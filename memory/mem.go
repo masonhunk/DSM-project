@@ -1,11 +1,12 @@
 package memory
 
+import "errors"
+
 type Page struct {
 	AccessRight int
 	memory []byte
 }
 
-const PAGE_BYTESIZE  = 1024
 
 // NO_ACCESS is nil
 const READ_ONLY byte = 1
@@ -19,49 +20,57 @@ type VirtualMemory interface {
 	SetRights(addr int, access byte)
 }
 
-type VMem struct {
-	stack []byte
+type Vmem struct {
+	Stack     []byte
 	AccessMap map[int]byte
+	PAGE_BYTESIZE int
 }
 
+func NewVmem(memSize int, pageByteSize int) *Vmem {
+	m := new(Vmem)
+	m.Stack = make([]byte, memSize)
+	m.AccessMap = make(map[int]byte)
+	m.PAGE_BYTESIZE = pageByteSize
+	return m
+}
 
-func (m *VMem) Read(addr int) (byte, error) {
-	access := m.AccessMap[getPageAddr(addr)]
+func (m *Vmem) Read(addr int) (byte, error) {
+	access := m.AccessMap[m.getPageAddr(addr)]
 	switch access {
-	case nil:
-		return nil, error("access denied")
+	case 0:
+		return 127, errors.New("access denied")
 	case READ_ONLY:
-		return m.stack[addr], nil
+		return m.Stack[addr], nil
 	case READ_WRITE:
-		return m.stack[addr], nil
+		return m.Stack[addr], nil
 	}
-	return nil, error("unknown error")
+	return 127, errors.New("unknown error")
 }
 
-func (m *VMem) Write(addr int, val byte) error {
-	access := m.AccessMap[getPageAddr(addr)]
+func (m *Vmem) Write(addr int, val byte) error {
+	access := m.AccessMap[m.getPageAddr(addr)]
 	switch access {
-	case nil:
-		return error("access denied")
+	case 0:
+		return errors.New("access denied")
 	case READ_ONLY:
-		return error("access denied")
+		return errors.New("access denied")
 	case READ_WRITE:
-		m.stack[addr] = val
+		m.Stack[addr] = val
 		return nil
 	}
-	return error("unknown error")
+	return errors.New("unknown error")
 
 }
 
-func (m *VMem) GetRights(addr int) byte {
-	return m.AccessMap[getPageAddr(addr)]
+func (m *Vmem) GetRights(addr int) byte {
+	return m.AccessMap[m.getPageAddr(addr)]
 }
 
-func (m *VMem) SetRights(addr int, access byte) {
-	m.AccessMap[getPageAddr(addr)] = access
+func (m *Vmem) SetRights(addr int, access byte) {
+	m.AccessMap[m.getPageAddr(addr)] = access
 }
 
 
-func getPageAddr(addr int) int {
-	return addr - addr % PAGE_BYTESIZE
+func (m *Vmem) getPageAddr(addr int) int {
+	return addr - addr % m.PAGE_BYTESIZE
 }
