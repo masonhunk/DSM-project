@@ -2,7 +2,6 @@ package memory
 
 import (
   "errors"
-  "math"
 )
 
 const NO_ACCESS byte = 0
@@ -20,43 +19,44 @@ type VirtualMemory interface {
 }
 
 type Vmem struct {
-  Stack         []byte
-  AccessMap     map[int]byte
-  PAGE_BYTESIZE int
-  freeMemObjects []addrPair
+  Stack          []byte
+  AccessMap      map[int]byte
+  PAGE_BYTESIZE  int
+  FreeMemObjects []AddrPair
 }
 
 func (m *Vmem) Free(offset, sizeInBytes int) error {
   if offset + sizeInBytes >= len(m.Stack) {
     return errors.New("index out of bounds")
   }
-  foundOverlap := false
-  var newlist []addrPair
-  for _, pair := range m.freeMemObjects {
-    if pair.end < offset || pair.start > offset + sizeInBytes{
+  start := offset
+  end := offset + sizeInBytes - 1
+  var newlist []AddrPair
+  for i, pair := range m.FreeMemObjects {
+    if pair.End + 1 < start  {
       newlist = append(newlist, pair)
-    } else if pair.start <= offset && pair.end >= offset + sizeInBytes {
-      return nil
-    } else if pair.start <= offset && offset + sizeInBytes >= pair.end {
-      newlist = append(newlist, addrPair{min(pair.start, offset),max(pair.end, offset + sizeInBytes)})
-      foundOverlap = true
-    } else if foundOverlap && pair.start <= offset && pair.end >= offset + sizeInBytes {
-      newlist[len(newlist) - 1] = addrPair{newlist[len(newlist) - 1].start, pair.end}
+    } else if end + 1 < pair.Start {
+      newlist = append(newlist, AddrPair{start, end})
+      newlist = append(newlist, m.FreeMemObjects[i:]...)
+      break
+    } else {
+    start = min(start, pair.Start)
+    end = max(end, pair.End)
     }
   }
-  m.freeMemObjects = newlist
+  m.FreeMemObjects = newlist
   return nil
 }
 
-type addrPair struct {
-  start, end int
+type AddrPair struct {
+  Start, End int
 }
 
 func (m *Vmem) Malloc(sizeInBytes int) (int, error) {
-  for i, pair := range m.freeMemObjects{
-    if pair.end - pair.start + 1 >= sizeInBytes {
-      m.freeMemObjects[i] = addrPair{pair.start + sizeInBytes, pair.end}
-      return pair.start, nil
+  for i, pair := range m.FreeMemObjects {
+    if pair.End- pair.Start+ 1 >= sizeInBytes {
+      m.FreeMemObjects[i] = AddrPair{pair.Start + sizeInBytes, pair.End}
+      return pair.Start, nil
     }
   }
   return 0, errors.New("insufficient space")
@@ -68,8 +68,8 @@ func NewVmem(memSize int, pageByteSize int) *Vmem {
   m.Stack = make([]byte, memSize)
   m.AccessMap = make(map[int]byte)
   m.PAGE_BYTESIZE = pageByteSize
-  m.freeMemObjects = make([]addrPair, 1)
-  m.freeMemObjects[0] = addrPair{0, memSize - 1}
+  m.FreeMemObjects = make([]AddrPair, 1)
+  m.FreeMemObjects[0] = AddrPair{0, memSize - 1}
   return m
 }
 
