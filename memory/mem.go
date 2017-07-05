@@ -32,17 +32,22 @@ func (m *Vmem) Free(offset, sizeInBytes int) error {
   start := offset
   end := offset + sizeInBytes - 1
   var newlist []AddrPair
+  j := -1
   for i, pair := range m.FreeMemObjects {
     if pair.End + 1 < start  {
       newlist = append(newlist, pair)
     } else if end + 1 < pair.Start {
-      newlist = append(newlist, AddrPair{start, end})
-      newlist = append(newlist, m.FreeMemObjects[i:]...)
+      j = i
       break
     } else {
     start = min(start, pair.Start)
     end = max(end, pair.End)
+
     }
+  }
+  newlist = append(newlist, AddrPair{start, end})
+  if j != -1 {
+    newlist = append(newlist, m.FreeMemObjects[j:]...)
   }
   m.FreeMemObjects = newlist
   return nil

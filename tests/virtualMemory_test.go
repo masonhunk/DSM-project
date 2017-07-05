@@ -4,7 +4,6 @@ import (
   "testing"
   "DSM-project/memory"
 	"github.com/stretchr/testify/assert"
-
 )
 
 func TestNoAccess(t *testing.T) {
@@ -59,4 +58,35 @@ func TestFreeMemory(t *testing.T) {
 	assert.Equal(t, 2, len(mem.FreeMemObjects))
 	assert.Equal(t, memory.AddrPair{0, 511}, mem.FreeMemObjects[0])
 	assert.Equal(t, memory.AddrPair{1024, 4095}, mem.FreeMemObjects[1])
+
+	mem.Malloc(1024)
+	assert.Equal(t, memory.AddrPair{2048, 4095}, mem.FreeMemObjects[1])
+	mem.Free(512, 512 + 1024)
+	assert.Len(t, mem.FreeMemObjects, 1)
+	assert.Equal(t, memory.AddrPair{0, 4095}, mem.FreeMemObjects[0])
+
+	mem = memory.NewVmem(4096, 128)
+	mem.FreeMemObjects = []memory.AddrPair{
+		{0, 127},
+		{256, 1023},
+		{2048, 3099},
+		{3500, 4095},
+	}
+	mem.Free(500, 3500)
+	//second and third interval should be removed, and the third should be expanded to {500,4095}
+	assert.Len(t, mem.FreeMemObjects, 2)
+	assert.Equal(t, memory.AddrPair{0, 127}, mem.FreeMemObjects[0])
+	assert.Equal(t, memory.AddrPair{256, 4095}, mem.FreeMemObjects[1])
 }
+
+/*func TestGoPointers(t *testing.T) {
+	arr := make([]byte, 1024)
+	fmt.Println(&arr[0])
+	fmt.Println(&arr[1])
+	arr[0] = 2
+	var s *byte
+	s = &arr[0]
+	*s = 42
+	fmt.Println(*&arr[0])
+}
+*/
