@@ -2,14 +2,16 @@ package memory
 
 import (
   "errors"
+  "strconv"
 )
 
-const NO_ACCESS byte = 0
-const READ_ONLY byte = 1
-const READ_WRITE byte = 2
+var NO_ACCESS byte = 0
+var READ_ONLY byte = 1
+var READ_WRITE byte = 2
 
 type VirtualMemory interface {
   Read(addr int) (byte, error)
+  ReadBytes(addr, length int) ([]byte, error)
   Write(addr int, val byte) error
   GetRights(addr int) byte
   SetRights(addr int, access byte)
@@ -90,6 +92,24 @@ func (m *Vmem) Read(addr int) (byte, error) {
   }
   return 127, errors.New("unknown error")
 }
+
+func (m *Vmem) ReadBytes(addr, length int) ([]byte, error) {
+  start := addr
+  end := addr + length - 1
+  for i := start; i < end; i += m.PAGE_BYTESIZE {
+    access := m.AccessMap[m.GetPageAddr(i)]
+    switch access {
+    case NO_ACCESS:
+      return nil, errors.New("access denied at location: " + strconv.Itoa(i))
+    case access == READ_WRITE || access == READ_ONLY:
+      continue
+    case access > 2:
+      return nil, errors.New("unknown access value at: " + strconv.Itoa(i))
+    }
+  }
+  return m.Stack[start:end + 1], nil
+}
+
 
 func (m *Vmem) Write(addr int, val byte) error {
   access := m.AccessMap[m.GetPageAddr(addr)]
