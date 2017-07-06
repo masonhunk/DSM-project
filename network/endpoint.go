@@ -9,32 +9,59 @@ import (
 )
 
 type Message struct{
-	id string //The id of the recipient
-	message string //The message
-	data []byte //Data of the message
+	Id int //The id of the recipient
+	Message string //The message
+	Data []byte //Data of the message
 }
 
 type Endpoint struct{
-	listener net.Listener
-	handler func(message Message)
+	Listener net.Listener
+	Handler func(io.ReadWriter, Message)
+	Running bool
 }
 
-func (e *Endpoint) listen(port string) error{
+func (m *Message) GetMessage() string{
+	return m.Message
+}
+
+func NewEndpoint(port string, handler func(io.ReadWriter, Message)) (Endpoint, error) {
 	var err error
-	e.listener, err = net.Listen("tcp", port)
-	if err != nil{
-		fmt.Println("Failed to liste.")
-		return err
+	e := Endpoint{}
+	e.Handler = handler
+	e.Listener, err = net.Listen("tcp", ":"+port)
+	if err != nil {
+		fmt.Println("Failed to listen")
+		fmt.Println(err)
+		return e, err
 	}
+	return e, nil
+}
+
+func (e *Endpoint) Listen() error{
+	fmt.Println("EP trying to listen")
+	e.Running = true
 	for {
-		conn, err := e.listener.Accept()
+		fmt.Println("EP for loop running")
+		if e.Running == false{
+			fmt.Println("EP stoppped listening")
+			e.Listener.Close()
+			break
+		}
+		fmt.Println("EP waiting for accept")
+		conn, err := e.Listener.Accept()
+		fmt.Print("EP got accept")
 		if err != nil{
 			fmt.Println("Failed to accept connection.")
 			return err
 		}
+		fmt.Println("EP handles message")
 		go e.handleMessages(conn)
-
 	}
+	return nil
+}
+
+func (e *Endpoint) Close() {
+	e.Running = false
 }
 
 func (e *Endpoint) handleMessages(conn net.Conn) {
@@ -51,7 +78,8 @@ func (e *Endpoint) handleMessages(conn net.Conn) {
 			fmt.Println("Failed to decode message.")
 			return
 		}
-		e.handler(message)
+		fmt.Println("EP got a message")
+		e.Handler(rw, message)
 	}
 }
 

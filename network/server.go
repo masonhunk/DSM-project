@@ -1,44 +1,48 @@
 package network
 
 import (
-	"net"
+	"io"
 	"fmt"
-	"os"
 )
 
-const (
-	connHost = "localhost"
-	connPort = "8080"
-	connType = "	"
-)
+type Server struct{
+	port string
+	clients map[int]io.ReadWriter
+	nonce int
+	ep Endpoint
+	handler func(Message)
+}
 
+func NewServer(handler func(Message), port string) (Server, error){
+	s := Server{port, make(map[int]io.ReadWriter), 1, Endpoint{}, handler}
+	var err error
+	s.ep, err = NewEndpoint(port, s.handleMessage)
+	if err != nil {
+		fmt.Println("Could not create endpoint")
+		fmt.Println(err)
+		return Server{}, err
+	}
+
+	return s, nil
+}
 
 // StartServer s
-func StartServer() {
-	// Listen for incoming connections.
-	l, err := net.Listen(connType, connHost+":"+connPort)
-	if err != nil {
-		fmt.Println("Error listening:", err.Error())
-		os.Exit(1)
-	}
-	// Close the listener when the application closes.
-	defer l.Close()
-	fmt.Println("Listening on " + connHost + ":" + connPort)
-	for {
-		// Listen for an incoming connection.
-		conn, err := l.Accept()
+func (s *Server) StartServer() {
+	//We first create an endpoint, give it a handler function and start listening for messages
+	fmt.Println("Telling ep to listen")
+	s.ep.Listen()
+}
 
-		if err != nil {
-			fmt.Println("Error accepting: ", err.Error())
-			os.Exit(1)
-		}
-		// Handle connections in a new goroutine.
-		go handleRequests(conn)
-	}
+func (s *Server) StopServer() {
+	s.ep.Close()
 }
 
 
 // Handles incoming requests.
-func handleRequests(conn net.Conn) {
-//TODO: add new connections to connList and remove disconnected clients
+func (s *Server)handleMessage(rw io.ReadWriter, message Message) {
+	if message.Message == "join"{
+		s.clients[s.nonce] = rw
+		s.nonce = s.nonce+1
+	}
+	s.handler(message)
 }
