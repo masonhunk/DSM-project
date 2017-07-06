@@ -101,9 +101,9 @@ func (m *Vmem) ReadBytes(addr, length int) ([]byte, error) {
     switch access {
     case NO_ACCESS:
       return nil, errors.New("access denied at location: " + strconv.Itoa(i))
-    case access == READ_WRITE || access == READ_ONLY:
+    case  READ_WRITE, READ_ONLY:
       continue
-    case access > 2:
+    default:
       return nil, errors.New("unknown access value at: " + strconv.Itoa(i))
     }
   }
