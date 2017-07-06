@@ -18,6 +18,7 @@ type VirtualMemory interface {
   GetPageAddr(addr int) int
   Malloc(sizeInBytes int) (int, error)
   Free(offset, sizeInBytes int) error
+  GetPageSize() int
 }
 
 type Vmem struct {
@@ -25,6 +26,10 @@ type Vmem struct {
   AccessMap      map[int]byte
   PAGE_BYTESIZE  int
   FreeMemObjects []AddrPair
+}
+
+func (m *Vmem) GetPageSize() int {
+  return m.PAGE_BYTESIZE
 }
 
 func (m *Vmem) Free(offset, sizeInBytes int) error {
@@ -135,7 +140,7 @@ func (m *Vmem) SetRights(addr int, access byte) {
 }
 
 func (m *Vmem) GetPageAddr(addr int) int {
-  return addr - addr%m.PAGE_BYTESIZE
+  return addr - addr % m.PAGE_BYTESIZE
 }
 
 
