@@ -19,6 +19,7 @@ type VirtualMemory interface {
   Malloc(sizeInBytes int) (int, error)
   Free(offset, sizeInBytes int) error
   GetPageSize() int
+  Size() int
 }
 
 type Vmem struct {
@@ -26,6 +27,10 @@ type Vmem struct {
   AccessMap      map[int]byte
   PAGE_BYTESIZE  int
   FreeMemObjects []AddrPair
+}
+
+func (m *Vmem) Size() int {
+  return len(m.Stack)
 }
 
 func (m *Vmem) GetPageSize() int {
@@ -66,7 +71,7 @@ type AddrPair struct {
 
 func (m *Vmem) Malloc(sizeInBytes int) (int, error) {
   for i, pair := range m.FreeMemObjects {
-    if pair.End- pair.Start+ 1 >= sizeInBytes {
+    if pair.End - pair.Start + 1 >= sizeInBytes {
       m.FreeMemObjects[i] = AddrPair{pair.Start + sizeInBytes, pair.End}
       return pair.Start, nil
     }
