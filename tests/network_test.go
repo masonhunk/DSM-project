@@ -52,16 +52,17 @@ func TestEndpointAndTranscieverConnectAndTalk(t *testing.T) {
 
 func TestServerCreationWithMultipleClients(t *testing.T){
 	messages = []network.Message{}
-	s,_ := network.NewServer(messageHandler, "2000")
+	s,_ := network.NewServer(func(message network.Message){}, "2000")
 	c1 := network.NewClient(messageHandler)
 	c1.Connect("localhost:2000")
 	c2 := network.NewClient(messageHandler)
 	c2.Connect("localhost:2000")
 	c3 := network.NewClient(messageHandler)
 	c3.Connect("localhost:2000")
-	c1.Send(network.Message{10, "Test", []byte{1,2}})
-	c2.Send(network.Message{10, "Test", []byte{1,2}})
-	c3.Send(network.Message{10, "Test", []byte{1,2}})
+	time.Sleep(1000000000)
+	c1.Send(network.Message{1, "Test", []byte{1,2}})
+	c2.Send(network.Message{1, "Test", []byte{1,2}})
+	c3.Send(network.Message{1, "Test", []byte{1,2}})
 
 	time.Sleep(1000000000)
 	c1.Close()
@@ -77,19 +78,20 @@ func TestMultiMessages(t *testing.T) {
 	s,_ := network.NewServer(messageHandler, "2000")
 	c := network.NewClient(messageHandler)
 	c.Connect("localhost:2000")
-	c.Send(network.Message{10, "Test", []byte{1,2}})
-	c.Send(network.Message{11, "Test", []byte{1,2}})
-	c.Send(network.Message{12, "Test", []byte{1,2}})
+	time.Sleep(1000000000)
+	c.Send(network.Message{1, "Test", []byte{1,2}})
+	c.Send(network.Message{1, "Test", []byte{1,2}})
+	c.Send(network.Message{1, "Test", []byte{1,2}})
 	time.Sleep(1000000000)
 	c.Close()
 	s.StopServer()
-	assert.Len(t, messages, 3)
+	assert.Len(t, messages, 6)
 	assert.Len(t, s.Clients, 1)
 }
 
 func TestServerSending(t *testing.T) {
 	messages = []network.Message{}
-	s,_ := network.NewServer(messageHandler, "2000")
+	s,_ := network.NewServer(func(message network.Message){}, "2000")
 	c := network.NewClient(messageHandler)
 	c.Connect("localhost:2000")
 	for len(s.Clients) < 1{	}

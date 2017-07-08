@@ -18,13 +18,11 @@ func NewClient(handler func(Message)) Client{
 
 //Connect to some address, which is a string on the form xxx.xxx.xxx.xxx:xxxx with ip and port.
 func (c *Client) Connect(address string) (error){
-	fmt.Println("Client connecting.")
 	conn, err := net.Dial("tcp", address)
 	if err != nil {
 		fmt.Println("Connection failed")
 		return err
 	}
-	fmt.Println("Client conected")
 	c.t = NewTransciever(conn, c.handler)
 	return nil
 }

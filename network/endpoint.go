@@ -30,29 +30,23 @@ func NewEndpoint(port string, handler func(conn net.Conn)) (Endpoint, error) {
 	}
 	done := make(chan bool)
 	running := make(chan bool)
-	fmt.Println("Running loop")
 	go func() {
 		running <- true
 		for {
 			//Do stuff with connections
-			fmt.Println("Loop is running")
 			conn, err := l.Accept()
 			if err != nil{
 				fmt.Println("Endpoint - Accept failed.")
-				fmt.Println(err)
 				l.Close()
 				done <- true
 				return
 
 			}
-			fmt.Println("Connection accepted.")
 			handler(conn)
 
 		}
 	}()
-	fmt.Println("Waiting for loop")
 	 <- running
-	fmt.Println("Done waiting.")
 	return Endpoint{done, l}, nil
 }
 

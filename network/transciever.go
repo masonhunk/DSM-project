@@ -6,7 +6,6 @@ import (
 	"bufio"
 	"fmt"
 	"encoding/gob"
-	"reflect"
 )
 
 type Transciever struct{
@@ -17,7 +16,7 @@ type Transciever struct{
 
 func NewTransciever(conn net.Conn, handler func(Message)) Transciever{
 	rw := bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn))
-	done := make(chan bool)
+	done := make(chan bool, 1)
 	go func() {
 		done <- true
 		for {
@@ -31,7 +30,6 @@ func NewTransciever(conn net.Conn, handler func(Message)) Transciever{
 				return
 			} else if err != nil {
 				fmt.Println("transciever stopped.")
-				fmt.Println(reflect.TypeOf(err))
 				done <- true
 				return
 			}
@@ -48,13 +46,10 @@ func (t *Transciever) Close(){
 }
 
 func (t *Transciever) Send(message Message) {
-	fmt.Println("Sending message.")
 	enc := gob.NewEncoder(t.rw)
 	err := enc.Encode(message)
 	if err != nil{
 		fmt.Println("Couldnt encode message")
 	}
 	t.rw.Flush()
-	fmt.Println("Flushing")
-	fmt.Println("Returning")
 }
