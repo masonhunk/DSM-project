@@ -11,6 +11,7 @@ type MVMem struct {
 	AddrToPage []VPage
 	VPAGE_SIZE int
 	FreeVPages []interval
+	mallocHistory map[int]int //maps address to length
 }
 
 type interval struct {
@@ -36,12 +37,13 @@ func NewMVMem(virtualMemory memory.VirtualMemory) *MVMem {
 	memory.NO_ACCESS = 2
 	memory.READ_WRITE = 0
 	m.FreeVPages = make([]interval, 0)
+	m.mallocHistory = make(map[int]int)
 	return m
 }
 
 func (m *MVMem) Read(addr int) (byte, error) {
 	vp := m.AddrToPage[m.GetPageAddr(addr)/m.GetPageSize()]
-	if vp.Access_right == 0 {
+	if vp.Access_right == NO_ACCESS {
 		return 0, errors.New("access denied")
 
 	}
@@ -66,7 +68,7 @@ func (m *MVMem) ReadBytes(addr, length int) ([]byte, error) {
 
 func (m *MVMem) Write(addr int, val byte) error {
 	vp := m.AddrToPage[m.GetPageAddr(addr)/m.GetPageSize()]
-	if vp.Access_right == 0 {
+	if vp.Access_right == NO_ACCESS || vp.Access_right == READ_ONLY  {
 		return errors.New("access denied")
 
 	}
@@ -120,12 +122,12 @@ func (m *MVMem) Malloc(sizeInBytes int) (int, error) {
 	for i, interval := range m.FreeVPages {
 		if interval.end - interval.start >= len(resultArray) {
 			//insert into free interval
-			m.AddrToPage = append(m.AddrToPage[:interval.start], resultArray...)
+			m.AddrToPage = append(m.AddrToPage[:interval.start], append(resultArray, m.AddrToPage[interval.start:]...)...)
 			if interval.end - interval.start == len(resultArray) {
 				//remove interval in freevpages list
 				m.FreeVPages = append(m.FreeVPages[:i], m.FreeVPages[i+1:]...)
 			} else {
-				m.FreeVPages[i].start += len(resultArray)
+				m.FreeVPages[i].start += sizeInBytes
 			}
 			return (interval.start * m.VPAGE_SIZE) + m.AddrToPage[interval.start].Offset, nil
 		}
@@ -133,40 +135,46 @@ func (m *MVMem) Malloc(sizeInBytes int) (int, error) {
 	//else if no free spots, append
 	resultPtr := len(m.AddrToPage) * m.VPAGE_SIZE + resultArray[0].Offset
 	m.AddrToPage = append(m.AddrToPage, resultArray...)
+	m.mallocHistory[resultPtr] = sizeInBytes
 	return resultPtr, nil
 }
 
-func (m *MVMem) Free(offset, sizeInBytes int) error {
-	if offset + sizeInBytes >= m.getLastAddr() || offset < 0 || offset + sizeInBytes < 0 {
-		return errors.New("index out of bounds")
+func (m *MVMem) Free(pointer int) error {
+	size := m.mallocHistory[pointer]
+	if size == 0 {
+		return errors.New("invalid reference: no corresponding malloc found")
 	}
-	index := m.GetPageAddr(offset)/m.GetPageSize()
-	err := m.vm.Free(m.AddrToPage[index].Offset, sizeInBytes)
+	m.mallocHistory[pointer] = 0
+	addr, err := m.vPageAddrToMemoryAddr(pointer)
 	if err != nil {
 		return err
 	}
-	sizeLeft := sizeInBytes
-	resultArray := make([]VPage, 0)
-	for sizeLeft > 0 {
-		if index >= len(m.AddrToPage) {
-			//stop if trying to free more memory than available. Doesn't throw an error
-			break
-		}
-		vPage := m.AddrToPage[index]
-		if vPage.Length > sizeLeft {
-			//if last vPage to be removed has > size than size left, shrink it.
-			vPage.Length -= sizeLeft
+	if err := m.vm.Free(addr); err != nil {
+		return err
+	}
+	start := pointer
+	end := start + size - 1
+	var newlist []interval
+	j := -1
+	for i, pair := range m.FreeVPages {
+		if pair.end + 1 < start  {
+			newlist = append(newlist, pair)
+		} else if end + 1 < pair.start {
+			j = i
 			break
 		} else {
-			//"remove" startvPage from list, ie. set to nil and add to free vpage interval list
-
-			m.AddrToPage = append(m.AddrToPage[:index], m.AddrToPage[index + 1:]...)
-
-			sizeLeft -= vPage.Length
+			start = min(start, pair.start)
+			end = max(end, pair.end)
 
 		}
-		index++
 	}
+	newlist = append(newlist, interval{start, end})
+	if j != -1 {
+		newlist = append(newlist, m.FreeVPages[j:]...)
+	}
+	m.FreeVPages = newlist
+
+
 	return nil
 }
 

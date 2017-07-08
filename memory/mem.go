@@ -17,7 +17,7 @@ type VirtualMemory interface {
   SetRights(addr int, access byte)
   GetPageAddr(addr int) int
   Malloc(sizeInBytes int) (int, error)
-  Free(offset, sizeInBytes int) error
+  Free(pointer int) error
   GetPageSize() int
   Size() int
 }
@@ -27,6 +27,8 @@ type Vmem struct {
   AccessMap      map[int]byte
   PAGE_BYTESIZE  int
   FreeMemObjects []AddrPair
+	mallocHistory map[int]int //maps address to length
+
 }
 
 func (m *Vmem) Size() int {
@@ -37,12 +39,13 @@ func (m *Vmem) GetPageSize() int {
   return m.PAGE_BYTESIZE
 }
 
-func (m *Vmem) Free(offset, sizeInBytes int) error {
-  if offset + sizeInBytes >= len(m.Stack) {
-    return errors.New("index out of bounds")
-  }
-  start := offset
-  end := offset + sizeInBytes - 1
+func (m *Vmem) Free(pointer int) error {
+	size := m.mallocHistory[pointer]
+	if size == 0 {
+		return errors.New("invalid reference: no corresponding malloc found")
+	}
+  start := pointer
+  end := start + size - 1
   var newlist []AddrPair
   j := -1
   for i, pair := range m.FreeMemObjects {
@@ -73,6 +76,7 @@ func (m *Vmem) Malloc(sizeInBytes int) (int, error) {
   for i, pair := range m.FreeMemObjects {
     if pair.End - pair.Start + 1 >= sizeInBytes {
       m.FreeMemObjects[i] = AddrPair{pair.Start + sizeInBytes, pair.End}
+			m.mallocHistory[pair.Start] = sizeInBytes
       return pair.Start, nil
     }
   }
@@ -87,6 +91,7 @@ func NewVmem(memSize int, pageByteSize int) *Vmem {
   m.PAGE_BYTESIZE = pageByteSize
   m.FreeMemObjects = make([]AddrPair, 1)
   m.FreeMemObjects[0] = AddrPair{0, memSize - 1}
+	m.mallocHistory = make(map[int]int)
   return m
 }
 

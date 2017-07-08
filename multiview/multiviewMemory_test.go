@@ -1,16 +1,15 @@
-package tests
+package multiview
 
 import (
 	"testing"
 	"DSM-project/memory"
 	"github.com/stretchr/testify/assert"
-	"DSM-project/multiview"
 	"fmt"
 )
 
 func TestMultiViewMalloc(t *testing.T) {
 	m := memory.NewVmem(4096, 128)
-	mem := multiview.NewMVMem(m)
+	mem := NewMVMem(m)
 
 	ptr, err := mem.Malloc(100)
 	assert.Nil(t, err)
@@ -26,7 +25,7 @@ func TestMultiViewMalloc(t *testing.T) {
 
 func TestCorrectAddressTranslation(t *testing.T) {
 	m := memory.NewVmem(4096, 128)
-	mem := multiview.NewMVMem(m)
+	mem := NewMVMem(m)
 
 	ptr, _:= mem.Malloc(330)
 	ptr1, _ := mem.Malloc(400)
@@ -45,7 +44,7 @@ func TestCorrectAddressTranslation(t *testing.T) {
 
 func TestHowReferenceTypesWork(t *testing.T) {
 	m := memory.NewVmem(4096, 128)
-	mem := multiview.NewMVMem(m)
+	mem := NewMVMem(m)
 	mem.Malloc(100)
 	assert.NoError(t, mem.Write(50, 42))
 	assert.Equal(t, byte(42), m.Stack[50])
@@ -57,29 +56,59 @@ func TestHowReferenceTypesWork(t *testing.T) {
 
 func TestMVMFree(t *testing.T) {
 	m := memory.NewVmem(4096, 128)
-	mem := multiview.NewMVMem(m)
-	mem.Malloc(100)
-	fmt.Println(mem.AddrToPage)
+	mem := NewMVMem(m)
+	mem.Malloc(1000)
 
-	assert.Equal(t, memory.AddrPair{100, 4095},m.FreeMemObjects[0])
-	assert.Nil(t,mem.Free(0, 100))
+	assert.Equal(t, memory.AddrPair{1000, 4095},m.FreeMemObjects[0])
+	assert.Nil(t,mem.Free(0))
 	assert.Equal(t, memory.AddrPair{0, 4095},m.FreeMemObjects[0])
-	assert.Len(t, mem.AddrToPage, 0)
+	assert.Len(t, mem.FreeVPages, 1)
+	assert.Equal(t, interval{0, 999}, mem.FreeVPages[0])
 
-	addr1, err := mem.Malloc(460)
-	addr2, er2 := mem.Malloc(900)
+	m = memory.NewVmem(4096, 128)
+	mem = NewMVMem(m)
 
+	ptr, err := mem.Malloc(1000)
+	ptr2, err2 := mem.Malloc(2000)
 	assert.Nil(t, err)
-	assert.Nil(t, er2)
-	fmt.Println(addr1, addr2)
-	fmt.Println(mem.AddrToPage)
-	mem.Write(addr2 + 400, 42)
+	assert.Nil(t, err2)
+	assert.Equal(t, 0, ptr)
+	assert.Equal(t, 1128, ptr2)
 
-	err = mem.Free(addr2, 400)
+	mem.Write(ptr2, 99)
+	assert.Equal(t, byte(99), m.Stack[1000])
+
+	err = mem.Free(ptr)
 	assert.Nil(t, err)
-	fmt.Println(mem.AddrToPage)
-	_, ok := mem.Read(addr2 + 400)
-	assert.Nil(t, ok)
-	//assert.Equal(t, 42, res)
+	assert.Equal(t, interval{0, 999}, mem.FreeVPages[0])
+
+	adr3, err3 := mem.Malloc(500)
+	assert.Nil(t, err3)
+	assert.Equal(t, 0, adr3)
+
+	m = memory.NewVmem(4096, 128)
+	mem = NewMVMem(m)
+
+	ptr1, err1 := mem.Malloc(1000)
+	ptr2, err2 = mem.Malloc(500)
+	ptr3, err3 := mem.Malloc(500)
+	_, err4 := mem.Malloc(500)
+
+	assert.Nil(t, err1)
+	assert.Nil(t, err2)
+	assert.Nil(t, err3)
+	assert.Nil(t, err4)
+
+	err1 = mem.Free(ptr1)
+	err2 = mem.Free(ptr3)
+
+	assert.Nil(t, err1)
+	assert.Nil(t, err2)
+
+	assert.Equal(t, interval{0, 999}, mem.FreeVPages[0])
+	assert.Equal(t, interval{ptr3, ptr3+500-1}, mem.FreeVPages[1])
+	assert.Equal(t, memory.AddrPair{1500, 1999}, m.FreeMemObjects[1])
+	mem.Write(1756, 99)
+	fmt.Println(mem.FreeVPages)
 }
 

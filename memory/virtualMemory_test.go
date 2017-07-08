@@ -1,13 +1,12 @@
-package tests
+package memory
 
 import (
   "testing"
-  "DSM-project/memory"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestNoAccess(t *testing.T) {
-  mem := memory.NewVmem(4096, 128)
+  mem := NewVmem(4096, 128)
 
   if r := mem.GetRights(125); r != 0 {
 	t.Error("Expected NO_ACCESS rights (= 0), got:", r)
@@ -22,7 +21,7 @@ func TestNoAccess(t *testing.T) {
 }
 
 func TestCorrectPageAddr(t *testing.T) {
-  mem := memory.NewVmem(4096, 128)
+  mem := NewVmem(4096, 128)
   if addr := mem.GetPageAddr(57); addr != 0 {
 	t.Error("Expected address 0, got:", addr)
   }
@@ -35,7 +34,7 @@ func TestCorrectPageAddr(t *testing.T) {
 }
 
 func TestMalloc(t *testing.T) {
-  mem := memory.NewVmem(4096, 128)
+  mem := NewVmem(4096, 128)
   addr1, err1 := mem.Malloc(512)
   addr2, err2 := mem.Malloc(1024)
 	if addr1 != 0 || err1 != nil {
@@ -49,34 +48,31 @@ func TestMalloc(t *testing.T) {
 }
 
 func TestFreeMemory(t *testing.T) {
-	mem := memory.NewVmem(4096, 128)
+	mem := NewVmem(4096, 128)
 	mem.Malloc(1024)
-	err := mem.Free(0, 512)
+	assert.Equal(t, AddrPair{1024, 4095}, mem.FreeMemObjects[0])
+	err := mem.Free(0)
 	if err != nil {
 		t.Error("Expected nil error, got:", err)
 	}
-	assert.Equal(t, 2, len(mem.FreeMemObjects))
-	assert.Equal(t, memory.AddrPair{0, 511}, mem.FreeMemObjects[0])
-	assert.Equal(t, memory.AddrPair{1024, 4095}, mem.FreeMemObjects[1])
+	assert.Equal(t, 1, len(mem.FreeMemObjects))
+	assert.Equal(t, AddrPair{0, 4095}, mem.FreeMemObjects[0])
+
+	mem = NewVmem(4096, 128)
 
 	mem.Malloc(1024)
-	assert.Equal(t, memory.AddrPair{2048, 4095}, mem.FreeMemObjects[1])
-	mem.Free(512, 512 + 1024)
-	assert.Len(t, mem.FreeMemObjects, 1)
-	assert.Equal(t, memory.AddrPair{0, 4095}, mem.FreeMemObjects[0])
+	addr1, _ := mem.Malloc(512)
+	addr2, _ := mem.Malloc(1024)
+	assert.Equal(t, 1024, addr1)
+	assert.Equal(t, 1024 + 512, addr2)
 
-	mem = memory.NewVmem(4096, 128)
-	mem.FreeMemObjects = []memory.AddrPair{
-		{0, 127},
-		{256, 1023},
-		{2048, 3099},
-		{3500, 4095},
-	}
-	mem.Free(500, 3500)
-	//second and third interval should be removed, and the third should be expanded to {500,4095}
-	assert.Len(t, mem.FreeMemObjects, 2)
-	assert.Equal(t, memory.AddrPair{0, 127}, mem.FreeMemObjects[0])
-	assert.Equal(t, memory.AddrPair{256, 4095}, mem.FreeMemObjects[1])
+	assert.NoError(t, mem.Free(addr1))
+	assert.Equal(t, AddrPair{1024, 1024+512-1}, mem.FreeMemObjects[0])
+	assert.Equal(t, AddrPair{addr2+1024, 4095}, mem.FreeMemObjects[1])
+	mem.Free(addr2)
+	assert.Equal(t, AddrPair{1024, 4095}, mem.FreeMemObjects[0])
+	mem.Malloc(600)
+	assert.Equal(t, AddrPair{1024+600, 4095}, mem.FreeMemObjects[0])
 }
 
 /*func TestGoPointers(t *testing.T) {
