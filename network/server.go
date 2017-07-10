@@ -41,7 +41,7 @@ func (s *Server) Send(message Message) {
 }
 
 func (s *Server) handleMessage(message Message) {
-	if message.To != 0 {
+	if message.To != byte(0) {
 		s.Send(message)
 	}
 	s.handler(message)

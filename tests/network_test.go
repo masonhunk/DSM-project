@@ -7,12 +7,17 @@ import (
 	"fmt"
 	"time"
 	"github.com/stretchr/testify/assert"
+	"sync"
 )
 
 var messages []network.Message
+var mutex sync.Mutex
 
 func messageHandler(message network.Message){
+	mutex.Lock()
 	messages = append(messages, message)
+	mutex.Unlock()
+	time.Sleep(time.Millisecond)
 }
 
 func createTransciever(conn net.Conn) {
@@ -59,10 +64,9 @@ func TestServerCreationWithMultipleClients(t *testing.T){
 	c2.Connect("localhost:2000")
 	c3 := network.NewClient(messageHandler)
 	c3.Connect("localhost:2000")
-	time.Sleep(1000000000)
-	c1.Send(network.Message{To: 1, Type:  "Test", Data: []byte{1,3}})
-	c2.Send(network.Message{To: 1, Type: "Test", Data: []byte{1,4}})
-	c3.Send(network.Message{To: 1, Type: "Test", Data: []byte{1,5}})
+	c1.Send(network.Message{To: byte(1), Type:  "Test", Data: []byte{1,3}})
+	c2.Send(network.Message{To: byte(1), Type: "Test", Data: []byte{1,4}})
+	c3.Send(network.Message{To: byte(1), Type: "Test", Data: []byte{1,5}})
 
 	time.Sleep(1000000000)
 	c1.Close()
