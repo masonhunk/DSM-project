@@ -17,7 +17,7 @@ func messageHandler(message network.Message){
 	mutex.Lock()
 	messages = append(messages, message)
 	mutex.Unlock()
-	time.Sleep(time.Millisecond)
+	time.Sleep(time.Millisecond * 50)
 }
 
 func createTransciever(conn net.Conn) {
@@ -46,7 +46,7 @@ func TestEndpointAndTranscieverConnectAndTalk(t *testing.T) {
 	e := createEndpoint("2000")
 	conn, _ := net.Dial("tcp", "localhost:2000")
 	tr := network.NewTransciever(conn, messageHandler)
-	tr.Send(network.Message{To: 10, Type: "Test", Data: []byte{1,2}})
+	tr.Send(network.Message{To: byte(10), Type: "Test", Data: []byte{1,2}})
 	e.Close()
 	time.Sleep(1000000000)
 	assert.Len(t, messages, 1)
@@ -65,10 +65,11 @@ func TestServerCreationWithMultipleClients(t *testing.T){
 	c3 := network.NewClient(messageHandler)
 	c3.Connect("localhost:2000")
 	c1.Send(network.Message{To: byte(1), Type:  "Test", Data: []byte{1,3}})
+	time.Sleep(time.Millisecond * 200)
 	c2.Send(network.Message{To: byte(1), Type: "Test", Data: []byte{1,4}})
+	time.Sleep(time.Millisecond * 200)
 	c3.Send(network.Message{To: byte(1), Type: "Test", Data: []byte{1,5}})
-
-	time.Sleep(1000000000)
+	time.Sleep(200000000)
 	c1.Close()
 	c2.Close()
 	c3.Close()
