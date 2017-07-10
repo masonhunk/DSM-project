@@ -5,9 +5,9 @@ import (
   "strconv"
 )
 
-var NO_ACCESS byte = 0
-var READ_ONLY byte = 1
-var READ_WRITE byte = 2
+const NO_ACCESS byte = 0
+const READ_ONLY byte = 1
+const READ_WRITE byte = 2
 
 type VirtualMemory interface {
   Read(addr int) (byte, error)
@@ -20,6 +20,7 @@ type VirtualMemory interface {
   Free(pointer int) error
   GetPageSize() int
   Size() int
+  AccessRightsDisabled(b bool)
 }
 
 type Vmem struct {
@@ -27,8 +28,12 @@ type Vmem struct {
   AccessMap      map[int]byte
   PAGE_BYTESIZE  int
   FreeMemObjects []AddrPair
-	mallocHistory map[int]int //maps address to length
+	mallocHistory  map[int]int //maps address to length
+  arDisabled     bool
+}
 
+func (m *Vmem) AccessRightsDisabled(b bool) {
+ m.arDisabled = b
 }
 
 func (m *Vmem) Size() int {
@@ -92,10 +97,15 @@ func NewVmem(memSize int, pageByteSize int) *Vmem {
   m.FreeMemObjects = make([]AddrPair, 1)
   m.FreeMemObjects[0] = AddrPair{0, memSize - 1}
 	m.mallocHistory = make(map[int]int)
+  m.arDisabled = false
   return m
 }
 
 func (m *Vmem) Read(addr int) (byte, error) {
+  //If access rights disabled, just read no matter what
+  if m.arDisabled {
+    return m.Stack[addr], nil
+  }
   access := m.AccessMap[m.GetPageAddr(addr)]
   switch access {
   case NO_ACCESS:
@@ -111,6 +121,9 @@ func (m *Vmem) Read(addr int) (byte, error) {
 func (m *Vmem) ReadBytes(addr, length int) ([]byte, error) {
   start := addr
   end := addr + length - 1
+  if m.arDisabled {
+    return m.Stack[start:end + 1], nil
+  }
   for i := start; i < end; i += m.PAGE_BYTESIZE {
     access := m.AccessMap[m.GetPageAddr(i)]
     switch access {
@@ -127,6 +140,10 @@ func (m *Vmem) ReadBytes(addr, length int) ([]byte, error) {
 
 
 func (m *Vmem) Write(addr int, val byte) error {
+  if m.arDisabled {
+    m.Stack[addr] = val
+    return nil
+  }
   access := m.AccessMap[m.GetPageAddr(addr)]
   switch access {
   case NO_ACCESS:

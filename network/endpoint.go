@@ -5,6 +5,14 @@ import (
 	"fmt"
 )
 
+const (
+	READ_REQUEST = "RR"
+	WRITE_REQUEST = "WR"
+	READ_REPLY = "RRPL"
+	WRITE_REPLY = "WRPL"
+	INVALIDATE_REPLY = "INV"
+	INVALIDATE_REQUEST = "INVQ"
+)
 type Message struct{
 	From byte
 	To byte

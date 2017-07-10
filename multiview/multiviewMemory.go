@@ -19,14 +19,10 @@ type interval struct {
 }
 
 type VPage struct {
-	PageAddr       int
+	PageAddr       int //the address of the actual page to which this vpage points
 	Offset, Length int
 	Access_right   byte
 }
-
-const NO_ACCESS byte = 0
-const READ_ONLY byte = 1
-const READ_WRITE byte = 2
 
 
 func NewMVMem(virtualMemory memory.VirtualMemory) *MVMem {
@@ -34,8 +30,7 @@ func NewMVMem(virtualMemory memory.VirtualMemory) *MVMem {
 	m.AddrToPage = make([]VPage, 0)
 	m.vm = virtualMemory
 	m.VPAGE_SIZE = (virtualMemory).GetPageSize()
-	memory.NO_ACCESS = 2
-	memory.READ_WRITE = 0
+	m.vm.AccessRightsDisabled(true)
 	m.FreeVPages = make([]interval, 0)
 	m.mallocHistory = make(map[int]int)
 	return m
@@ -43,7 +38,7 @@ func NewMVMem(virtualMemory memory.VirtualMemory) *MVMem {
 
 func (m *MVMem) Read(addr int) (byte, error) {
 	vp := m.AddrToPage[m.GetPageAddr(addr)/m.GetPageSize()]
-	if vp.Access_right == NO_ACCESS {
+	if vp.Access_right == memory.NO_ACCESS {
 		return 0, errors.New("access denied")
 
 	}
@@ -54,21 +49,28 @@ func (m *MVMem) Read(addr int) (byte, error) {
 	return m.vm.Read(res)
 }
 
+//returns all data in the minipage for which the address resides
+func (m *MVMem) ReadMinipage(addr int) ([]byte, error) {
+	vp := m.AddrToPage[m.GetPageAddr(addr)/m.GetPageSize()]
+	return m.ReadBytes(m.GetPageAddr(addr) + vp.Offset, vp.Length)
+}
+
 // reads a variable size, up to the size of the minipage
 func (m *MVMem) ReadBytes(addr, length int) ([]byte, error) {
+	//check access rights
 	for i := addr; i < addr + length; i += m.VPAGE_SIZE {
 		vp := m.AddrToPage[m.GetPageAddr(i)/m.GetPageSize()]
-		if vp.Access_right == NO_ACCESS {
+		if vp.Access_right == memory.NO_ACCESS {
 			return nil, errors.New("Access Denied")
 		}
 	}
-	vp := m.AddrToPage[m.GetPageAddr(addr)/m.GetPageSize()]
-	return m.vm.ReadBytes(addr - vp.PageAddr, length)
+	realAddr, _ := m.vPageAddrToMemoryAddr(addr)
+	return m.vm.ReadBytes(realAddr, length)
 }
 
 func (m *MVMem) Write(addr int, val byte) error {
 	vp := m.AddrToPage[m.GetPageAddr(addr)/m.GetPageSize()]
-	if vp.Access_right == NO_ACCESS || vp.Access_right == READ_ONLY  {
+	if vp.Access_right == memory.NO_ACCESS || vp.Access_right == memory.READ_ONLY  {
 		return errors.New("access denied")
 
 	}
@@ -87,6 +89,7 @@ func (m *MVMem) SetRights(addr int, access byte) {
 	m.AddrToPage[m.GetPageAddr(addr)/m.GetPageSize()].Access_right = access
 }
 
+//returns the vPage address for this addr
 func (m *MVMem) GetPageAddr(addr int) int {
 	return addr - addr % m.VPAGE_SIZE
 }
@@ -111,7 +114,7 @@ func (m *MVMem) Malloc(sizeInBytes int) (int, error) {
 			PageAddr:     m.vm.GetPageAddr(i),
 			Offset:       i - m.vm.GetPageAddr(i),
 			Length:       length,
-			Access_right: READ_WRITE,
+			Access_right: memory.READ_WRITE,
 		}
 		resultArray = append(resultArray, vp)
 		sizeLeft -= length
@@ -183,6 +186,11 @@ func (m *MVMem) GetPageSize() int {
 	return m.VPAGE_SIZE
 }
 
+
+func (m *MVMem) AccessRightsDisabled(b bool) {
+	panic("implement me")
+}
+
 // takes an address in the vPage memory space and translates it into the corresponding address in the memory
 func (m *MVMem) vPageAddrToMemoryAddr(addr int) (int, error) {
 	vp := m.AddrToPage[m.GetPageAddr(addr)/m.GetPageSize()]
@@ -199,6 +207,8 @@ func (m *MVMem) getLastAddr() int {
 	lastVP := m.AddrToPage[len(m.AddrToPage) - 1]
 	return len(m.AddrToPage)*m.VPAGE_SIZE - m.VPAGE_SIZE + lastVP.Length - 1
 }
+
+
 
 func min(a, b int) int {
 	if a < b {
