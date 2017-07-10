@@ -6,19 +6,18 @@ import (
 )
 
 type Message struct{
-	Id int //The id of the recipient
-	Message string //The message
+	From byte
+	To byte
+	Type string
+	Fault_addr int
+	Event *chan string
+	Err error
 	Data []byte //Data of the message
 }
 
 type Endpoint struct{
 	done chan bool
 	l net.Listener
-}
-
-
-func (m *Message) GetMessage() string{
-	return m.Message
 }
 
 func NewEndpoint(port string, handler func(conn net.Conn)) (Endpoint, error) {

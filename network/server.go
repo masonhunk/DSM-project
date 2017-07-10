@@ -7,14 +7,14 @@ import (
 
 type Server struct{
 	port string
-	Clients map[int]Transciever
-	nonce int
+	Clients map[byte]Transciever
+	nonce byte
 	ep Endpoint
 	handler func(Message)
 }
 
 func NewServer(handler func(Message), port string) (Server, error){
-	s := Server{port, make(map[int]Transciever), 1, Endpoint{}, handler}
+	s := Server{port, make(map[byte]Transciever), byte(1), Endpoint{}, handler}
 	var err error
 	s.ep, err = NewEndpoint(port, s.handleConnection)
 	if err != nil {
@@ -36,12 +36,12 @@ func (s *Server) StopServer() {
 }
 
 func (s *Server) Send(message Message) {
-	t := s.Clients[message.Id]
+	t := s.Clients[message.To]
 	t.Send(message)
 }
 
 func (s *Server) handleMessage(message Message) {
-	if message.Id != 0 {
+	if message.To != 0 {
 		s.Send(message)
 	}
 	s.handler(message)
@@ -51,5 +51,5 @@ func (s *Server) handleMessage(message Message) {
 func (s *Server)handleConnection(conn net.Conn) {
 	t := NewTransciever(conn, s.handleMessage)
 	s.Clients[s.nonce] = t
-	s.nonce = s.nonce + 1
+	s.nonce = s.nonce + byte(1)
 }
