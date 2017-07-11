@@ -10,7 +10,7 @@ var conn network.Client
 var privView memory.VirtualMemory
 var mem *MVMem
 
-func init() {
+func initialize() {
 	privView = memory.NewVmem(4096, 128)
 	mem = NewMVMem(privView)
 

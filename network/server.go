@@ -7,14 +7,14 @@ import (
 
 type Server struct{
 	port string
-	Clients map[byte]Transciever
+	Clients map[byte]*Transciever
 	nonce byte
 	ep Endpoint
 	handler func(Message)
 }
 
 func NewServer(handler func(Message), port string) (Server, error){
-	s := Server{port, make(map[byte]Transciever), byte(1), Endpoint{}, handler}
+	s := Server{port, make(map[byte]*Transciever), byte(1), Endpoint{}, handler}
 	var err error
 	s.ep, err = NewEndpoint(port, s.handleConnection)
 	if err != nil {

@@ -7,13 +7,13 @@ import (
 
 type Client struct{
 	conn net.Conn
-	t Transciever
+	t *Transciever
 	handler func(Message)
 	running bool
 }
 
 func NewClient(handler func(Message)) Client{
-	return Client{nil, Transciever{}, handler, false}
+	return Client{nil, &Transciever{}, handler, false}
 }
 
 //Connect to some address, which is a string on the form xxx.xxx.xxx.xxx:xxxx with ip and port.
