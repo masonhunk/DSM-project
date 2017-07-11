@@ -55,13 +55,11 @@ func (t *Transciever) Close(){
 	<- t.done
 }
 
-func (t *Transciever) Send(message Message) {
+func (t *Transciever) Send(message Message) error {
 	enc := gob.NewEncoder(t.rw)
 	err := enc.Encode(message)
-	if err != nil{
-		fmt.Println("Couldnt encode message")
-	}
 	t.rw.Flush()
+	return err
 }
 
 // A transciever mock

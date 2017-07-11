@@ -27,3 +27,16 @@ func TestManager_HandleReadReq(t *testing.T){
 	m.HandleReadReq(network.Message{Fault_addr: 0, From: 1, To:3})
 	assert.Equal(t, []network.Message{{Fault_addr:0, From:1, To:4}}, tm.Messages)
 }
+
+func TestMVMem_Malloc(t *testing.T) {
+	vmem := memory.NewVmem(1024, 128)
+	tm := network.NewTranscieverMock()
+	m := NewManager(tm, vmem)
+	m.HandleAlloc(200)
+	fmt.Println(m.mpt)
+	m.HandleAlloc(150)
+	fmt.Println(m.mpt)
+	m.HandleAlloc(600)
+	fmt.Println(m.mpt)
+
+}

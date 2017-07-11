@@ -69,7 +69,7 @@ func TestServerCreationWithMultipleClients(t *testing.T){
 	c2.Send(network.Message{To: byte(1), Type: "Test", Data: []byte{1,4}})
 	time.Sleep(time.Millisecond * 200)
 	c3.Send(network.Message{To: byte(1), Type: "Test", Data: []byte{1,5}})
-	time.Sleep(200000000)
+	time.Sleep(time.Millisecond * 500)
 	c1.Close()
 	c2.Close()
 	c3.Close()

@@ -12,6 +12,7 @@ const (
 	WRITE_REPLY = "WRPL"
 	INVALIDATE_REPLY = "INV"
 	INVALIDATE_REQUEST = "INVQ"
+
 )
 type Message struct{
 	From byte
@@ -43,6 +44,7 @@ func NewEndpoint(port string, handler func(conn net.Conn)) (Endpoint, error) {
 			//Do stuff with connections
 			conn, err := l.Accept()
 			if err != nil{
+				fmt.Println(err)
 				fmt.Println("Endpoint - Accept failed.")
 				l.Close()
 				done <- true

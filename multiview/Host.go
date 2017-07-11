@@ -20,8 +20,8 @@ func initialize() {
 		case network.READ_REPLY, network.WRITE_REPLY:
 			privBase, _ := mem.vPageAddrToMemoryAddr(mem.GetPageAddr(msg.Fault_addr))
 			//write data to privileged view, ie. the actual memory representation
-			for i, byte := range msg.Data {
-				err := mem.vm.Write(privBase + 0, byte)
+			for i, byt := range msg.Data {
+				err := mem.vm.Write(privBase + 0, byt)
 				if err != nil {
 					fmt.Println("failed to write to privileged view at addr: ", privBase + i, " with error: ", err)
 					break
@@ -69,7 +69,7 @@ func initialize() {
 	conn.Connect("localhost:2000")
 }
 
-//ID's are placeholder values for integration. faultType = memory.READ_REQUEST OR memory.WRITE_REQUEST
+//ID's are placeholder values waiting for integration. faultType = memory.READ_REQUEST OR memory.WRITE_REQUEST
 func onFault(addr int, faultType string) {
 	c := make(chan string)
 	msg := network.Message{
@@ -81,7 +81,11 @@ func onFault(addr int, faultType string) {
 		Event: &c,
 		Fault_addr: addr,
 	}
-	conn.Send(msg)
-	<- c
+	err := conn.Send(msg)
+	if err != nil {
+		<- c
+		//send ack
+		//conn.Send()
+	}
 
 }
