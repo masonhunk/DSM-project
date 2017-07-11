@@ -5,9 +5,14 @@ import (
   "strconv"
 )
 
+
+var AccessDeniedErr = errors.New("access denied")
 const NO_ACCESS byte = 0
 const READ_ONLY byte = 1
 const READ_WRITE byte = 2
+
+type FaultListener func(addr int, faultType byte) //faultType = 0 => read fault, = 1 => write fault
+
 
 type VirtualMemory interface {
   Read(addr int) (byte, error)
@@ -21,6 +26,7 @@ type VirtualMemory interface {
   GetPageSize() int
   Size() int
   AccessRightsDisabled(b bool)
+  addFaultListener(l FaultListener)
 }
 
 type Vmem struct {
@@ -30,6 +36,11 @@ type Vmem struct {
   FreeMemObjects []AddrPair
 	mallocHistory  map[int]int //maps address to length
   arDisabled     bool
+  faultListeners []FaultListener
+}
+
+func (m *Vmem) addFaultListener(l FaultListener) {
+  m.faultListeners = append(m.faultListeners, l)
 }
 
 func (m *Vmem) AccessRightsDisabled(b bool) {
@@ -98,6 +109,7 @@ func NewVmem(memSize int, pageByteSize int) *Vmem {
   m.FreeMemObjects[0] = AddrPair{0, memSize - 1}
 	m.mallocHistory = make(map[int]int)
   m.arDisabled = false
+	m.faultListeners = make([]FaultListener, 0)
   return m
 }
 
@@ -109,11 +121,15 @@ func (m *Vmem) Read(addr int) (byte, error) {
   access := m.AccessMap[m.GetPageAddr(addr)]
   switch access {
   case NO_ACCESS:
-	return 127, errors.New("access denied")
+    //notify all listeners
+    for _, l := range m.faultListeners {
+      l(addr, 0)
+    }
+    return 127, errors.New("access denied")
   case READ_ONLY:
-	return m.Stack[addr], nil
+	  return m.Stack[addr], nil
   case READ_WRITE:
-	return m.Stack[addr], nil
+	  return m.Stack[addr], nil
   }
   return 127, errors.New("unknown error")
 }
@@ -128,6 +144,10 @@ func (m *Vmem) ReadBytes(addr, length int) ([]byte, error) {
     access := m.AccessMap[m.GetPageAddr(i)]
     switch access {
     case NO_ACCESS:
+      //notify all listeners
+      for _, l := range m.faultListeners {
+        l(addr, 0)
+      }
       return nil, errors.New("access denied at location: " + strconv.Itoa(i))
     case  READ_WRITE, READ_ONLY:
       continue
@@ -147,12 +167,20 @@ func (m *Vmem) Write(addr int, val byte) error {
   access := m.AccessMap[m.GetPageAddr(addr)]
   switch access {
   case NO_ACCESS:
-	return errors.New("access denied")
+    //notify all listeners
+    for _, l := range m.faultListeners {
+      l(addr, 1)
+    }
+	  return errors.New("access denied")
   case READ_ONLY:
-	return errors.New("access denied")
+    //notify all listeners
+    for _, l := range m.faultListeners {
+      l(addr, 1)
+    }
+	  return errors.New("access denied")
   case READ_WRITE:
-	m.Stack[addr] = val
-	return nil
+	  m.Stack[addr] = val
+	  return nil
   }
   return errors.New("unknown error")
 

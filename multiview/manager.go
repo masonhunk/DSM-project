@@ -53,7 +53,7 @@ func (m *Manager) HandleWriteReq(message network.Message){
 	m.cs.locks[i].Lock()
 	for _, p := range m.cs.copies[i]{
 		message.To = p
-		message.Type = network.INVALIDATE_REQUEST
+		message.Type = INVALIDATE_REQUEST
 		m.tr.Send(message)
 	}
 }
@@ -62,7 +62,7 @@ func (m *Manager) HandleInvalidateReply(message network.Message){
 	i := m.vm.GetPageAddr(message.Fault_addr)
 	c :=m.cs.copies[i]
 	if len(c) == 1{
-		message.Type = network.WRITE_REQUEST
+		message.Type = WRITE_REQUEST
 		message.To = c[0]
 		m.tr.Send(message)
 		c = []byte{}
@@ -81,10 +81,12 @@ func (m *Manager) HandleWriteAck(message network.Message){
 	m.cs.locks[i].Unlock()
 }
 
+
 func (m *Manager) handleAck(message network.Message) int{
-	i := mem.GetPageAddr(message.Fault_addr)
+	/*i := m.GetPageAddr(message.Fault_addr)
 	m.cs.copies[i]=append(m.cs.copies[i], message.From)
-	return i
+	return i*/
+	return -1
 }
 
 func (m *Manager) HandleAlloc(size int){

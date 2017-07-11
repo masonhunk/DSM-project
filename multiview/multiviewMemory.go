@@ -14,6 +14,10 @@ type MVMem struct {
 	mallocHistory map[int]int //maps address to length
 }
 
+func (m *MVMem) addFaultListener(l memory.FaultListener) {
+	panic("implement me")
+}
+
 type interval struct {
 	start, end int
 }

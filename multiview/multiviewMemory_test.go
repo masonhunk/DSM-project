@@ -4,6 +4,8 @@ import (
 	"testing"
 	"DSM-project/memory"
 	"github.com/stretchr/testify/assert"
+	"fmt"
+	"strconv"
 )
 
 func TestMultiViewMalloc(t *testing.T) {
