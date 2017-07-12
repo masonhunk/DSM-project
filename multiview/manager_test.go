@@ -13,6 +13,20 @@ import 	(
 func checkRLockTimeout( lock *sync.RWMutex) bool {
 	gotLock := make(chan bool, 1)
 	go func() {
+		lock.RLock()
+		gotLock <- true
+		lock.RUnlock()
+	}()
+	select {
+	case  <-gotLock:
+		return false
+	case <-time.After(time.Second):
+		return true
+	}
+}
+func checkWLockTimeout( lock *sync.RWMutex) bool {
+	gotLock := make(chan bool, 1)
+	go func() {
 		lock.Lock()
 		gotLock <- true
 		lock.Unlock()
@@ -41,6 +55,7 @@ func countChannelCont(c chan bool) int{
 func TestManagerInit(t *testing.T) {
 	vmem := memory.NewVmem(1024, 128)
 	NewManager(network.NewTranscieverMock(),vmem)
+	//TODO just to avoid errors from compiler. Remove at some point.
 	fmt.Println("")
 }
 
@@ -48,10 +63,10 @@ func TestManager_HandleReadReq(t *testing.T){
 	vmem := memory.NewVmem(1024, 128)
 	tm := network.NewTranscieverMock()
 	m := NewManager(tm, vmem)
-	m.cs.copies[0] = []byte{4}
-	m.cs.locks[0] = new(sync.RWMutex)
-	m.HandleReadReq(network.Message{Fault_addr: 0, From: 1, To:3})
-	assert.Equal(t, []network.Message{{Fault_addr:0, From:1, To:4}}, tm.Messages)
+	m.HandleAlloc(network.Message{From:byte(2), To:byte(1), Minipage_size:200})
+	message, err := m.HandleReadReq(network.Message{Fault_addr: 1100, From: 1, To:3})
+	assert.Nil(t, err)
+	assert.Equal(t, network.Message{Fault_addr:1100, From:1, To:2, Minipage_base:1024, Minipage_size:128}, message)
 }
 
 func TestManager_HandleMultipleReadReq(t *testing.T) {
@@ -63,11 +78,11 @@ func TestManager_HandleMultipleReadReq(t *testing.T) {
 	m.HandleAlloc(network.Message{From: byte(2), To: byte(1), Minipage_size: 1024})
 	m.HandleReadReq(message)
 	m.HandleReadReq(message)
-	assert.True(t, checkRLockTimeout(m.cs.locks[vpage]))
+	assert.True(t, checkWLockTimeout(m.locks[vpage]))
 	message.Type = READ_ACK
 	m.HandleReadAck(message)
 	m.HandleReadAck(message)
-	assert.False(t, checkRLockTimeout(m.cs.locks[vpage]))
+	assert.False(t, checkWLockTimeout(m.locks[vpage]))
 }
 
 func TestManager_HandleAlloc(t *testing.T) {
@@ -79,9 +94,9 @@ func TestManager_HandleAlloc(t *testing.T) {
 	expmpt[8] = minipage{0,128}
 	expmpt[9] = minipage{0,72}
 	assert.Equal(t, expmpt, m.mpt)
-	assert.NotNil(t, m.cs.locks[8])
+	assert.NotNil(t, m.locks[8])
 	assert.Equal(t, 8, m.log[8])
-	assert.NotNil(t, m.cs.locks[9])
+	assert.NotNil(t, m.locks[9])
 	assert.Equal(t, 8, m.log[9])
 	m.HandleAlloc(network.Message{From:byte(2), To:byte(1), Minipage_size:150})
 	expmpt[17] = minipage{72,56}
@@ -109,8 +124,8 @@ func TestManager_HandleFree(t *testing.T) {
 	m.HandleFree(network.Message{From:byte(2), To:byte(1), Fault_addr:pointer.Fault_addr})
 	assert.Equal(t, 0, len(m.mpt))
 	assert.Equal(t, 0, len(m.log))
-	assert.Equal(t, 0, len(m.cs.locks))
-	assert.Equal(t, 0, len(m.cs.copies))
+	assert.Equal(t, 0, len(m.locks))
+	assert.Equal(t, 0, len(m.copies))
 }
 
 func TestManager_HandleWriteReq(t *testing.T) {
@@ -130,10 +145,10 @@ func TestManager_HandleWriteReq(t *testing.T) {
 	message.Type = INVALIDATE_REPLY
 	m.HandleInvalidateReply(message)
 	vpage :=  message.Fault_addr / vmem.GetPageSize()
-	assert.True(t, checkRLockTimeout(m.cs.locks[vpage]))
+	assert.True(t, checkRLockTimeout(m.locks[vpage]))
 	message.Type = WRITE_ACK
 	m.HandleWriteAck(message)
-	assert.False(t, checkRLockTimeout(m.cs.locks[vpage]))
+	assert.False(t, checkRLockTimeout(m.locks[vpage]))
 }
 
 func TestManager_HandleMultipleWriteReq(t *testing.T) {
@@ -153,11 +168,13 @@ func TestManager_HandleMultipleWriteReq(t *testing.T) {
 		m.HandleWriteReq(message)
 		reply <- true
 	}()
-	time.Sleep(time.Second)
+	time.Sleep(time.Millisecond * 500)
 	assert.Equal(t, 1, countChannelCont(reply))
 	m.HandleWriteAck(message)
-	time.Sleep(time.Second)
+	time.Sleep(time.Millisecond * 500)
 	assert.Equal(t, 1, countChannelCont(reply))
-
-
+	m.HandleWriteAck(message)
+	time.Sleep(time.Millisecond * 500)
+	vpage :=  message.Fault_addr / vmem.GetPageSize()
+	assert.False(t, checkWLockTimeout(m.locks[vpage]))
 }

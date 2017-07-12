@@ -8,90 +8,109 @@ import (
 	"errors"
 )
 
-type CopySet struct{
-	copies map[int][]byte
-	locks map[int]*sync.RWMutex
-}
-
+//Each minipage consists of an offset and a length.
 type minipage struct {
 	offset, length int
 }
 
-
+//this is the actual manager.
 type Manager struct{
-	cs CopySet
-	tr network.ITransciever
-	vm memory.VirtualMemory
-	mpt map[int]minipage
-	log map[int]int //A map, where each entrance points to the first vpage of this allocation. Used for freeing.
+	tr network.ITransciever 		//The transciever that we are sending messages over.
+	vm memory.VirtualMemory 		//The virtual memory object we are working on in the system.
+	mpt map[int]minipage			//Minipagetable
+	log map[int]int 				//A map, where each entrance points to
+									// the first vpage of this allocation. Used for freeing.
+	copies map[int][]byte			//A map of who has copies of what vpage
+	locks map[int]*sync.RWMutex		//A map of locks belonging to each vpage.
 }
 
-func NewManager(tr network.ITransciever, vm memory.VirtualMemory) Manager{
+// Returns the pointer to a manager object.
+func NewManager(tr network.ITransciever, vm memory.VirtualMemory) *Manager{
 	//TODO remove the line below
 	fmt.Println("") //Just to make to compiler be quiet for now.
 	m := Manager{
-		CopySet{copies: make(map[int][]byte),
-		locks: make(map[int]*sync.RWMutex)},
-		tr,
-		vm,
-		make(map[int]minipage),
-		make(map[int]int),
+		copies: make(map[int][]byte),
+		locks: make(map[int]*sync.RWMutex),
+		tr: tr,
+		vm: vm,
+		mpt: make(map[int]minipage),
+		log: make(map[int]int),
 	}
-	return m
+	return &m
 }
 
-func (m *Manager) HandleMessage(message network.Message){
+// This is the function to call, when a manager has to handle any message.
+// This will call the correct functions, depending on the message type, and
+// then send whatever messages needs to be sent afterwards.
+func (m *Manager) HandleMessage(message network.Message) error{
 	switch t := message.Type; t{
+
 	case READ_REQUEST:
-		message, _ :=m.HandleReadReq(message)
+		message, err :=m.HandleReadReq(message)
+		if err != nil{return err}
 		m.tr.Send(message)
+
 	case WRITE_REQUEST:
-		message, _ :=m.HandleWriteReq(message)
-		for _, mes := range message{
-			m.tr.Send(mes)
-		}
+		message, err :=m.HandleWriteReq(message)
+		if err != nil{return err}
+		for _, mes := range message{m.tr.Send(mes)}
+
 	case INVALIDATE_REPLY:
-		m.HandleInvalidateReply(message)
+		err := m.HandleInvalidateReply(message)
+		if err != nil{return err}
 
 	case MALLOC_REQUEST:
-		message, _ :=m.HandleAlloc(message)
+		message, err :=m.HandleAlloc(message)
+		if err != nil{return err}
 		m.tr.Send(message)
+
 	case FREE_REQUEST:
-		message, _ :=m.HandleFree(message)
+		message, err :=m.HandleFree(message)
+		if err != nil{return err}
 		m.tr.Send(message)
 	}
+	return nil
 }
 
+// This translates a message, by adding more information to it. This is information
+// that only the manager knows, but which is important for the hosts.
 func (m *Manager) translate(message network.Message) network.Message{
-	vpage :=  m.vm.GetPageAddr(message.Fault_addr)/m.vm.GetPageSize()
+	vpage :=  message.Fault_addr / m.vm.GetPageSize()
 	message.Minipage_base = m.vm.GetPageAddr(message.Fault_addr) + m.mpt[vpage].offset
 	message.Minipage_size = m.mpt[vpage].length
 	message.Privbase = message.Minipage_base % m.vm.Size()
 	return message
 }
 
+// This handles read requests.
 func (m *Manager) HandleReadReq(message network.Message) (network.Message, error){
 	message = m.translate(message)
 	vpage :=  message.Fault_addr / m.vm.GetPageSize()
-	m.cs.locks[vpage].RLock()
-	p := m.cs.copies[vpage][0]
+
+	if _, ok := m.mpt[vpage]; !ok { //If the page doesnt exist, we return nil and an error.
+		return network.Message{}, errors.New("vpage have not been allocated.")
+	}
+
+	m.locks[vpage].RLock()
+	p := m.copies[vpage][0]
 	message.To = p
-	m.tr.Send(message)
 	return message, nil
 }
 
+// This handles write requests.
 func (m *Manager) HandleWriteReq(message network.Message) ([]network.Message, error){
 	message = m.translate(message)
 	vpage :=  message.Fault_addr / m.vm.GetPageSize()
 
-	if _, ok := m.mpt[vpage]; !ok {
+	if _, ok := m.mpt[vpage]; !ok { //If the page doesnt exist, we return nil and an error.
 		return nil, errors.New("vpage have not been allocated.")
 	}
-	m.cs.locks[vpage].Lock()
+
+	m.locks[vpage].Lock()
 	message.Type = INVALIDATE_REQUEST
 	messages := []network.Message{}
 
-	for _, p := range m.cs.copies[vpage]{
+	for _, p := range m.copies[vpage]{
 		message.To = p
 
 		messages = append(messages, message)
@@ -99,9 +118,9 @@ func (m *Manager) HandleWriteReq(message network.Message) ([]network.Message, er
 	return messages, nil
 }
 
-func (m *Manager) HandleInvalidateReply(message network.Message){
+func (m *Manager) HandleInvalidateReply(message network.Message) error{
 	vpage :=  message.Fault_addr / m.vm.GetPageSize()
-	c :=m.cs.copies[vpage]
+	c :=m.copies[vpage]
 	if len(c) == 1{
 		message.Type = WRITE_REQUEST
 		message.To = c[0]
@@ -110,22 +129,25 @@ func (m *Manager) HandleInvalidateReply(message network.Message){
 	} else {
 		c = c[1:]
 	}
+	return nil
 }
 
-func (m *Manager) HandleReadAck(message network.Message){
+func (m *Manager) HandleReadAck(message network.Message) error{
 	vpage := m.handleAck(message)
-	m.cs.locks[vpage].RUnlock()
+	m.locks[vpage].RUnlock()
+	return nil
 }
 
-func (m *Manager) HandleWriteAck(message network.Message){
+func (m *Manager) HandleWriteAck(message network.Message) error{
 	vpage := m.handleAck(message)
-	m.cs.locks[vpage].Unlock()
+	m.locks[vpage].Unlock()
+	return nil
 }
 
 
 func (m *Manager) handleAck(message network.Message) int{
 	vpage := m.vm.GetPageAddr(message.Fault_addr) / m.vm.GetPageSize()
-	m.cs.copies[vpage]=append(m.cs.copies[vpage], message.From)
+	m.copies[vpage]=append(m.copies[vpage], message.From)
 	return vpage
 }
 
@@ -138,31 +160,22 @@ func (m *Manager) HandleAlloc(message network.Message) (network.Message, error){
 	i := ptr
 	resultArray := make([]minipage, 0)
 	for sizeLeft > 0 {
-		nextPageAddr := i + m.vm.GetPageSize() - (i % m.vm.GetPageSize())
-		length := 0
-		if nextPageAddr - i > sizeLeft {
-			length = sizeLeft
-		} else {
-			length = nextPageAddr - i
-		}
-		mp := minipage{
-			offset: i - m.vm.GetPageAddr(i),
-			length: length,
-		}
-		resultArray = append(resultArray, mp)
-		sizeLeft -= length
-		i = nextPageAddr
 
+		offset := i - m.vm.GetPageAddr(i)
+		length := Min(sizeLeft, m.vm.GetPageSize()-offset)
+		i = i + length
+		sizeLeft = sizeLeft - length
+		resultArray = append(resultArray, minipage{offset, length})
 	}
 
 	startpg := ptr/m.vm.GetPageSize()
 	endpg := (ptr+size)/m.vm.GetPageSize()
-
+	npages := m.vm.Size()/m.vm.GetPageSize()
 	//loop over views to find free space
 	for i := 1; i < m.vm.GetPageSize(); i++ {
 		failed := false
-		startpg = startpg + m.vm.Size()/m.vm.GetPageSize()
-		endpg = endpg + m.vm.Size()/m.vm.GetPageSize()
+		startpg = startpg + npages
+		endpg = endpg + npages
 		for j := startpg; j <= endpg; j++  {
 			_, exists := m.mpt[j]
 			if exists {
@@ -179,8 +192,8 @@ func (m *Manager) HandleAlloc(message network.Message) (network.Message, error){
 	for i, mp := range resultArray {
 		m.mpt[startpg + i] = mp
 		m.log[startpg + i] = startpg
-		m.cs.locks[startpg+i] = new(sync.RWMutex)
-		m.cs.copies[startpg+i] = []byte{message.From}
+		m.locks[startpg+i] = new(sync.RWMutex)
+		m.copies[startpg+i] = []byte{message.From}
 	}
 
 	//Send reply to alloc requester
@@ -203,13 +216,29 @@ func (m *Manager) HandleFree(message network.Message) (network.Message, error){
 		if m.log[i] != vpage{
 			break
 		}
-		m.cs.locks[i].Lock()
+		m.locks[i].Lock()
 		delete(m.log, i)
 		delete(m.mpt, i)
-		delete(m.cs.copies, i)
-		delete(m.cs.locks,i)
+		delete(m.copies, i)
+		delete(m.locks,i)
 	}
 	message.Type = FREE_REPLY
 	message.To = message.From
 	return message, nil
 }
+
+
+// Here is some utility stuff
+func Min(x, y int) int {
+	if x < y {
+		return x
+	}
+	return y
+}
+/*
+func Max(x, y int) int {
+	if x > y {
+		return x
+	}
+	return y
+}*/
