@@ -4,6 +4,8 @@ import (
 	"DSM-project/network"
 	"sync"
 	"DSM-project/memory"
+	"fmt"
+	"errors"
 )
 
 type CopySet struct{
@@ -25,6 +27,8 @@ type Manager struct{
 }
 
 func NewManager(tr network.ITransciever, vm memory.VirtualMemory) Manager{
+	//TODO remove the line below
+	fmt.Println("") //Just to make to compiler be quiet for now.
 	m := Manager{
 		CopySet{copies: make(map[int][]byte),
 		locks: make(map[int]*sync.RWMutex)},
@@ -52,31 +56,40 @@ func (m *Manager) HandleMessage(message network.Message){
 }
 
 func (m *Manager) translate(message network.Message) network.Message{
-	vpage :=  message.Fault_addr / m.vm.GetPageSize()
+	vpage :=  m.vm.GetPageAddr(message.Fault_addr)/m.vm.GetPageSize()
 	message.Minipage_base = m.vm.GetPageAddr(message.Fault_addr) + m.mpt[vpage].offset
 	message.Minipage_size = m.mpt[vpage].length
 	message.Privbase = message.Minipage_base % m.vm.Size()
 	return message
 }
 
-func (m *Manager) HandleReadReq(message network.Message){
+func (m *Manager) HandleReadReq(message network.Message) (network.Message, error){
 	message = m.translate(message)
 	vpage :=  message.Fault_addr / m.vm.GetPageSize()
 	m.cs.locks[vpage].RLock()
 	p := m.cs.copies[vpage][0]
 	message.To = p
 	m.tr.Send(message)
+	return message, nil
 }
 
-func (m *Manager) HandleWriteReq(message network.Message){
+func (m *Manager) HandleWriteReq(message network.Message) ([]network.Message, error){
 	message = m.translate(message)
 	vpage :=  message.Fault_addr / m.vm.GetPageSize()
+
+	if _, ok := m.mpt[vpage]; !ok {
+		return nil, errors.New("vpage have not been allocated.")
+	}
 	m.cs.locks[vpage].Lock()
+	message.Type = INVALIDATE_REQUEST
+	messages := []network.Message{}
+
 	for _, p := range m.cs.copies[vpage]{
 		message.To = p
-		message.Type = INVALIDATE_REQUEST
-		m.tr.Send(message)
+
+		messages = append(messages, message)
 	}
+	return messages, nil
 }
 
 func (m *Manager) HandleInvalidateReply(message network.Message){
@@ -109,7 +122,7 @@ func (m *Manager) handleAck(message network.Message) int{
 	return vpage
 }
 
-func (m *Manager) HandleAlloc(message network.Message){
+func (m *Manager) HandleAlloc(message network.Message) (network.Message, error){
 	size := message.Minipage_size
 	ptr, _:= m.vm.Malloc(size)
 
@@ -141,8 +154,8 @@ func (m *Manager) HandleAlloc(message network.Message){
 	//loop over views to find free space
 	for i := 1; i < m.vm.GetPageSize(); i++ {
 		failed := false
-		startpg = startpg + m.vm.GetPageSize()
-		endpg = endpg + m.vm.GetPageSize()
+		startpg = startpg + m.vm.Size()/m.vm.GetPageSize()
+		endpg = endpg + m.vm.Size()/m.vm.GetPageSize()
 		for j := startpg; j <= endpg; j++  {
 			_, exists := m.mpt[j]
 			if exists {
@@ -159,34 +172,37 @@ func (m *Manager) HandleAlloc(message network.Message){
 	for i, mp := range resultArray {
 		m.mpt[startpg + i] = mp
 		m.log[startpg + i] = startpg
+		m.cs.locks[startpg+i] = new(sync.RWMutex)
+		m.cs.copies[startpg+i] = []byte{message.From}
 	}
 
 	//Send reply to alloc requester
 	message.To=message.From
-	message.Fault_addr = m.vm.GetPageAddr(startpg) + m.mpt[startpg].offset
+	message.Fault_addr = startpg*m.vm.GetPageSize() + m.mpt[startpg].offset
 	message.Type = MALLOC_REPLY
-	m.tr.Send(message)
+	return message, nil
 
 }
 
-func (m *Manager) HandleFree(message network.Message){
+func (m *Manager) HandleFree(message network.Message) (network.Message, error){
 	message = m.translate(message)
 
 	//First we get the first vpage the allocation is in
-	vpage := message.Minipage_base / m.vm.GetPageSize()
+	vpage := m.vm.GetPageAddr(message.Fault_addr) / m.vm.GetPageSize()
+
 
 	//Then we loop over vpages from that vpage. If they point back to this vpage, we free them.
-	for i := vpage; i < len(m.mpt); i++{
+	for i := vpage; true ; i++{
 		if m.log[i] != vpage{
 			break
 		}
 		m.cs.locks[i].Lock()
-		m.log[i] = 0
-		m.mpt[i] = minipage{}
-		m.cs.copies[i] = nil
-		m.cs.locks[i].Unlock()
+		delete(m.log, i)
+		delete(m.mpt, i)
+		delete(m.cs.copies, i)
+		delete(m.cs.locks,i)
 	}
 	message.Type = FREE_REPLY
 	message.To = message.From
-	m.tr.Send(message)
+	return message, nil
 }
