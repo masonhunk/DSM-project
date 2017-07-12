@@ -21,7 +21,7 @@ type Manager struct{
 	tr network.ITransciever
 	vm memory.VirtualMemory
 	mpt map[int]minipage
-
+	log map[int]int //A map, where each entrance points to the first vpage of this allocation. Used for freeing.
 }
 
 func NewManager(tr network.ITransciever, vm memory.VirtualMemory) Manager{
@@ -30,12 +30,25 @@ func NewManager(tr network.ITransciever, vm memory.VirtualMemory) Manager{
 		locks: make(map[int]*sync.RWMutex)},
 		tr,
 		vm,
-		make(map[int]minipage)}
+		make(map[int]minipage),
+		make(map[int]int),
+	}
 	return m
 }
 
 func (m *Manager) HandleMessage(message network.Message){
-
+	switch t := message.Type; t{
+	case READ_REQUEST:
+		m.HandleReadReq(message)
+	case WRITE_REQUEST:
+		m.HandleWriteReq(message)
+	case INVALIDATE_REPLY:
+		m.HandleInvalidateReply(message)
+	case MALLOC_REQUEST:
+		m.HandleAlloc(message)
+	case FREE_REQUEST:
+		m.HandleFree(message)
+	}
 }
 
 func (m *Manager) translate(message network.Message) network.Message{
@@ -145,11 +158,35 @@ func (m *Manager) HandleAlloc(message network.Message){
 	//insert into virtual memory
 	for i, mp := range resultArray {
 		m.mpt[startpg + i] = mp
+		m.log[startpg + i] = startpg
 	}
 
+	//Send reply to alloc requester
 	message.To=message.From
-
+	message.Fault_addr = m.vm.GetPageAddr(startpg) + m.mpt[startpg].offset
+	message.Type = MALLOC_REPLY
+	m.tr.Send(message)
 
 }
 
-func (m *Manager) HandleFree(){}
+func (m *Manager) HandleFree(message network.Message){
+	message = m.translate(message)
+
+	//First we get the first vpage the allocation is in
+	vpage := message.Minipage_base / m.vm.GetPageSize()
+
+	//Then we loop over vpages from that vpage. If they point back to this vpage, we free them.
+	for i := vpage; i < len(m.mpt); i++{
+		if m.log[i] != vpage{
+			break
+		}
+		m.cs.locks[i].Lock()
+		m.log[i] = 0
+		m.mpt[i] = minipage{}
+		m.cs.copies[i] = nil
+		m.cs.locks[i].Unlock()
+	}
+	message.Type = FREE_REPLY
+	message.To = message.From
+	m.tr.Send(message)
+}
