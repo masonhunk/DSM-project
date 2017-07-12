@@ -6,7 +6,6 @@ import 	(
 	"github.com/stretchr/testify/assert"
 	"DSM-project/network"
 	"DSM-project/memory"
-	"fmt"
 )
 
 func TestManagerInit(t *testing.T) {
