@@ -20,6 +20,7 @@ const (
 	FREE_REQUEST = "FR"
 	MALLOC_REPLY = "MRPL"
 	FREE_REPLY = "FRPL"
+	WELCOME_MESSAGE = "WELC"
 )
 
 var conn network.Client

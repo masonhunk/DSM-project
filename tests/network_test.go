@@ -21,7 +21,7 @@ func messageHandler(message network.Message){
 }
 
 func createTransciever(conn net.Conn) {
-	network.NewTransciever(conn, messageHandler)
+	network(conn, messageHandler)
 }
 
 func createEndpoint(port string) network.Endpoint{

@@ -38,20 +38,28 @@ func (m *Manager) HandleMessage(message network.Message){
 
 }
 
-func (m *Manager) translate(){} //Not necessary atm.
+func (m *Manager) translate(message network.Message) network.Message{
+	vpage :=  message.Fault_addr / m.vm.GetPageSize()
+	message.Minipage_base = m.vm.GetPageAddr(message.Fault_addr) + m.mpt[vpage].offset
+	message.Minipage_size = m.mpt[vpage].length
+	message.Privbase = message.Minipage_base % m.vm.Size()
+	return message
+}
 
 func (m *Manager) HandleReadReq(message network.Message){
-	i := m.vm.GetPageAddr(message.Fault_addr)
-	m.cs.locks[i].RLock()
-	p := m.cs.copies[i][0]
+	message = m.translate(message)
+	vpage :=  message.Fault_addr / m.vm.GetPageSize()
+	m.cs.locks[vpage].RLock()
+	p := m.cs.copies[vpage][0]
 	message.To = p
 	m.tr.Send(message)
 }
 
 func (m *Manager) HandleWriteReq(message network.Message){
-	i := m.vm.GetPageAddr(message.Fault_addr)
-	m.cs.locks[i].Lock()
-	for _, p := range m.cs.copies[i]{
+	message = m.translate(message)
+	vpage :=  message.Fault_addr / m.vm.GetPageSize()
+	m.cs.locks[vpage].Lock()
+	for _, p := range m.cs.copies[vpage]{
 		message.To = p
 		message.Type = INVALIDATE_REQUEST
 		m.tr.Send(message)
@@ -59,8 +67,8 @@ func (m *Manager) HandleWriteReq(message network.Message){
 }
 
 func (m *Manager) HandleInvalidateReply(message network.Message){
-	i := m.vm.GetPageAddr(message.Fault_addr)
-	c :=m.cs.copies[i]
+	vpage :=  message.Fault_addr / m.vm.GetPageSize()
+	c :=m.cs.copies[vpage]
 	if len(c) == 1{
 		message.Type = WRITE_REQUEST
 		message.To = c[0]
@@ -72,24 +80,24 @@ func (m *Manager) HandleInvalidateReply(message network.Message){
 }
 
 func (m *Manager) HandleReadAck(message network.Message){
-	i := m.handleAck(message)
-	m.cs.locks[i].RUnlock()
+	vpage := m.handleAck(message)
+	m.cs.locks[vpage].RUnlock()
 }
 
 func (m *Manager) HandleWriteAck(message network.Message){
-	i := m.handleAck(message)
-	m.cs.locks[i].Unlock()
+	vpage := m.handleAck(message)
+	m.cs.locks[vpage].Unlock()
 }
 
 
 func (m *Manager) handleAck(message network.Message) int{
-	/*i := m.GetPageAddr(message.Fault_addr)
-	m.cs.copies[i]=append(m.cs.copies[i], message.From)
-	return i*/
-	return -1
+	vpage :=  message.Fault_addr / m.vm.GetPageSize()
+	m.cs.copies[vpage]=append(m.cs.copies[vpage], message.From)
+	return vpage
 }
 
-func (m *Manager) HandleAlloc(size int){
+func (m *Manager) HandleAlloc(message network.Message){
+	size := message.Minipage_size
 	ptr, _:= m.vm.Malloc(size)
 
 	//generate minipages
@@ -138,6 +146,8 @@ func (m *Manager) HandleAlloc(size int){
 	for i, mp := range resultArray {
 		m.mpt[startpg + i] = mp
 	}
+
+	message.To=message.From
 
 
 }

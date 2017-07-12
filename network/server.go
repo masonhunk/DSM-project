@@ -3,6 +3,7 @@ package network
 import (
 	"fmt"
 	"net"
+	"DSM-project/multiview"
 )
 
 type Server struct{
@@ -50,6 +51,7 @@ func (s *Server) handleMessage(message Message) {
 
 func (s *Server)handleConnection(conn net.Conn) {
 	t := NewTransciever(conn, s.handleMessage)
+	t.Send(Message{From: 0, To: s.nonce, Type:multiview.WELCOME_MESSAGE})
 	s.Clients[s.nonce] = t
 	s.nonce = s.nonce + byte(1)
 }
