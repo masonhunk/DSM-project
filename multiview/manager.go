@@ -43,15 +43,22 @@ func NewManager(tr network.ITransciever, vm memory.VirtualMemory) Manager{
 func (m *Manager) HandleMessage(message network.Message){
 	switch t := message.Type; t{
 	case READ_REQUEST:
-		m.HandleReadReq(message)
+		message, _ :=m.HandleReadReq(message)
+		m.tr.Send(message)
 	case WRITE_REQUEST:
-		m.HandleWriteReq(message)
+		message, _ :=m.HandleWriteReq(message)
+		for _, mes := range message{
+			m.tr.Send(mes)
+		}
 	case INVALIDATE_REPLY:
 		m.HandleInvalidateReply(message)
+
 	case MALLOC_REQUEST:
-		m.HandleAlloc(message)
+		message, _ :=m.HandleAlloc(message)
+		m.tr.Send(message)
 	case FREE_REQUEST:
-		m.HandleFree(message)
+		message, _ :=m.HandleFree(message)
+		m.tr.Send(message)
 	}
 }
 
