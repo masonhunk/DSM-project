@@ -124,7 +124,7 @@ func (m *Manager) HandleWriteAck(message network.Message){
 
 
 func (m *Manager) handleAck(message network.Message) int{
-	vpage :=  message.Fault_addr / m.vm.GetPageSize()
+	vpage := m.vm.GetPageAddr(message.Fault_addr) / m.vm.GetPageSize()
 	m.cs.copies[vpage]=append(m.cs.copies[vpage], message.From)
 	return vpage
 }

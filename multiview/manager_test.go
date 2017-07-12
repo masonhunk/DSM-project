@@ -10,8 +10,8 @@ import 	(
 	"time"
 )
 
-func checkLockTimeout( lock *sync.RWMutex) bool {
-	gotLock := make(chan bool)
+func checkRLockTimeout( lock *sync.RWMutex) bool {
+	gotLock := make(chan bool, 1)
 	go func() {
 		lock.Lock()
 		gotLock <- true
@@ -20,9 +20,22 @@ func checkLockTimeout( lock *sync.RWMutex) bool {
 	select {
 	case  <-gotLock:
 		return false
-	case <-time.After(time.Second * 1):
+	case <-time.After(time.Second):
 		return true
 	}
+}
+
+func countChannelCont(c chan bool) int{
+	i := 0
+	for {
+		select {
+		case <-c:
+			i = i + 1
+		default:
+			return i
+		}
+	}
+	return i
 }
 
 func TestManagerInit(t *testing.T) {
@@ -39,6 +52,22 @@ func TestManager_HandleReadReq(t *testing.T){
 	m.cs.locks[0] = new(sync.RWMutex)
 	m.HandleReadReq(network.Message{Fault_addr: 0, From: 1, To:3})
 	assert.Equal(t, []network.Message{{Fault_addr:0, From:1, To:4}}, tm.Messages)
+}
+
+func TestManager_HandleMultipleReadReq(t *testing.T) {
+	vmem := memory.NewVmem(1024, 128)
+	tm := network.NewTranscieverMock()
+	m := NewManager(tm, vmem)
+	message := network.Message{Fault_addr:1025, From: byte(2), To: byte(1), Type:READ_REQUEST}
+	vpage :=  message.Fault_addr / vmem.GetPageSize()
+	m.HandleAlloc(network.Message{From: byte(2), To: byte(1), Minipage_size: 1024})
+	m.HandleReadReq(message)
+	m.HandleReadReq(message)
+	assert.True(t, checkRLockTimeout(m.cs.locks[vpage]))
+	message.Type = READ_ACK
+	m.HandleReadAck(message)
+	m.HandleReadAck(message)
+	assert.False(t, checkRLockTimeout(m.cs.locks[vpage]))
 }
 
 func TestManager_HandleAlloc(t *testing.T) {
@@ -101,14 +130,34 @@ func TestManager_HandleWriteReq(t *testing.T) {
 	message.Type = INVALIDATE_REPLY
 	m.HandleInvalidateReply(message)
 	vpage :=  message.Fault_addr / vmem.GetPageSize()
-	assert.True(t, checkLockTimeout(m.cs.locks[vpage]))
+	assert.True(t, checkRLockTimeout(m.cs.locks[vpage]))
 	message.Type = WRITE_ACK
 	m.HandleWriteAck(message)
-	assert.False(t, checkLockTimeout(m.cs.locks[vpage]))
+	assert.False(t, checkRLockTimeout(m.cs.locks[vpage]))
 }
 
-/*func TestManager_HandleMultipleWriteReq(t *testing.T) {
+func TestManager_HandleMultipleWriteReq(t *testing.T) {
 	vmem := memory.NewVmem(1024, 128)
 	tm := network.NewTranscieverMock()
 	m := NewManager(tm, vmem)
-}*/
+	pointer, _ := m.HandleAlloc(network.Message{From: byte(2), To: byte(1), Minipage_size: 200})
+	message := network.Message{From: byte(2), To: byte(1), Fault_addr: pointer.Fault_addr}
+
+	reply := make(chan bool, 5)
+
+	go func(){
+		m.HandleWriteReq(message)
+		reply <- true
+	}()
+	go func(){
+		m.HandleWriteReq(message)
+		reply <- true
+	}()
+	time.Sleep(time.Second)
+	assert.Equal(t, 1, countChannelCont(reply))
+	m.HandleWriteAck(message)
+	time.Sleep(time.Second)
+	assert.Equal(t, 1, countChannelCont(reply))
+
+
+}
