@@ -74,17 +74,22 @@ func (m *Manager) HandleMessage(message network.Message) error {
 
 // This translates a message, by adding more information to it. This is information
 // that only the manager knows, but which is important for the hosts.
-func (m *Manager) translate(message network.Message) network.Message{
+func (m *Manager) translate(message network.Message) (network.Message, error) {
 	vpage :=  message.Fault_addr / m.vm.GetPageSize()
+	if _, ok:= m.mpt[vpage]; ok == false{
+		message.Err = errors.New("vpage did not exist.")
+		return message, errors.New("vpage did not exist.")
+	}
 	message.Minipage_base = m.vm.GetPageAddr(message.Fault_addr) + m.mpt[vpage].offset
 	message.Minipage_size = m.mpt[vpage].length
 	message.Privbase = message.Minipage_base % m.vm.Size()
-	return message
+	return message, nil
 }
 
 // This handles read requests.
 func (m *Manager) HandleReadReq(message network.Message) (network.Message, error){
-	message = m.translate(message)
+	var err error
+	message, err = m.translate(message)
 	vpage :=  message.Fault_addr / m.vm.GetPageSize()
 
 	if _, ok := m.mpt[vpage]; !ok { //If the page doesnt exist, we return nil and an error.
@@ -94,12 +99,13 @@ func (m *Manager) HandleReadReq(message network.Message) (network.Message, error
 	m.locks[vpage].RLock()
 	p := m.copies[vpage][0]
 	message.To = p
-	return message, nil
+	return message, err
 }
 
 // This handles write requests.
 func (m *Manager) HandleWriteReq(message network.Message) ([]network.Message, error){
-	message = m.translate(message)
+	var err error
+	message, err = m.translate(message)
 	vpage :=  message.Fault_addr / m.vm.GetPageSize()
 
 	if _, ok := m.mpt[vpage]; !ok { //If the page doesnt exist, we return nil and an error.
@@ -115,7 +121,7 @@ func (m *Manager) HandleWriteReq(message network.Message) ([]network.Message, er
 
 		messages = append(messages, message)
 	}
-	return messages, nil
+	return messages, err
 }
 
 func (m *Manager) HandleInvalidateReply(message network.Message) error{
@@ -206,7 +212,8 @@ func (m *Manager) HandleAlloc(message network.Message) (network.Message, error){
 }
 
 func (m *Manager) HandleFree(message network.Message) (network.Message, error){
-	message = m.translate(message)
+	var err error
+	message, err = m.translate(message)
 
 	//First we get the first vpage the allocation is in
 	vpage := m.vm.GetPageAddr(message.Fault_addr) / m.vm.GetPageSize()
@@ -225,7 +232,7 @@ func (m *Manager) HandleFree(message network.Message) (network.Message, error){
 	}
 	message.Type = FREE_REPLY
 	message.To = message.From
-	return message, nil
+	return message, err
 }
 
 
