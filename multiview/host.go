@@ -23,21 +23,24 @@ const (
 	MALLOC_REPLY = "MRPL"
 	FREE_REPLY = "FRPL"
 	WELCOME_MESSAGE = "WELC"
+	READ_ACK = "RA"
+	WRITE_ACK = "WA"
 )
 
-var conn network.Client
+var conn network.IClient
 var mem *hostMem
+var id byte
 
 type hostMem struct {
 	vm	memory.VirtualMemory
-	accessMap map[int]byte
+	accessMap map[int]byte //key = vpage number, value, access right
 	faultListeners []memory.FaultListener
 }
 
 func NewHostMem(virtualMemory memory.VirtualMemory) *hostMem {
 	m := new(hostMem)
 	m.vm = virtualMemory
-	m.accessMap = make(map[int]byte) //key = vpage number, value, access right
+	m.accessMap = make(map[int]byte)
 	m.faultListeners = make([]memory.FaultListener, 0)
 	m.vm.AccessRightsDisabled(true)
 	return m
@@ -48,7 +51,7 @@ func (m *hostMem) translateAddr(addr int) int {
 }
 
 func (m *hostMem) getVPageNr(addr int) int {
-	return addr % m.vm.GetPageSize()
+	return addr/m.vm.GetPageSize()
 }
 
 func (m *hostMem) Read(addr int) (byte, error) {
@@ -64,13 +67,19 @@ func (m *hostMem) Read(addr int) (byte, error) {
 
 
 func (m *hostMem) ReadBytes(addr, length int) ([]byte, error) {
-	panic("implement me")
+	//check access rights
+	for i := addr; i < addr + length; i += mem.vm.GetPageSize() {
+		if mem.accessMap[mem.getVPageNr(addr)] == memory.NO_ACCESS {
+			return nil, errors.New("Access Denied")
+		}
+	}
+	return m.vm.ReadBytes(mem.translateAddr(addr), length)
 }
 
 func (m *hostMem) Write(addr int, val byte) error {
 	if m.accessMap[m.getVPageNr(addr)] != memory.READ_WRITE {
 		for _, l := range m.faultListeners {
-			l(addr, 0)
+			l(addr, 1)
 		}
 		return memory.AccessDeniedErr
 	}
@@ -82,12 +91,9 @@ func (m *hostMem) Malloc(sizeInBytes int) (int, error) {
 
 	msg := network.Message{
 		Type: MALLOC_REQUEST,
-		From: byte(1),
+		From: id,
 		To: byte(1),
-		Data: nil,
-		Err: nil,
 		Event: &c,
-		Fault_addr: 0,
 		Minipage_size: sizeInBytes, //<- contains the size for the allocation!
 	}
 	conn.Send(msg)
@@ -101,13 +107,10 @@ func (m *hostMem) Malloc(sizeInBytes int) (int, error) {
 
 func (m *hostMem) Free(pointer, length int) error {
 	c := make(chan string)
-
 	msg := network.Message{
 		Type: FREE_REQUEST,
-		From: byte(1),
+		From: id,
 		To: byte(1),
-		Data: nil,
-		Err: nil,
 		Event: &c,
 		Fault_addr: pointer,
 		Minipage_size: length, //<- length here
@@ -124,13 +127,12 @@ func (m *hostMem) addFaultListener(l memory.FaultListener) {
 	m.faultListeners = append(m.faultListeners, l)
 }
 
-
-func Initialize(memSize, pageByteSize int) {
-	vm := memory.NewVmem(memSize, pageByteSize)
-	mem = NewHostMem(vm)
+func Initialise(memSize, pageByteSize int) error {
 	//handler for all incoming messages in the host process, ie. read/write requests/replies, and invalidation requests.
 	msgHandler := func(msg network.Message) {
 		switch msg.Type {
+		case WELCOME_MESSAGE:
+			id = msg.To
 		case READ_REPLY, WRITE_REPLY:
 			privBase := msg.Privbase
 			//write data to privileged view, ie. the actual memory representation
@@ -150,11 +152,13 @@ func Initialize(memSize, pageByteSize int) {
 			mem.accessMap[mem.getVPageNr(msg.Fault_addr)] = right
 			*msg.Event <- "done" //let the blocking caller resume their work
 		case READ_REQUEST, WRITE_REQUEST:
-			if msg.Type == READ_REQUEST && mem.accessMap[msg.Fault_addr] == memory.READ_WRITE {
-				mem.accessMap[mem.getVPageNr(msg.Fault_addr)] = memory.READ_ONLY
-
-			} else if msg.Type == WRITE_REQUEST {
-				mem.accessMap[mem.getVPageNr(msg.Fault_addr)] = memory.NO_ACCESS
+			vpagenr := mem.getVPageNr(msg.Fault_addr)
+			if msg.Type == READ_REQUEST && mem.accessMap[vpagenr] == memory.READ_WRITE && vpagenr >= mem.vm.Size()/mem.vm.GetPageSize() {
+				mem.accessMap[vpagenr] = memory.READ_ONLY
+				msg.Type = READ_REPLY
+			} else if msg.Type == WRITE_REQUEST && vpagenr >= mem.vm.Size()/mem.vm.GetPageSize() {
+				mem.accessMap[vpagenr] = memory.NO_ACCESS
+				msg.Type = WRITE_REPLY
 			}
 			//send reply back to requester including data
 			msg.To = msg.From
@@ -173,7 +177,7 @@ func Initialize(memSize, pageByteSize int) {
 			if msg.Err != nil {
 				*msg.Event <- msg.Err.Error()
 			} else {
-				s := msg.Fault_addr
+				s := msg.Minipage_base
 				*msg.Event <- strconv.Itoa(s)
 			}
 		case FREE_REPLY:
@@ -185,27 +189,53 @@ func Initialize(memSize, pageByteSize int) {
 		}
 	}
 
-	conn = network.NewClient(msgHandler)
-	conn.Connect("localhost:2000")
+	client := network.NewClient(msgHandler)
+	return StartAndConnect(memSize, pageByteSize, client)
+}
+
+func StartAndConnect(memSize, pageByteSize int, client network.IClient) error {
+	vm := memory.NewVmem(memSize, pageByteSize)
+	mem = NewHostMem(vm)
+	for i := 0; i < memSize/pageByteSize; i++ {
+		mem.accessMap[i] = memory.READ_WRITE
+	}
+	conn = client
+	mem.addFaultListener(onFault)
+	return conn.Connect("localhost:2000")
 }
 
 //ID's are placeholder values waiting for integration. faultType = memory.READ_REQUEST OR memory.WRITE_REQUEST
-func onFault(addr int, faultType string) {
+func onFault(addr int, faultType byte) {
+	str := ""
+	if faultType == 0 {
+		str = READ_REQUEST
+	} else if faultType == 1 {
+		str = WRITE_REQUEST
+	}
 	c := make(chan string)
 	msg := network.Message{
-		Type: faultType,
-		From: byte(1),
+		Type: str,
+		From: id,
 		To: byte(1),
-		Data: nil,
-		Err: nil,
 		Event: &c,
 		Fault_addr: addr,
 	}
 	err := conn.Send(msg)
-	if err != nil {
+	if err == nil {
 		<- c
 		//send ack
-		//conn.Send()
+		msg := network.Message{
+			From: id,
+			To: byte(1),
+		}
+		if faultType == 0 {
+			msg.Type = READ_ACK
+		} else if faultType == 1 {
+			msg.Type = WRITE_ACK
+		}
+		conn.Send(msg)
+	} else {
+		fmt.Println(err)
 	}
 
 }
