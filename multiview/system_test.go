@@ -14,10 +14,10 @@ func TestInitialize(t *testing.T) {
 	assert.Nil(t, err)
 	fmt.Println(ptr)
 	mw.Write(ptr, byte(9))
-	val, err := mw.mem.Read(ptr)
+	val, err := mw.Read(ptr)
 	fmt.Println(val, err)
 	mw.Write(ptr, byte(8))
-	val, err = mw.mem.Read(ptr)
+	val, err = mw.Read(ptr)
 	fmt.Println(val, err)
 	mw.Shutdown()
 }
