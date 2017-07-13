@@ -24,10 +24,20 @@ func TestInitialize(t *testing.T) {
 
 func TestMalloc(t *testing.T) {
 	Initialize(4096, 128)
-	_, err := mem.Malloc(1000)
-	_, err2 := mem.Malloc(2000)
+	ptr, err := mem.Malloc(100)
+	fmt.Println(ptr)
+	_, err2 := mem.Malloc(200)
 	assert.Nil(t, err)
 	assert.Nil(t, err2)
+	err = mem.Free(ptr, 100)
+	assert.Nil(t, err)
+	ptr3, err3 := mem.Malloc(100)
+	assert.Nil(t, err3)
+	assert.Equal(t,ptr, ptr3)
 
 	Shutdown()
+}
+
+func TestREADWRITE(t *testing.T) {
+
 }

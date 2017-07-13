@@ -110,7 +110,7 @@ func Join(memSize, pageByteSize int) error {
 			if msg.Err != nil {
 				chanMap[msg.EventId] <- msg.Err.Error()
 			} else {
-				s := msg.Minipage_base
+				s := msg.Fault_addr
 				chanMap[msg.EventId] <- strconv.Itoa(s)
 			}
 		case FREE_REPLY:
