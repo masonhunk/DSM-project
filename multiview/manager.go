@@ -213,7 +213,6 @@ func (m *Manager) HandleAlloc(message network.Message) (network.Message, error){
 	message.To=message.From
 	message.Fault_addr = startpg*m.vm.GetPageSize() + m.mpt[startpg].offset
 	message.Type = MALLOC_REPLY
-	fmt.Println(m.mpt)
 
 	return message, nil
 
@@ -238,9 +237,9 @@ func (m *Manager) HandleFree(message network.Message) (network.Message, error){
 		delete(m.copies, i)
 		delete(m.locks,i)
 	}
+	m.vm.Free(message.Fault_addr % m.vm.Size())
 	message.Type = FREE_REPLY
 	message.To = message.From
-	fmt.Println(m.mpt)
 	return message, err
 }
 
