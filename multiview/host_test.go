@@ -3,9 +3,7 @@ package multiview
 import (
 	"testing"
 	"DSM-project/network"
-	"fmt"
 	"DSM-project/memory"
-	"strconv"
 	"github.com/stretchr/testify/assert"
 	"time"
 )
@@ -94,10 +92,13 @@ func TestHandlerINVALIDATE(t *testing.T) {
 
 func TestHostMem_WriteAndRead(t *testing.T) {
 	mw := NewMultiView()
-
+	c := make(chan bool)
 	cMock := NewClientMock()
+	handler := func (message network.Message) {
+		mw.messageHandler(message, c)
+	}
+	cMock.handler = handler
 	mw.StartAndConnect(4096, 128, cMock)
-
 	//test that an access miss fires a read/write request to the manager
 	go func() {
 		_, err := mw.Read(4096 + 100)
@@ -148,66 +149,6 @@ func (c *clientMock) Send(message network.Message) error {
 func NewClientMock() *clientMock {
 	cMock := new(clientMock)
 	cMock.messages = make([]network.Message, 0)
-	msgHandler := func(msg network.Message) {
-		switch msg.Type {
-		case WELCOME_MESSAGE:
-			id = msg.To
-		case READ_REPLY, WRITE_REPLY:
-			privBase := msg.Privbase
-			//write data to privileged view, ie. the actual memory representation
-			for i, byt := range msg.Data {
-				err := mem.Write(privBase + i, byt)
-				if err != nil {
-					fmt.Println("failed to write to privileged view at addr: ", privBase + i, " with error: ", err)
-					break
-				}
-			}
-			var right byte
-			if msg.Type == READ_REPLY {
-				right = memory.READ_ONLY
-			} else {
-				right = memory.READ_WRITE
-			}
-			mem.accessMap[mem.getVPageNr(msg.Fault_addr)] = right
-			chanMap[msg.EventId] <- "done" //let the blocking caller resume their work
-		case READ_REQUEST, WRITE_REQUEST:
-			vpagenr := mem.getVPageNr(msg.Fault_addr)
-			if msg.Type == READ_REQUEST && mem.accessMap[vpagenr] == memory.READ_WRITE && vpagenr >= mem.vm.Size()/mem.vm.GetPageSize() {
-				fmt.Println("test")
-				mem.accessMap[vpagenr] = memory.READ_ONLY
-				msg.Type = READ_REPLY
-			} else if msg.Type == WRITE_REQUEST && vpagenr >= mem.vm.Size()/mem.vm.GetPageSize() {
-				mem.accessMap[vpagenr] = memory.NO_ACCESS
-				msg.Type = WRITE_REPLY
-			}
-			//send reply back to requester including data
-			msg.To = msg.From
-			res, err := mem.ReadBytes(msg.Privbase, msg.Minipage_size)
-			if err != nil {
-				fmt.Println(err)
-			} else {
-				msg.Data = res
-				conn.Send(msg)
-			}
-		case INVALIDATE_REQUEST:
-			mem.accessMap[mem.getVPageNr(msg.Fault_addr)] = memory.NO_ACCESS
-			msg.Type = INVALIDATE_REPLY
-			conn.Send(msg)
-		case MALLOC_REPLY:
-			if msg.Err != nil {
-				chanMap[msg.EventId] <- msg.Err.Error()
-			} else {
-				s := msg.Minipage_base
-				chanMap[msg.EventId] <- strconv.Itoa(s)
-			}
-		case FREE_REPLY:
-			if msg.Err != nil {
-				chanMap[msg.EventId] <- msg.Err.Error()
-			} else {
-				chanMap[msg.EventId] <- "ok"
-			}
-		}
-	}
-	cMock.handler = msgHandler
+
 	return cMock
 }

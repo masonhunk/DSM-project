@@ -67,70 +67,10 @@ func (m *Multiview) Join(memSize, pageByteSize int) error {
 	c := make(chan bool)
 	m.chanMap = make(map[byte]chan string)
 	//handler for all incoming messages in the host process, ie. read/write requests/replies, and invalidation requests.
-	msgHandler := func(msg network.Message) error {
-		switch msg.Type {
-		case WELCOME_MESSAGE:
-			m.id = msg.To
-			c <- true
-		case READ_REPLY, WRITE_REPLY:
-			privBase := msg.Privbase
-			//write data to privileged view, ie. the actual memory representation
-			for i, byt := range msg.Data {
-				err := m.Write(privBase + i, byt)
-				if err != nil {
-					fmt.Println("failed to write to privileged view at addr: ", privBase + i, " with error: ", err)
-					break
-				}
-			}
-			var right byte
-			if msg.Type == READ_REPLY {
-				right = memory.READ_ONLY
-			} else {
-				right = memory.READ_WRITE
-			}
-			m.mem.accessMap[m.mem.getVPageNr(msg.Fault_addr)] = right
-			m.chanMap[msg.EventId] <- "done" //let the blocking caller resume their work
-		case READ_REQUEST, WRITE_REQUEST:
-			vpagenr := m.mem.getVPageNr(msg.Fault_addr)
-			if msg.Type == READ_REQUEST && m.mem.accessMap[vpagenr] == memory.READ_WRITE &&
-					vpagenr >= m.mem.vm.Size()/m.mem.vm.GetPageSize() {
-				m.mem.accessMap[vpagenr] = memory.READ_ONLY
-				msg.Type = READ_REPLY
-			} else if msg.Type == WRITE_REQUEST && vpagenr >= m.mem.vm.Size()/m.mem.vm.GetPageSize() {
-				m.mem.accessMap[vpagenr] = memory.NO_ACCESS
-				msg.Type = WRITE_REPLY
-			}
-			//send reply back to requester including data
-			msg.To = msg.From
-			res, err := m.ReadBytes(msg.Privbase, msg.Minipage_size)
-			if err != nil {
-				fmt.Println(err)
-			} else {
-				msg.Data = res
-				m.conn.Send(msg)
-			}
-		case INVALIDATE_REQUEST:
-			m.mem.accessMap[m.mem.getVPageNr(msg.Fault_addr)] = memory.NO_ACCESS
-			msg.Type = INVALIDATE_REPLY
-			m.conn.Send(msg)
-		case MALLOC_REPLY:
-			if msg.Err != nil {
-				m.chanMap[msg.EventId] <- msg.Err.Error()
-			} else {
-				s := msg.Fault_addr
-				m.chanMap[msg.EventId] <- strconv.Itoa(s)
-			}
-		case FREE_REPLY:
-			if msg.Err != nil {
-				m.chanMap[msg.EventId] <- msg.Err.Error()
-			} else {
-				m.chanMap[msg.EventId] <- "ok"
-			}
-		}
-		return nil
+	handler := func (message network.Message) error {
+		return m.messageHandler(message, c)
 	}
-
-	client := network.NewClient(msgHandler)
+	client := network.NewClient(handler)
 	err := m.StartAndConnect(memSize, pageByteSize, client)
 	<- c
 	return err
@@ -283,4 +223,67 @@ func (m *Multiview) onFault(addr int, faultType byte) {
 		fmt.Println(err)
 	}
 
+}
+
+func (m *Multiview) messageHandler(msg network.Message, c chan bool) error {
+	switch msg.Type {
+	case WELCOME_MESSAGE:
+		m.id = msg.To
+		c <- true
+	case READ_REPLY, WRITE_REPLY:
+		privBase := msg.Privbase
+		//write data to privileged view, ie. the actual memory representation
+		for i, byt := range msg.Data {
+			err := m.Write(privBase + i, byt)
+			if err != nil {
+				fmt.Println("failed to write to privileged view at addr: ", privBase + i, " with error: ", err)
+				break
+			}
+		}
+		var right byte
+		if msg.Type == READ_REPLY {
+			right = memory.READ_ONLY
+		} else {
+			right = memory.READ_WRITE
+		}
+		m.mem.accessMap[m.mem.getVPageNr(msg.Fault_addr)] = right
+		m.chanMap[msg.EventId] <- "done" //let the blocking caller resume their work
+	case READ_REQUEST, WRITE_REQUEST:
+		vpagenr := m.mem.getVPageNr(msg.Fault_addr)
+		if msg.Type == READ_REQUEST && m.mem.accessMap[vpagenr] == memory.READ_WRITE &&
+				vpagenr >= m.mem.vm.Size()/m.mem.vm.GetPageSize() {
+			m.mem.accessMap[vpagenr] = memory.READ_ONLY
+			msg.Type = READ_REPLY
+		} else if msg.Type == WRITE_REQUEST && vpagenr >= m.mem.vm.Size()/m.mem.vm.GetPageSize() {
+			m.mem.accessMap[vpagenr] = memory.NO_ACCESS
+			msg.Type = WRITE_REPLY
+		}
+		//send reply back to requester including data
+		msg.To = msg.From
+		res, err := m.ReadBytes(msg.Privbase, msg.Minipage_size)
+		if err != nil {
+			fmt.Println(err)
+		} else {
+			msg.Data = res
+			m.conn.Send(msg)
+		}
+	case INVALIDATE_REQUEST:
+		m.mem.accessMap[m.mem.getVPageNr(msg.Fault_addr)] = memory.NO_ACCESS
+		msg.Type = INVALIDATE_REPLY
+		m.conn.Send(msg)
+	case MALLOC_REPLY:
+		if msg.Err != nil {
+			m.chanMap[msg.EventId] <- msg.Err.Error()
+		} else {
+			s := msg.Fault_addr
+			m.chanMap[msg.EventId] <- strconv.Itoa(s)
+		}
+	case FREE_REPLY:
+		if msg.Err != nil {
+			m.chanMap[msg.EventId] <- msg.Err.Error()
+		} else {
+			m.chanMap[msg.EventId] <- "ok"
+		}
+	}
+	return nil
 }
