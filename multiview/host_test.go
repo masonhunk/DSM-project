@@ -19,7 +19,9 @@ func TestHandlerREADWRITE_REPLY(t *testing.T) {
 		Type: WELCOME_MESSAGE,
 		To: byte(9),
 	}
-	cMock.handler(msg)
+	c := make(chan bool)
+	go mw.messageHandler(msg, c)
+	<- c
 	assert.Equal(t, byte(9), mw.id)
 	//test read_reply, ie. from a read request
 	channel := make(chan string)
@@ -31,7 +33,7 @@ func TestHandlerREADWRITE_REPLY(t *testing.T) {
 		Fault_addr: 4096+100,
 		EventId: 100,
 	}
-	go cMock.handler(msg)
+	go mw.messageHandler(msg, nil)
 	<- channel
 	assert.Equal(t, memory.READ_ONLY, mw.mem.accessMap[mw.mem.getVPageNr(4096+100)])
 	res, err := mw.Read(100 + 4096)
@@ -62,7 +64,7 @@ func TestHandlerREADWRITE_REQ(t *testing.T) {
 		Minipage_size: 25,
 		Fault_addr: 100 + 4096 + 5,
 	}
-	cMock.handler(msg)
+	mw.messageHandler(msg,nil)
 	assert.Equal(t, 1, len(cMock.messages))
 	assert.Equal(t, byte(12), cMock.messages[0].Data[5])
 	assert.Equal(t, msg.From, cMock.messages[0].To)
@@ -78,7 +80,7 @@ func TestHandlerINVALIDATE(t *testing.T) {
 		Type: INVALIDATE_REQUEST,
 		Fault_addr: 255 + 4096,
 	}
-	cMock.handler(msg)
+	mw.messageHandler(msg,nil)
 	reply := cMock.messages[0]
 	assert.Equal(t, INVALIDATE_REPLY, reply.Type)
 	assert.Equal(t, memory.NO_ACCESS, mw.mem.accessMap[mw.mem.getVPageNr(255 + 4096)])
@@ -92,12 +94,7 @@ func TestHandlerINVALIDATE(t *testing.T) {
 
 func TestHostMem_WriteAndRead(t *testing.T) {
 	mw := NewMultiView()
-	c := make(chan bool)
 	cMock := NewClientMock()
-	handler := func (message network.Message) {
-		mw.messageHandler(message, c)
-	}
-	cMock.handler = handler
 	mw.StartAndConnect(4096, 128, cMock)
 	//test that an access miss fires a read/write request to the manager
 	go func() {
