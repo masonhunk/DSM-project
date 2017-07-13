@@ -97,7 +97,7 @@ func (m *Multiview) Join(memSize, pageByteSize int) error {
 				m.mem.accessMap[vpagenr] = memory.READ_ONLY
 				msg.Type = READ_REPLY
 			} else if msg.Type == WRITE_REQUEST && vpagenr >= m.mem.vm.Size()/m.mem.vm.GetPageSize() {
-				mem.accessMap[vpagenr] = memory.NO_ACCESS
+				m.mem.accessMap[vpagenr] = memory.NO_ACCESS
 				msg.Type = WRITE_REPLY
 			}
 			//send reply back to requester including data
@@ -153,7 +153,7 @@ func (m *Multiview) StartAndConnect(memSize, pageByteSize int, client network.IC
 	vm := memory.NewVmem(memSize, pageByteSize)
 	m.mem = NewHostMem(vm)
 	for i := 0; i < memSize/pageByteSize; i++ {
-		mem.accessMap[i] = memory.READ_WRITE
+		m.mem.accessMap[i] = memory.READ_WRITE
 	}
 	m.conn = client
 	m.mem.addFaultListener(m.onFault)
@@ -169,14 +169,14 @@ func (m *hostMem) getVPageNr(addr int) int {
 	return addr/m.vm.GetPageSize()
 }
 
-func (m *hostMem) Read(addr int) (byte, error) {
-	if m.accessMap[m.getVPageNr(addr)] == 0 {
-		for _, l := range m.faultListeners {
+func (m *Multiview) Read(addr int) (byte, error) {
+	if m.mem.accessMap[m.mem.getVPageNr(addr)] == 0 {
+		for _, l := range m.mem.faultListeners {
 			l(addr, 0)
 		}
 		return 0, memory.AccessDeniedErr
 	}
-	res, _ := m.vm.Read(m.translateAddr(addr))
+	res, _ := m.mem.vm.Read(m.mem.translateAddr(addr))
 	return res, nil
 }
 
@@ -191,13 +191,13 @@ func (m *Multiview) ReadBytes(addr, length int) ([]byte, error) {
 }
 
 func (m *Multiview) Write(addr int, val byte) error {
-	if m.accessMap[m.getVPageNr(addr)] != memory.READ_WRITE {
-		for _, l := range m.faultListeners {
+	if m.mem.accessMap[m.mem.getVPageNr(addr)] != memory.READ_WRITE {
+		for _, l := range m.mem.faultListeners {
 			l(addr, 1)
 		}
 		return memory.AccessDeniedErr
 	}
-	return m.vm.Write(m.translateAddr(addr), val)
+	return m.mem.vm.Write(m.mem.translateAddr(addr), val)
 }
 
 func (m *Multiview) Malloc(sizeInBytes int) (int, error) {

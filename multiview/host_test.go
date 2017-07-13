@@ -35,24 +35,26 @@ func TestHandlerREADWRITE_REPLY(t *testing.T) {
 	}
 	go cMock.handler(msg)
 	<- channel
-	assert.Equal(t, memory.READ_ONLY, mem.accessMap[mem.getVPageNr(4096+100)])
-	res, err := mem.Read(100 + 4096)
+	assert.Equal(t, memory.READ_ONLY, mw.mem.accessMap[mw.mem.getVPageNr(4096+100)])
+	res, err := mw.Read(100 + 4096)
 	assert.Nil(t, err)
 	assert.Equal(t, byte(1), res)
 
-	res, err = mem.Read(101 + 4096)
+	res, err = mw.Read(101 + 4096)
 	assert.Nil(t, err)
 	assert.Equal(t, byte(2), res)
 
-	res, err = mem.Read(102 + 4096)
+	res, err = mw.Read(102 + 4096)
 	assert.Nil(t, err)
 	assert.Equal(t, byte(3), res)
 }
 
 func TestHandlerREADWRITE_REQ(t *testing.T) {
+	mw := NewMultiView()
+
 	cMock := NewClientMock()
-	StartAndConnect(4096, 128, cMock)
-	mem.Write(105, byte(12))
+	mw.StartAndConnect(4096, 128, cMock)
+	mw.Write(105, byte(12))
 	msg := network.Message{
 		Type: WRITE_REQUEST,
 		To: byte(9),
@@ -66,12 +68,14 @@ func TestHandlerREADWRITE_REQ(t *testing.T) {
 	assert.Equal(t, 1, len(cMock.messages))
 	assert.Equal(t, byte(12), cMock.messages[0].Data[5])
 	assert.Equal(t, msg.From, cMock.messages[0].To)
-	assert.Equal(t, memory.NO_ACCESS, mem.accessMap[mem.getVPageNr(100 + 4096 + 5)])
+	assert.Equal(t, memory.NO_ACCESS, mw.mem.accessMap[mw.mem.getVPageNr(100 + 4096 + 5)])
 }
 
 func TestHandlerINVALIDATE(t *testing.T) {
+	mw := NewMultiView()
+
 	cMock := NewClientMock()
-	StartAndConnect(4096, 128, cMock)
+	mw.StartAndConnect(4096, 128, cMock)
 	msg := network.Message{
 		Type: INVALIDATE_REQUEST,
 		Fault_addr: 255 + 4096,
@@ -79,39 +83,41 @@ func TestHandlerINVALIDATE(t *testing.T) {
 	cMock.handler(msg)
 	reply := cMock.messages[0]
 	assert.Equal(t, INVALIDATE_REPLY, reply.Type)
-	assert.Equal(t, memory.NO_ACCESS, mem.accessMap[mem.getVPageNr(255 + 4096)])
+	assert.Equal(t, memory.NO_ACCESS, mw.mem.accessMap[mw.mem.getVPageNr(255 + 4096)])
 	go func() {
-		_, err := mem.Read(255 + 4096)
+		_, err := mw.Read(255 + 4096)
 		assert.NotNil(t, err)
 	}()
 	time.Sleep(time.Millisecond * 200)
-	chanMap[cMock.messages[1].EventId] <- "ok"
+	mw.chanMap[cMock.messages[1].EventId] <- "ok"
 }
 
 func TestHostMem_WriteAndRead(t *testing.T) {
+	mw := NewMultiView()
+
 	cMock := NewClientMock()
-	StartAndConnect(4096, 128, cMock)
+	mw.StartAndConnect(4096, 128, cMock)
 
 	//test that an access miss fires a read/write request to the manager
 	go func() {
-		_, err := mem.Read(4096 + 100)
+		_, err := mw.Read(4096 + 100)
 		assert.NotNil(t, err)
 	}()
 	time.Sleep(time.Millisecond * 200)
 	reply := cMock.messages[0]
-	chanMap[reply.EventId] <- "ok"
+	mw.chanMap[reply.EventId] <- "ok"
 	assert.Equal(t, 4096 + 100, reply.Fault_addr )
 	assert.Equal(t, READ_REQUEST, reply.Type)
 	time.Sleep(time.Millisecond * 200)
 	assert.Equal(t, READ_ACK, cMock.messages[1].Type)
 
 	go func() {
-		err := mem.Write(4096 + 100, byte(99))
+		err := mw.Write(4096 + 100, byte(99))
 		assert.NotNil(t, err)
 	}()
 	time.Sleep(time.Millisecond * 200)
 	reply = cMock.messages[2]
-	chanMap[reply.EventId] <- "ok"
+	mw.chanMap[reply.EventId] <- "ok"
 	assert.Equal(t, WRITE_REQUEST, reply.Type)
 	time.Sleep(time.Millisecond * 200)
 	assert.Equal(t, WRITE_ACK, cMock.messages[3].Type)
