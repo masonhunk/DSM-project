@@ -270,6 +270,8 @@ func (m *Multiview) messageHandler(msg network.Message, c chan bool) error {
 	case INVALIDATE_REQUEST:
 		m.mem.accessMap[m.mem.getVPageNr(msg.Fault_addr)] = memory.NO_ACCESS
 		msg.Type = INVALIDATE_REPLY
+		msg.To = msg.From
+		msg.From = msg.To
 		m.conn.Send(msg)
 	case MALLOC_REPLY:
 		if msg.Err != nil {

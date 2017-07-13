@@ -120,6 +120,7 @@ func (m *Manager) HandleWriteReq(message network.Message) ([]network.Message, er
 
 	m.locks[vpage].Lock()
 	message.Type = INVALIDATE_REQUEST
+	message.From = 1
 	messages := []network.Message{}
 
 	for _, p := range m.copies[vpage]{
@@ -133,6 +134,7 @@ func (m *Manager) HandleWriteReq(message network.Message) ([]network.Message, er
 func (m *Manager) HandleInvalidateReply(message network.Message) error{
 	vpage :=  message.Fault_addr / m.vm.GetPageSize()
 	c :=m.copies[vpage]
+	fmt.Println("Length of c is ", len(c))
 	if len(c) == 1{
 		message.Type = WRITE_REQUEST
 		message.To = c[0]

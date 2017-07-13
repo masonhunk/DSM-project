@@ -56,6 +56,7 @@ func (t *Transciever) Close(){
 }
 
 func (t *Transciever) Send(message Message) error {
+	fmt.Println(" --> Client sending ", message)
 	enc := gob.NewEncoder(t.rw)
 	err := enc.Encode(message)
 	t.rw.Flush()
