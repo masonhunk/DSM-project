@@ -54,7 +54,7 @@ func countChannelCont(c chan bool) int{
 
 func TestManagerInit(t *testing.T) {
 	vmem := memory.NewVmem(1024, 128)
-	NewManager(network.NewTranscieverMock(),vmem)
+	NewManager(vmem)
 	//TODO just to avoid errors from compiler. Remove at some point.
 	fmt.Println("")
 }
@@ -62,7 +62,8 @@ func TestManagerInit(t *testing.T) {
 func TestManager_HandleReadReq(t *testing.T){
 	vmem := memory.NewVmem(1024, 128)
 	tm := network.NewTranscieverMock()
-	m := NewManager(tm, vmem)
+	m := NewManager( vmem)
+	m.tr = tm
 	m.HandleAlloc(network.Message{From:byte(2), To:byte(1), Minipage_size:200})
 	message, err := m.HandleReadReq(network.Message{Fault_addr: 1100, From: 1, To:3})
 	assert.Nil(t, err)
@@ -72,7 +73,8 @@ func TestManager_HandleReadReq(t *testing.T){
 func TestManager_HandleMultipleReadReq(t *testing.T) {
 	vmem := memory.NewVmem(1024, 128)
 	tm := network.NewTranscieverMock()
-	m := NewManager(tm, vmem)
+	m := NewManager(vmem)
+	m.tr = tm
 	message := network.Message{Fault_addr:1025, From: byte(2), To: byte(1), Type:READ_REQUEST}
 	vpage :=  message.Fault_addr / vmem.GetPageSize()
 	m.HandleAlloc(network.Message{From: byte(2), To: byte(1), Minipage_size: 1024})
@@ -89,7 +91,8 @@ func TestManager_HandleAlloc(t *testing.T) {
 	vmem := memory.NewVmem(1024, 128)
 	expmpt := map[int]minipage{}
 	tm := network.NewTranscieverMock()
-	m := NewManager(tm, vmem)
+	m := NewManager(vmem)
+	m.tr = tm
 	m.HandleAlloc(network.Message{From:byte(2), To:byte(1), Minipage_size:200})
 	expmpt[8] = minipage{0,128}
 	expmpt[9] = minipage{0,72}
@@ -116,7 +119,8 @@ func TestManager_HandleFree(t *testing.T) {
 	vmem := memory.NewVmem(1024, 128)
 	expmpt := map[int]minipage{}
 	tm := network.NewTranscieverMock()
-	m := NewManager(tm, vmem)
+	m := NewManager(vmem)
+	m.tr = tm
 	pointer, _ := m.HandleAlloc(network.Message{From:byte(2), To:byte(1), Minipage_size:200})
 	expmpt[8] = minipage{0,128}
 	expmpt[9] = minipage{0,72}
@@ -131,7 +135,8 @@ func TestManager_HandleFree(t *testing.T) {
 func TestManager_HandleWriteReq(t *testing.T) {
 	vmem := memory.NewVmem(1024, 128)
 	tm := network.NewTranscieverMock()
-	m := NewManager(tm, vmem)
+	m := NewManager( vmem)
+	m.tr = tm
 
 	message := network.Message{From: byte(2), To: byte(1), Fault_addr: 4}
 	reply, err := m.HandleWriteReq(message)
@@ -154,7 +159,8 @@ func TestManager_HandleWriteReq(t *testing.T) {
 func TestManager_HandleMultipleWriteReq(t *testing.T) {
 	vmem := memory.NewVmem(1024, 128)
 	tm := network.NewTranscieverMock()
-	m := NewManager(tm, vmem)
+	m := NewManager(vmem)
+	m.tr = tm
 	pointer, _ := m.HandleAlloc(network.Message{From: byte(2), To: byte(1), Minipage_size: 200})
 	message := network.Message{From: byte(2), To: byte(1), Fault_addr: pointer.Fault_addr}
 

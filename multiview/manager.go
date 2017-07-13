@@ -15,7 +15,8 @@ type minipage struct {
 
 //this is the actual manager.
 type Manager struct{
-	tr network.ITransciever 		//The transciever that we are sending messages over.
+	tr network.ITransciever
+	cl *network.Client 		//The transciever that we are sending messages over.
 	vm memory.VirtualMemory 		//The virtual memory object we are working on in the system.
 	mpt map[int]minipage			//Minipagetable
 	log map[int]int 				//A map, where each entrance points to
@@ -25,18 +26,23 @@ type Manager struct{
 }
 
 // Returns the pointer to a manager object.
-func NewManager(tr network.ITransciever, vm memory.VirtualMemory) *Manager{
+func NewManager(vm memory.VirtualMemory) *Manager{
 	//TODO remove the line below
 	fmt.Println("") //Just to make to compiler be quiet for now.
 	m := Manager{
 		copies: make(map[int][]byte),
 		locks: make(map[int]*sync.RWMutex),
-		tr: tr,
 		vm: vm,
 		mpt: make(map[int]minipage),
 		log: make(map[int]int),
 	}
 	return &m
+}
+
+func(m *Manager) Connect(address string) {
+	m.cl = network.NewClient(func(message network.Message)error{go m.HandleMessage(message); return nil})
+	m.cl.Connect(address)
+	m.tr = m.cl.GetTransciever()
 }
 
 // This is the function to call, when a manager has to handle any message.
@@ -159,6 +165,8 @@ func (m *Manager) handleAck(message network.Message) int{
 
 func (m *Manager) HandleAlloc(message network.Message) (network.Message, error){
 	size := message.Minipage_size
+	fmt.Println("test")
+	fmt.Println(m)
 	fmt.Println(m.vm)
 	ptr, _:= m.vm.Malloc(size)
 
