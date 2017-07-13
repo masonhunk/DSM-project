@@ -12,18 +12,20 @@ import (
 
 
 func TestHandlerREADWRITE_REPLY(t *testing.T) {
-	chanMap = make(map[byte]chan string)
+	mw := NewMultiView()
+
+	mw.chanMap = make(map[byte]chan string)
 	cMock := NewClientMock()
-	StartAndConnect(4096, 128, cMock)
+	mw.StartAndConnect(4096, 128, cMock)
 	msg := network.Message{
 		Type: WELCOME_MESSAGE,
 		To: byte(9),
 	}
 	cMock.handler(msg)
-	assert.Equal(t, byte(9), id)
+	assert.Equal(t, byte(9), mw.id)
 	//test read_reply, ie. from a read request
 	channel := make(chan string)
-	chanMap[100] = channel
+	mw.chanMap[100] = channel
 	msg = network.Message{
 		Type: READ_REPLY,
 		Data: []byte{byte(1), byte(2), byte(3)},

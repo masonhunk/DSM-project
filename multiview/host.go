@@ -26,17 +26,23 @@ const (
 	WRITE_ACK = "WA"
 )
 
-var conn network.IClient
-var mem *hostMem
-var id byte
-var server network.Server
-var chanMap map[byte]chan string
-var sequenceNumber byte = 0
+type Multiview struct {
+	conn network.IClient
+	mem *hostMem
+	id byte
+	server network.Server
+	chanMap map[byte]chan string
+	sequenceNumber byte
+}
 
 type hostMem struct {
 	vm	memory.VirtualMemory
 	accessMap map[int]byte //key = vpage number, value, access right
 	faultListeners []memory.FaultListener
+}
+
+func NewMultiView() *Multiview {
+	return new(Multiview)
 }
 
 func NewHostMem(virtualMemory memory.VirtualMemory) *hostMem {
@@ -48,29 +54,29 @@ func NewHostMem(virtualMemory memory.VirtualMemory) *hostMem {
 	return m
 }
 
-func Leave() {
-	conn.Close()
+func (m *Multiview) Leave() {
+	m.conn.Close()
 }
 
-func Shutdown() {
-	conn.Close()
-	server.StopServer()
+func (m *Multiview) Shutdown() {
+	m.conn.Close()
+	m.server.StopServer()
 }
 
-func Join(memSize, pageByteSize int) error {
+func (m *Multiview) Join(memSize, pageByteSize int) error {
 	c := make(chan bool)
-	chanMap = make(map[byte]chan string)
+	m.chanMap = make(map[byte]chan string)
 	//handler for all incoming messages in the host process, ie. read/write requests/replies, and invalidation requests.
 	msgHandler := func(msg network.Message) error {
 		switch msg.Type {
 		case WELCOME_MESSAGE:
-			id = msg.To
+			m.id = msg.To
 			c <- true
 		case READ_REPLY, WRITE_REPLY:
 			privBase := msg.Privbase
 			//write data to privileged view, ie. the actual memory representation
 			for i, byt := range msg.Data {
-				err := mem.Write(privBase + i, byt)
+				err := m.Write(privBase + i, byt)
 				if err != nil {
 					fmt.Println("failed to write to privileged view at addr: ", privBase + i, " with error: ", err)
 					break
@@ -82,56 +88,57 @@ func Join(memSize, pageByteSize int) error {
 			} else {
 				right = memory.READ_WRITE
 			}
-			mem.accessMap[mem.getVPageNr(msg.Fault_addr)] = right
-			chanMap[msg.EventId] <- "done" //let the blocking caller resume their work
+			m.mem.accessMap[m.mem.getVPageNr(msg.Fault_addr)] = right
+			m.chanMap[msg.EventId] <- "done" //let the blocking caller resume their work
 		case READ_REQUEST, WRITE_REQUEST:
-			vpagenr := mem.getVPageNr(msg.Fault_addr)
-			if msg.Type == READ_REQUEST && mem.accessMap[vpagenr] == memory.READ_WRITE && vpagenr >= mem.vm.Size()/mem.vm.GetPageSize() {
-				mem.accessMap[vpagenr] = memory.READ_ONLY
+			vpagenr := m.mem.getVPageNr(msg.Fault_addr)
+			if msg.Type == READ_REQUEST && m.mem.accessMap[vpagenr] == memory.READ_WRITE &&
+					vpagenr >= m.mem.vm.Size()/m.mem.vm.GetPageSize() {
+				m.mem.accessMap[vpagenr] = memory.READ_ONLY
 				msg.Type = READ_REPLY
-			} else if msg.Type == WRITE_REQUEST && vpagenr >= mem.vm.Size()/mem.vm.GetPageSize() {
+			} else if msg.Type == WRITE_REQUEST && vpagenr >= m.mem.vm.Size()/m.mem.vm.GetPageSize() {
 				mem.accessMap[vpagenr] = memory.NO_ACCESS
 				msg.Type = WRITE_REPLY
 			}
 			//send reply back to requester including data
 			msg.To = msg.From
-			res, err := mem.ReadBytes(msg.Privbase, msg.Minipage_size)
+			res, err := m.ReadBytes(msg.Privbase, msg.Minipage_size)
 			if err != nil {
 				fmt.Println(err)
 			} else {
 				msg.Data = res
-				conn.Send(msg)
+				m.conn.Send(msg)
 			}
 		case INVALIDATE_REQUEST:
-			mem.accessMap[mem.getVPageNr(msg.Fault_addr)] = memory.NO_ACCESS
+			m.mem.accessMap[m.mem.getVPageNr(msg.Fault_addr)] = memory.NO_ACCESS
 			msg.Type = INVALIDATE_REPLY
-			conn.Send(msg)
+			m.conn.Send(msg)
 		case MALLOC_REPLY:
 			if msg.Err != nil {
-				chanMap[msg.EventId] <- msg.Err.Error()
+				m.chanMap[msg.EventId] <- msg.Err.Error()
 			} else {
 				s := msg.Fault_addr
-				chanMap[msg.EventId] <- strconv.Itoa(s)
+				m.chanMap[msg.EventId] <- strconv.Itoa(s)
 			}
 		case FREE_REPLY:
 			if msg.Err != nil {
-				chanMap[msg.EventId] <- msg.Err.Error()
+				m.chanMap[msg.EventId] <- msg.Err.Error()
 			} else {
-				chanMap[msg.EventId] <- "ok"
+				m.chanMap[msg.EventId] <- "ok"
 			}
 		}
 		return nil
 	}
 
 	client := network.NewClient(msgHandler)
-	err := StartAndConnect(memSize, pageByteSize, client)
+	err := m.StartAndConnect(memSize, pageByteSize, client)
 	<- c
 	return err
 }
 
-func Initialize(memSize, pageByteSize int) error {
+func (m *Multiview) Initialize(memSize, pageByteSize int) error {
 	var err error
-	server, err = network.NewServer(func(message network.Message) error {return nil}, "2000")
+	m.server, err = network.NewServer(func(message network.Message) error {return nil}, "2000")
 	if err != nil {
 		return err
 	}
@@ -139,18 +146,18 @@ func Initialize(memSize, pageByteSize int) error {
 	vm := memory.NewVmem(memSize, pageByteSize)
 	manager := NewManager(vm)
 	manager.Connect("localhost:2000")
-	return Join(memSize, pageByteSize)
+	return m.Join(memSize, pageByteSize)
 }
 
-func StartAndConnect(memSize, pageByteSize int, client network.IClient) error {
+func (m *Multiview) StartAndConnect(memSize, pageByteSize int, client network.IClient) error {
 	vm := memory.NewVmem(memSize, pageByteSize)
-	mem = NewHostMem(vm)
+	m.mem = NewHostMem(vm)
 	for i := 0; i < memSize/pageByteSize; i++ {
 		mem.accessMap[i] = memory.READ_WRITE
 	}
-	conn = client
-	mem.addFaultListener(onFault)
-	return conn.Connect("localhost:2000")
+	m.conn = client
+	m.mem.addFaultListener(m.onFault)
+	return m.conn.Connect("localhost:2000")
 }
 
 
@@ -173,17 +180,17 @@ func (m *hostMem) Read(addr int) (byte, error) {
 	return res, nil
 }
 
-func (m *hostMem) ReadBytes(addr, length int) ([]byte, error) {
+func (m *Multiview) ReadBytes(addr, length int) ([]byte, error) {
 	//check access rights
-	for i := addr; i < addr + length; i += mem.vm.GetPageSize() {
-		if mem.accessMap[mem.getVPageNr(addr)] == memory.NO_ACCESS {
+	for i := addr; i < addr + length; i += m.mem.vm.GetPageSize() {
+		if m.mem.accessMap[m.mem.getVPageNr(addr)] == memory.NO_ACCESS {
 			return nil, errors.New("Access Denied")
 		}
 	}
-	return m.vm.ReadBytes(mem.translateAddr(addr), length)
+	return m.mem.vm.ReadBytes(m.mem.translateAddr(addr), length)
 }
 
-func (m *hostMem) Write(addr int, val byte) error {
+func (m *Multiview) Write(addr int, val byte) error {
 	if m.accessMap[m.getVPageNr(addr)] != memory.READ_WRITE {
 		for _, l := range m.faultListeners {
 			l(addr, 1)
@@ -193,20 +200,20 @@ func (m *hostMem) Write(addr int, val byte) error {
 	return m.vm.Write(m.translateAddr(addr), val)
 }
 
-func (m *hostMem) Malloc(sizeInBytes int) (int, error) {
+func (m *Multiview) Malloc(sizeInBytes int) (int, error) {
 	c := make(chan string)
-	chanMap[sequenceNumber] = c
+	m.chanMap[m.sequenceNumber] = c
 	msg := network.Message{
 		Type: MALLOC_REQUEST,
-		From: id,
+		From: m.id,
 		To: byte(1),
-		EventId: sequenceNumber,
+		EventId: m.sequenceNumber,
 		Minipage_size: sizeInBytes, //<- contains the size for the allocation!
 	}
-	conn.Send(msg)
+	m.conn.Send(msg)
 	s := <- c
-	chanMap[sequenceNumber] = nil
-	sequenceNumber++
+	m.chanMap[m.sequenceNumber] = nil
+	m.sequenceNumber++
 	res, err := strconv.Atoi(s)
 	if err != nil {
 		return 0, errors.New(s)
@@ -214,21 +221,21 @@ func (m *hostMem) Malloc(sizeInBytes int) (int, error) {
 	return res, nil
 }
 
-func (m *hostMem) Free(pointer, length int) error {
+func (m *Multiview) Free(pointer, length int) error {
 	c := make(chan string)
-	chanMap[sequenceNumber] = c
+	m.chanMap[m.sequenceNumber] = c
 	msg := network.Message{
 		Type: FREE_REQUEST,
-		From: id,
+		From: m.id,
 		To: byte(1),
-		EventId: sequenceNumber,
+		EventId: m.sequenceNumber,
 		Fault_addr: pointer,
 		Minipage_size: length, //<- length here
 	}
-	conn.Send(msg)
+	m.conn.Send(msg)
 	res := <- c
-	chanMap[sequenceNumber] = nil
-	sequenceNumber++
+	m.chanMap[m.sequenceNumber] = nil
+	m.sequenceNumber++
 	if res != "ok" {
 		return errors.New(res)
 	}
@@ -240,7 +247,7 @@ func (m *hostMem) addFaultListener(l memory.FaultListener) {
 }
 
 //ID's are placeholder values waiting for integration. faultType = memory.READ_REQUEST OR memory.WRITE_REQUEST
-func onFault(addr int, faultType byte) {
+func (m *Multiview) onFault(addr int, faultType byte) {
 	str := ""
 	if faultType == 0 {
 		str = READ_REQUEST
@@ -248,22 +255,22 @@ func onFault(addr int, faultType byte) {
 		str = WRITE_REQUEST
 	}
 	c := make(chan string)
-	chanMap[sequenceNumber] = c
+	m.chanMap[m.sequenceNumber] = c
 	msg := network.Message{
 		Type: str,
-		From: id,
+		From: m.id,
 		To: byte(1),
-		EventId: sequenceNumber,
+		EventId: m.sequenceNumber,
 		Fault_addr: addr,
 	}
-		err := conn.Send(msg)
+		err := m.conn.Send(msg)
 	if err == nil {
 		<- c
-		chanMap[sequenceNumber] = nil
-		sequenceNumber++
+		m.chanMap[m.sequenceNumber] = nil
+		m.sequenceNumber++
 		//send ack
 		msg := network.Message{
-			From: id,
+			From: m.id,
 			To: byte(1),
 		}
 		if faultType == 0 {
@@ -271,7 +278,7 @@ func onFault(addr int, faultType byte) {
 		} else if faultType == 1 {
 			msg.Type = WRITE_ACK
 		}
-		conn.Send(msg)
+		m.conn.Send(msg)
 	} else {
 		fmt.Println(err)
 	}
