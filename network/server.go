@@ -10,10 +10,10 @@ type Server struct{
 	Clients map[byte]*Transciever
 	nonce byte
 	ep Endpoint
-	handler func(Message)
+	handler func(Message) error
 }
 
-func NewServer(handler func(Message), port string) (Server, error){
+func NewServer(handler func(Message) error, port string) (Server, error){
 	s := Server{port, make(map[byte]*Transciever), byte(1), Endpoint{}, handler}
 	var err error
 	s.ep, err = NewEndpoint(port, s.handleConnection)
@@ -40,11 +40,11 @@ func (s *Server) Send(message Message) {
 	t.Send(message)
 }
 
-func (s *Server) handleMessage(message Message) {
+func (s *Server) handleMessage(message Message) error {
 	if message.To != byte(0) {
 		s.Send(message)
 	}
-	s.handler(message)
+	return s.handler(message)
 }
 
 

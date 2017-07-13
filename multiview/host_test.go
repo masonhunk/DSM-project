@@ -121,6 +121,10 @@ type clientMock struct {
 	handler func(msg network.Message)
 }
 
+func (c *clientMock) GetTransciever() network.ITransciever {
+	panic("implement me")
+}
+
 func (c *clientMock) Connect(address string) error {
 	return nil
 }

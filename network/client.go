@@ -9,16 +9,21 @@ type IClient interface {
 	Connect(address string) error
 	Close()
 	Send(message Message) error
+	GetTransciever() ITransciever
 }
 
 type Client struct{
 	conn net.Conn
-	t *Transciever
-	handler func(Message)
+	t ITransciever
+	handler func(Message) error
 	running bool
 }
 
-func NewClient(handler func(Message)) *Client{
+func (c *Client) GetTransciever() ITransciever {
+	return c.t
+}
+
+func NewClient(handler func(Message) error) *Client{
 	c := new(Client)
 	c.conn = nil
 	c.t = &Transciever{}
@@ -39,11 +44,11 @@ func (c *Client) Connect(address string) error {
 }
 
 func (c *Client) Close(){
-	c.t.Close()
+	c.GetTransciever().Close()
 }
 
 func (c *Client) Send(message Message) error {
-	return c.t.Send(message)
+	return c.GetTransciever().Send(message)
 }
 
 

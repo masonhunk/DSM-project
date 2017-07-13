@@ -42,7 +42,7 @@ func NewManager(tr network.ITransciever, vm memory.VirtualMemory) *Manager{
 // This is the function to call, when a manager has to handle any message.
 // This will call the correct functions, depending on the message type, and
 // then send whatever messages needs to be sent afterwards.
-func (m *Manager) HandleMessage(message network.Message) error{
+func (m *Manager) HandleMessage(message network.Message) error {
 	switch t := message.Type; t{
 
 	case READ_REQUEST:
@@ -153,6 +153,7 @@ func (m *Manager) handleAck(message network.Message) int{
 
 func (m *Manager) HandleAlloc(message network.Message) (network.Message, error){
 	size := message.Minipage_size
+	fmt.Println(m.vm)
 	ptr, _:= m.vm.Malloc(size)
 
 	//generate minipages

@@ -10,7 +10,7 @@ import (
 
 type ITransciever interface {
 	Close()
-	Send(Message)
+	Send(Message) error
 }
 
 type Transciever struct{
@@ -20,7 +20,7 @@ type Transciever struct{
 }
 
 
-func NewTransciever(conn net.Conn, handler func(Message)) *Transciever{
+func NewTransciever(conn net.Conn, handler func(Message) error) *Transciever{
 	rw := bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn))
 	done := make(chan bool, 1)
 	go func() {
@@ -75,6 +75,7 @@ func NewTranscieverMock() *TranscieverMock{
 
 func (t *TranscieverMock) Close(){}
 
-func (t *TranscieverMock) Send(message Message){
+func (t *TranscieverMock) Send(message Message) error {
 	t.Messages = append(t.Messages, message)
+	return nil
 }

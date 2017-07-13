@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"errors"
+	"time"
 )
 
 
@@ -28,6 +29,7 @@ const (
 var conn network.IClient
 var mem *hostMem
 var id byte
+var server network.Server
 
 type hostMem struct {
 	vm	memory.VirtualMemory
@@ -125,9 +127,9 @@ func (m *hostMem) addFaultListener(l memory.FaultListener) {
 	m.faultListeners = append(m.faultListeners, l)
 }
 
-func Initialise(memSize, pageByteSize int) error {
+func Join(memSize, pageByteSize int) error {
 	//handler for all incoming messages in the host process, ie. read/write requests/replies, and invalidation requests.
-	msgHandler := func(msg network.Message) {
+	msgHandler := func(msg network.Message) error {
 		switch msg.Type {
 		case WELCOME_MESSAGE:
 			id = msg.To
@@ -185,10 +187,27 @@ func Initialise(memSize, pageByteSize int) error {
 				*msg.Event <- "ok"
 			}
 		}
+		return nil
 	}
 
 	client := network.NewClient(msgHandler)
 	return StartAndConnect(memSize, pageByteSize, client)
+}
+
+func Initialize(memSize, pageByteSize int) error {
+	var err error
+	server, err = network.NewServer(func(message network.Message) error {return nil}, "2000")
+	if err != nil {
+		return err
+	}
+	time.Sleep(time.Millisecond * 100)
+	var manager *Manager
+	client := network.NewClient(manager.HandleMessage)
+	client.Connect("localhost:2000")
+	vm := memory.NewVmem(memSize, pageByteSize)
+	mem = NewHostMem(vm)
+	manager = NewManager(client.GetTransciever(), vm)
+	return Join(memSize, pageByteSize)
 }
 
 func StartAndConnect(memSize, pageByteSize int, client network.IClient) error {
