@@ -164,10 +164,8 @@ func (m *Manager) handleAck(message network.Message) int{
 }
 
 func (m *Manager) HandleAlloc(message network.Message) (network.Message, error){
+	fmt.Println("in HandleAlloc!")
 	size := message.Minipage_size
-	fmt.Println("test")
-	fmt.Println(m)
-	fmt.Println(m.vm)
 	ptr, _:= m.vm.Malloc(size)
 
 	//generate minipages

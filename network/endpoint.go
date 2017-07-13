@@ -13,7 +13,7 @@ type Message struct{
 	Minipage_size int
 	Minipage_base int // addrress in the vpage address space
 	Privbase int //address in the privileged view
-	Event *chan string
+	Event chan string
 	Err error
 	Data []byte //Data of the message
 

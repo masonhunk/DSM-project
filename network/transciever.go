@@ -39,6 +39,7 @@ func NewTransciever(conn net.Conn, handler func(Message) error) *Transciever{
 				done <- true
 				return
 			}
+			fmt.Println("received msg at transciever: ", message)
 			handler(message)
 		}
 	}()
@@ -56,6 +57,7 @@ func (t *Transciever) Close(){
 }
 
 func (t *Transciever) Send(message Message) error {
+	fmt.Println("sending msg in transciever: ", message)
 	enc := gob.NewEncoder(t.rw)
 	err := enc.Encode(message)
 	t.rw.Flush()

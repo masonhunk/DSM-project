@@ -28,7 +28,7 @@ func TestHandlerREADWRITE_REPLY(t *testing.T) {
 		Data: []byte{byte(1), byte(2), byte(3)},
 		Privbase: 100,
 		Fault_addr: 4096+100,
-		Event: &channel,
+		Event: channel,
 	}
 	cMock.handler(msg)
 	assert.Equal(t, memory.READ_ONLY, mem.accessMap[mem.getVPageNr(4096+100)])
@@ -58,7 +58,7 @@ func TestHandlerREADWRITE_REQ(t *testing.T) {
 		Minipage_base: 5,
 		Minipage_size: 25,
 		Fault_addr: 100 + 4096 + 5,
-		Event: &channel,
+		Event: channel,
 	}
 	cMock.handler(msg)
 	assert.Equal(t, 1, len(cMock.messages))
@@ -83,7 +83,7 @@ func TestHandlerINVALIDATE(t *testing.T) {
 		assert.NotNil(t, err)
 	}()
 	time.Sleep(time.Millisecond * 200)
-	*cMock.messages[1].Event <- "ok"
+	cMock.messages[1].Event <- "ok"
 }
 
 func TestHostMem_WriteAndRead(t *testing.T) {
@@ -97,7 +97,7 @@ func TestHostMem_WriteAndRead(t *testing.T) {
 	}()
 	time.Sleep(time.Millisecond * 200)
 	reply := cMock.messages[0]
-	*reply.Event <- "ok"
+	reply.Event <- "ok"
 	assert.Equal(t, 4096 + 100, reply.Fault_addr )
 	assert.Equal(t, READ_REQUEST, reply.Type)
 	time.Sleep(time.Millisecond * 200)
@@ -109,7 +109,7 @@ func TestHostMem_WriteAndRead(t *testing.T) {
 	}()
 	time.Sleep(time.Millisecond * 200)
 	reply = cMock.messages[2]
-	*reply.Event <- "ok"
+	reply.Event <- "ok"
 	assert.Equal(t, WRITE_REQUEST, reply.Type)
 	time.Sleep(time.Millisecond * 200)
 	assert.Equal(t, WRITE_ACK, cMock.messages[3].Type)
@@ -161,7 +161,7 @@ func NewClientMock() *clientMock {
 				right = memory.READ_WRITE
 			}
 			mem.accessMap[mem.getVPageNr(msg.Fault_addr)] = right
-			*msg.Event <- "done" //let the blocking caller resume their work
+			msg.Event <- "done" //let the blocking caller resume their work
 		case READ_REQUEST, WRITE_REQUEST:
 			vpagenr := mem.getVPageNr(msg.Fault_addr)
 			if msg.Type == READ_REQUEST && mem.accessMap[vpagenr] == memory.READ_WRITE && vpagenr >= mem.vm.Size()/mem.vm.GetPageSize() {
@@ -187,16 +187,16 @@ func NewClientMock() *clientMock {
 			conn.Send(msg)
 		case MALLOC_REPLY:
 			if msg.Err != nil {
-				*msg.Event <- msg.Err.Error()
+				msg.Event <- msg.Err.Error()
 			} else {
 				s := msg.Minipage_base
-				*msg.Event <- strconv.Itoa(s)
+				msg.Event <- strconv.Itoa(s)
 			}
 		case FREE_REPLY:
 			if msg.Err != nil {
-				*msg.Event <- msg.Err.Error()
+				msg.Event <- msg.Err.Error()
 			} else {
-				*msg.Event <- "ok"
+				msg.Event <- "ok"
 			}
 		}
 	}
