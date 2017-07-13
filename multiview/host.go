@@ -30,6 +30,8 @@ var conn network.IClient
 var mem *hostMem
 var id byte
 var server network.Server
+var chanMap map[byte]chan string
+var sequenceNumber byte = 0
 
 type hostMem struct {
 	vm	memory.VirtualMemory
@@ -46,13 +48,22 @@ func NewHostMem(virtualMemory memory.VirtualMemory) *hostMem {
 	return m
 }
 
+func Leave() {
+	conn.Close()
+}
+
+func Shutdown() {
+	conn.Close()
+	server.StopServer()
+}
+
 func Join(memSize, pageByteSize int) error {
 	c := make(chan bool)
+	chanMap = make(map[byte]chan string)
 	//handler for all incoming messages in the host process, ie. read/write requests/replies, and invalidation requests.
 	msgHandler := func(msg network.Message) error {
 		switch msg.Type {
 		case WELCOME_MESSAGE:
-			fmt.Println("received welcome message on host: ",msg.To)
 			id = msg.To
 			c <- true
 		case READ_REPLY, WRITE_REPLY:
@@ -72,7 +83,7 @@ func Join(memSize, pageByteSize int) error {
 				right = memory.READ_WRITE
 			}
 			mem.accessMap[mem.getVPageNr(msg.Fault_addr)] = right
-			msg.Event <- "done" //let the blocking caller resume their work
+			chanMap[msg.EventId] <- "done" //let the blocking caller resume their work
 		case READ_REQUEST, WRITE_REQUEST:
 			vpagenr := mem.getVPageNr(msg.Fault_addr)
 			if msg.Type == READ_REQUEST && mem.accessMap[vpagenr] == memory.READ_WRITE && vpagenr >= mem.vm.Size()/mem.vm.GetPageSize() {
@@ -97,17 +108,16 @@ func Join(memSize, pageByteSize int) error {
 			conn.Send(msg)
 		case MALLOC_REPLY:
 			if msg.Err != nil {
-				msg.Event <- msg.Err.Error()
+				chanMap[msg.EventId] <- msg.Err.Error()
 			} else {
 				s := msg.Minipage_base
-				fmt.Println("received msg at host in malloc_reply: ", msg)
-				msg.Event <- strconv.Itoa(s)
+				chanMap[msg.EventId] <- strconv.Itoa(s)
 			}
 		case FREE_REPLY:
 			if msg.Err != nil {
-				msg.Event <- msg.Err.Error()
+				chanMap[msg.EventId] <- msg.Err.Error()
 			} else {
-				msg.Event <- "ok"
+				chanMap[msg.EventId] <- "ok"
 			}
 		}
 		return nil
@@ -129,7 +139,6 @@ func Initialize(memSize, pageByteSize int) error {
 	vm := memory.NewVmem(memSize, pageByteSize)
 	manager := NewManager(vm)
 	manager.Connect("localhost:2000")
-	fmt.Println("manager connected")
 	return Join(memSize, pageByteSize)
 }
 
@@ -186,17 +195,18 @@ func (m *hostMem) Write(addr int, val byte) error {
 
 func (m *hostMem) Malloc(sizeInBytes int) (int, error) {
 	c := make(chan string)
-
+	chanMap[sequenceNumber] = c
 	msg := network.Message{
 		Type: MALLOC_REQUEST,
 		From: id,
 		To: byte(1),
-		Event: c,
+		EventId: sequenceNumber,
 		Minipage_size: sizeInBytes, //<- contains the size for the allocation!
 	}
-	fmt.Println("sending msg from host: ", msg)
 	conn.Send(msg)
 	s := <- c
+	chanMap[sequenceNumber] = nil
+	sequenceNumber++
 	res, err := strconv.Atoi(s)
 	if err != nil {
 		return 0, errors.New(s)
@@ -206,16 +216,19 @@ func (m *hostMem) Malloc(sizeInBytes int) (int, error) {
 
 func (m *hostMem) Free(pointer, length int) error {
 	c := make(chan string)
+	chanMap[sequenceNumber] = c
 	msg := network.Message{
 		Type: FREE_REQUEST,
 		From: id,
 		To: byte(1),
-		Event: c,
+		EventId: sequenceNumber,
 		Fault_addr: pointer,
 		Minipage_size: length, //<- length here
 	}
 	conn.Send(msg)
 	res := <- c
+	chanMap[sequenceNumber] = nil
+	sequenceNumber++
 	if res != "ok" {
 		return errors.New(res)
 	}
@@ -235,16 +248,19 @@ func onFault(addr int, faultType byte) {
 		str = WRITE_REQUEST
 	}
 	c := make(chan string)
+	chanMap[sequenceNumber] = c
 	msg := network.Message{
 		Type: str,
 		From: id,
 		To: byte(1),
-		Event: c,
+		EventId: sequenceNumber,
 		Fault_addr: addr,
 	}
-	err := conn.Send(msg)
+		err := conn.Send(msg)
 	if err == nil {
 		<- c
+		chanMap[sequenceNumber] = nil
+		sequenceNumber++
 		//send ack
 		msg := network.Message{
 			From: id,

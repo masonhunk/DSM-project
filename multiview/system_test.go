@@ -15,6 +15,11 @@ func TestInitialize(t *testing.T) {
 	mem.Write(ptr, byte(9))
 	val, err := mem.Read(ptr)
 	fmt.Println(val, err)
+	mem.Write(ptr, byte(8))
+	val, err = mem.Read(ptr)
+	fmt.Println(val, err)
+
+	Shutdown()
 }
 
 func TestMalloc(t *testing.T) {
@@ -23,4 +28,6 @@ func TestMalloc(t *testing.T) {
 	_, err2 := mem.Malloc(2000)
 	assert.Nil(t, err)
 	assert.Nil(t, err2)
+
+	Shutdown()
 }
