@@ -203,7 +203,6 @@ func (m *Manager) HandleAlloc(message network.Message) (network.Message, error){
 
 	//insert into virtual memory
 	for i, mp := range resultArray {
-		fmt.Println("first loop:", startpg + i)
 		m.mpt[startpg + i] = mp
 		m.log[startpg + i] = startpg
 		m.locks[startpg+i] = new(sync.RWMutex)
@@ -214,7 +213,6 @@ func (m *Manager) HandleAlloc(message network.Message) (network.Message, error){
 	message.To=message.From
 	message.Fault_addr = startpg*m.vm.GetPageSize() + m.mpt[startpg].offset
 	message.Type = MALLOC_REPLY
-	fmt.Println(m.mpt)
 
 	return message, nil
 
@@ -230,8 +228,6 @@ func (m *Manager) HandleFree(message network.Message) (network.Message, error){
 
 	//Then we loop over vpages from that vpage. If they point back to this vpage, we free them.
 	for i := vpage; true ; i++{
-		fmt.Println("second loop:", i)
-
 		if m.log[i] != vpage{
 			break
 		}
@@ -241,9 +237,9 @@ func (m *Manager) HandleFree(message network.Message) (network.Message, error){
 		delete(m.copies, i)
 		delete(m.locks,i)
 	}
+	m.vm.Free(message.Fault_addr % m.vm.Size())
 	message.Type = FREE_REPLY
 	message.To = message.From
-	fmt.Println(m.mpt)
 	return message, err
 }
 
