@@ -69,18 +69,19 @@ func (t *Transciever) Send(message Message) error {
 
 // A transciever mock
 
-type TranscieverMock struct{
-	Messages []Message
+type MultiviewTranscieverMock struct{
+	Messages []MultiviewMessage
 }
 
-func NewTranscieverMock() *TranscieverMock{
-	t := new(TranscieverMock)
+func NewMultiviewTranscieverMock() *MultiviewTranscieverMock{
+	t := new(MultiviewTranscieverMock)
 	return t
 }
 
-func (t *TranscieverMock) Close(){}
+func (t *MultiviewTranscieverMock) Close(){}
 
-func (t *TranscieverMock) Send(message Message) error {
-	t.Messages = append(t.Messages, message)
+func (t *MultiviewTranscieverMock) Send(message Message) error {
+
+	t.Messages = append(t.Messages, message.(MultiviewMessage))
 	return nil
 }

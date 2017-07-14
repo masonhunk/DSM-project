@@ -5,7 +5,7 @@ import (
 	"sync"
 	"DSM-project/memory"
 	"fmt"
-	"errors"
+	"log"
 )
 
 //Each minipage consists of an offset and a length.
@@ -15,6 +15,7 @@ type minipage struct {
 
 //this is the actual manager.
 type Manager struct{
+	copyLock *sync.RWMutex
 	tr network.ITransciever
 	cl *network.Client 		//The transciever that we are sending messages over.
 	vm memory.VirtualMemory 		//The virtual memory object we are working on in the system.
@@ -30,6 +31,7 @@ func NewManager(vm memory.VirtualMemory) *Manager{
 	//TODO remove the line below
 	fmt.Println("") //Just to make to compiler be quiet for now.
 	m := Manager{
+		copyLock: new(sync.RWMutex),
 		copies: make(map[int][]byte),
 		locks: make(map[int]*sync.RWMutex),
 		vm: vm,
@@ -53,132 +55,111 @@ func(m *Manager) Connect(address string) {
 // This is the function to call, when a manager has to handle any message.
 // This will call the correct functions, depending on the message type, and
 // then send whatever messages needs to be sent afterwards.
-func (m *Manager) HandleMessage(message network.MultiviewMessage) error {
+func (m *Manager) HandleMessage(message network.MultiviewMessage) {
 	fmt.Println("Manager got message ", message)
 	switch t := message.Type; t{
 
 	case READ_REQUEST:
-		message, err :=m.HandleReadReq(message)
-		if err != nil{return err}
-		m.tr.Send(message)
+		go m.HandleReadReq(&message)
 
 	case WRITE_REQUEST:
-		message, err :=m.HandleWriteReq(message)
-		if err != nil{return err}
-		for _, mes := range message{m.tr.Send(mes)}
+		go m.HandleWriteReq(&message)
 
 	case INVALIDATE_REPLY:
-		err := m.HandleInvalidateReply(message)
-		if err != nil{return err}
+		m.HandleInvalidateReply(&message)
 
 	case MALLOC_REQUEST:
-		message, err :=m.HandleAlloc(message)
-		if err != nil{return err}
-		m.tr.Send(message)
+		m.HandleAlloc(&message)
 
 	case FREE_REQUEST:
-		message, err :=m.HandleFree(message)
-		if err != nil{return err}
-		m.tr.Send(message)
+		m.HandleFree(&message)
 	case WRITE_ACK:
-		err := m.HandleWriteAck(message)
-		if err != nil{return err}
+		m.HandleWriteAck(&message)
 	case READ_ACK:
-		err := m.HandleReadAck(message)
-		if err != nil{return err}
+		m.HandleReadAck(&message)
+
 	}
-
-
-	return nil
 }
 
 // This translates a message, by adding more information to it. This is information
 // that only the manager knows, but which is important for the hosts.
-func (m *Manager) translate(message network.MultiviewMessage) (network.MultiviewMessage, error) {
+func (m *Manager) translate(message *network.MultiviewMessage)  int {
 	vpage :=  message.Fault_addr / m.vm.GetPageSize()
 	if _, ok:= m.mpt[vpage]; ok == false{
-		message.Err = errors.New("vpage did not exist.")
-		return message, errors.New("vpage did not exist.")
+		log.Fatalln("Vpage[", vpage, "] did not exist.")
+		return 0
 	}
 	message.Minipage_base = m.vm.GetPageAddr(message.Fault_addr) + m.mpt[vpage].offset
 	message.Minipage_size = m.mpt[vpage].length
 	message.Privbase = message.Minipage_base % m.vm.Size()
-	return message, nil
+	return vpage
 }
 
 // This handles read requests.
-func (m *Manager) HandleReadReq(message network.MultiviewMessage) (network.MultiviewMessage, error){
-	var err error
-	message, err = m.translate(message)
-	vpage :=  message.Fault_addr / m.vm.GetPageSize()
-
-	if _, ok := m.mpt[vpage]; !ok { //If the page doesnt exist, we return nil and an error.
-		return network.MultiviewMessage{}, errors.New("vpage have not been allocated.")
-	}
+func (m *Manager) HandleReadReq(message *network.MultiviewMessage){
+	vpage := m.translate(message)
 	m.locks[vpage].RLock()
 	p := m.copies[vpage][0]
 	message.To = p
-	return message, err
+	m.tr.Send(*message)
 }
 
 // This handles write requests.
-func (m *Manager) HandleWriteReq(message network.MultiviewMessage) ([]network.MultiviewMessage, error){
-	var err error
-	message, err = m.translate(message)
-	vpage :=  message.Fault_addr / m.vm.GetPageSize()
-
-	if _, ok := m.mpt[vpage]; !ok { //If the page doesnt exist, we return nil and an error.
-		return nil, errors.New("vpage have not been allocated.")
-	}
+func (m *Manager) HandleWriteReq(message *network.MultiviewMessage) {
+	vpage := m.translate(message)
 
 	m.locks[vpage].Lock()
 	message.Type = INVALIDATE_REQUEST
-	messages := []network.MultiviewMessage{}
 	fmt.Println("Copies contained ", m.copies)
 
 	for _, p := range m.copies[vpage]{
 		message.To = p
 		fmt.Println("Sending invalidate to ", p)
-		messages = append(messages, message)
+		m.tr.Send(*message)
 	}
-	return messages, err
 }
 
-func (m *Manager) HandleInvalidateReply(message network.MultiviewMessage) error{
-	vpage :=  message.Fault_addr / m.vm.GetPageSize()
-	c :=m.copies[vpage]
-	fmt.Println("Length of c is ", len(c))
-	if len(c) == 1{
+func (m *Manager) HandleInvalidateReply(message *network.MultiviewMessage){
+	vpage :=  m.translate(message)
+	m.copyLock.Lock()
+	fmt.Println("Length of c is ", len(m.copies[vpage]))
+	if len(m.copies[vpage]) == 1{
 		message.Type = WRITE_REQUEST
-		message.To = c[0]
-		m.tr.Send(message)
-		c = []byte{}
+		message.To = m.copies[vpage][0]
+		m.tr.Send(*message)
+		m.copies[vpage] = []byte{}
 	} else {
-		c = c[1:]
+		m.copies[vpage] = m.copies[vpage][:len(m.copies[vpage])-1]
 	}
-	return nil
+	m.copyLock.Unlock()
 }
 
-func (m *Manager) HandleReadAck(message network.MultiviewMessage) error{
+func (m *Manager) HandleReadAck(message *network.MultiviewMessage) {
 	vpage := m.handleAck(message)
 	m.locks[vpage].RUnlock()
-	return nil
 }
 
-func (m *Manager) HandleWriteAck(message network.MultiviewMessage) error{
+func (m *Manager) HandleWriteAck(message *network.MultiviewMessage) {
 	vpage := m.handleAck(message)
 	m.locks[vpage].Unlock()
-	return nil
 }
 
 
-func (m *Manager) handleAck(message network.MultiviewMessage) int{
-	vpage := m.vm.GetPageAddr(message.Fault_addr) / m.vm.GetPageSize()
-	m.copies[vpage]=append(m.copies[vpage], message.From)
+func (m *Manager) handleAck(message *network.MultiviewMessage) int{
+	vpage := m.translate(message)
+	alreadyHas := false
+	for _, c := range m.copies[vpage]{
+		if c == message.From{
+			alreadyHas = true
+		}
+	}
+	if !alreadyHas{
+		m.copies[vpage]=append(m.copies[vpage], message.From)
+	}
 	return vpage
 }
 
-func (m *Manager) HandleAlloc(message network.MultiviewMessage) (network.MultiviewMessage, error){
+func (m *Manager) HandleAlloc(message *network.MultiviewMessage){
 
 	size := message.Minipage_size
 	ptr, _:= m.vm.Malloc(size)
@@ -230,17 +211,12 @@ func (m *Manager) HandleAlloc(message network.MultiviewMessage) (network.Multivi
 	message.Fault_addr = startpg*m.vm.GetPageSize() + m.mpt[startpg].offset
 	message.Type = MALLOC_REPLY
 
-	return message, nil
+	m.tr.Send(*message)
 
 }
 
-func (m *Manager) HandleFree(message network.MultiviewMessage) (network.MultiviewMessage, error){
-	var err error
-	message, err = m.translate(message)
-
-	//First we get the first vpage the allocation is in
-	vpage := m.vm.GetPageAddr(message.Fault_addr) / m.vm.GetPageSize()
-
+func (m *Manager) HandleFree(message *network.MultiviewMessage) {
+	vpage := m.translate(message)
 
 	//Then we loop over vpages from that vpage. If they point back to this vpage, we free them.
 	for i := vpage; true ; i++{
@@ -256,7 +232,7 @@ func (m *Manager) HandleFree(message network.MultiviewMessage) (network.Multivie
 	m.vm.Free(message.Fault_addr % m.vm.Size())
 	message.Type = FREE_REPLY
 	message.To = message.From
-	return message, err
+	m.tr.Send(*message)
 }
 
 
