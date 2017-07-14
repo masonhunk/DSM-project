@@ -44,7 +44,13 @@ func NewManager(vm memory.VirtualMemory) *Manager{
 func(m *Manager) Connect(address string) {
 	m.cl = network.NewClient(
 		func(message network.Message) error {
-			msg := message.(network.MultiviewMessage)
+			var msg network.MultiviewMessage
+			switch message.(type){
+			case network.SimpleMessage:
+				msg = network.MultiviewMessage{From: message.GetFrom(), To: message.GetTo(), Type: message.GetType()}
+			case network.MultiviewMessage:
+				msg = message.(network.MultiviewMessage)
+			}
 			go m.HandleMessage(msg)
 			return nil
 		})

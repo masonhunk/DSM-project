@@ -40,7 +40,6 @@ func (s *Server) Send(message Message) {
 	} else {
 		log.Println(" --> Client sending ", message)
 	}
-
 	t.Send(message)
 }
 

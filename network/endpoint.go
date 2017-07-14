@@ -78,6 +78,7 @@ func NewEndpoint(port string, handler func(conn net.Conn)) (Endpoint, error) {
 				return
 
 			}
+			log.Println("Endpoint got a connection : ", conn)
 			handler(conn)
 
 		}

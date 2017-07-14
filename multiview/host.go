@@ -45,6 +45,7 @@ type hostMem struct {
 
 func NewMultiView() *Multiview {
 	gob.Register(network.MultiviewMessage{})
+	gob.Register(network.SimpleMessage{})
 	m := new(Multiview)
 	m.chanMap = make(map[byte]chan string)
 	return m
@@ -72,7 +73,13 @@ func (m *Multiview) Join(memSize, pageByteSize int) error {
 	c := make(chan bool)
 	//handler for all incoming messages in the host process, ie. read/write requests/replies, and invalidation requests.
 	handler := func (message network.Message) error {
-		msg := message.(network.MultiviewMessage)
+		var msg network.MultiviewMessage
+		switch message.(type){
+		case network.SimpleMessage:
+			msg = network.MultiviewMessage{From: message.GetFrom(), To: message.GetTo(), Type: message.GetType()}
+		case network.MultiviewMessage:
+			msg = message.(network.MultiviewMessage)
+		}
 		return m.messageHandler(msg, c)
 	}
 	client := network.NewClient(handler)

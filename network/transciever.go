@@ -39,6 +39,7 @@ func NewTransciever(conn net.Conn, handler func(Message) error) *Transciever{
 				done <- true
 				return
 			}
+			log.Println("Transciever recieved message : ", message)
 			go handler(message.(Message))
 			time.Sleep(time.Millisecond*100)
 		}
@@ -63,6 +64,9 @@ func (t *Transciever) Send(message Message) error {
 	enc := gob.NewEncoder(t.rw)
 	err := enc.Encode(&message)
 	t.rw.Flush()
+	if err != nil {
+		log.Println("Transciever experienced an error: ", err)
+	}
 	return err
 }
 
