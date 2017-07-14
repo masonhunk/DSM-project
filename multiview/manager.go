@@ -40,7 +40,12 @@ func NewManager(vm memory.VirtualMemory) *Manager{
 }
 
 func(m *Manager) Connect(address string) {
-	m.cl = network.NewClient(func(message network.Message)error{go m.HandleMessage(message); return nil})
+	m.cl = network.NewClient(
+		func(message network.Message) error {
+			msg := message.(network.MultiviewMessage)
+			go m.HandleMessage(msg)
+			return nil
+		})
 	m.cl.Connect(address)
 	m.tr = m.cl.GetTransciever()
 }
@@ -48,7 +53,7 @@ func(m *Manager) Connect(address string) {
 // This is the function to call, when a manager has to handle any message.
 // This will call the correct functions, depending on the message type, and
 // then send whatever messages needs to be sent afterwards.
-func (m *Manager) HandleMessage(message network.Message) error {
+func (m *Manager) HandleMessage(message network.MultiviewMessage) error {
 	fmt.Println("Manager got message ", message)
 	switch t := message.Type; t{
 
@@ -89,7 +94,7 @@ func (m *Manager) HandleMessage(message network.Message) error {
 
 // This translates a message, by adding more information to it. This is information
 // that only the manager knows, but which is important for the hosts.
-func (m *Manager) translate(message network.Message) (network.Message, error) {
+func (m *Manager) translate(message network.MultiviewMessage) (network.MultiviewMessage, error) {
 	vpage :=  message.Fault_addr / m.vm.GetPageSize()
 	if _, ok:= m.mpt[vpage]; ok == false{
 		message.Err = errors.New("vpage did not exist.")
@@ -102,13 +107,13 @@ func (m *Manager) translate(message network.Message) (network.Message, error) {
 }
 
 // This handles read requests.
-func (m *Manager) HandleReadReq(message network.Message) (network.Message, error){
+func (m *Manager) HandleReadReq(message network.MultiviewMessage) (network.MultiviewMessage, error){
 	var err error
 	message, err = m.translate(message)
 	vpage :=  message.Fault_addr / m.vm.GetPageSize()
 
 	if _, ok := m.mpt[vpage]; !ok { //If the page doesnt exist, we return nil and an error.
-		return network.Message{}, errors.New("vpage have not been allocated.")
+		return network.MultiviewMessage{}, errors.New("vpage have not been allocated.")
 	}
 	m.locks[vpage].RLock()
 	p := m.copies[vpage][0]
@@ -117,7 +122,7 @@ func (m *Manager) HandleReadReq(message network.Message) (network.Message, error
 }
 
 // This handles write requests.
-func (m *Manager) HandleWriteReq(message network.Message) ([]network.Message, error){
+func (m *Manager) HandleWriteReq(message network.MultiviewMessage) ([]network.MultiviewMessage, error){
 	var err error
 	message, err = m.translate(message)
 	vpage :=  message.Fault_addr / m.vm.GetPageSize()
@@ -128,7 +133,7 @@ func (m *Manager) HandleWriteReq(message network.Message) ([]network.Message, er
 
 	m.locks[vpage].Lock()
 	message.Type = INVALIDATE_REQUEST
-	messages := []network.Message{}
+	messages := []network.MultiviewMessage{}
 	fmt.Println("Copies contained ", m.copies)
 
 	for _, p := range m.copies[vpage]{
@@ -139,7 +144,7 @@ func (m *Manager) HandleWriteReq(message network.Message) ([]network.Message, er
 	return messages, err
 }
 
-func (m *Manager) HandleInvalidateReply(message network.Message) error{
+func (m *Manager) HandleInvalidateReply(message network.MultiviewMessage) error{
 	vpage :=  message.Fault_addr / m.vm.GetPageSize()
 	c :=m.copies[vpage]
 	fmt.Println("Length of c is ", len(c))
@@ -154,26 +159,26 @@ func (m *Manager) HandleInvalidateReply(message network.Message) error{
 	return nil
 }
 
-func (m *Manager) HandleReadAck(message network.Message) error{
+func (m *Manager) HandleReadAck(message network.MultiviewMessage) error{
 	vpage := m.handleAck(message)
 	m.locks[vpage].RUnlock()
 	return nil
 }
 
-func (m *Manager) HandleWriteAck(message network.Message) error{
+func (m *Manager) HandleWriteAck(message network.MultiviewMessage) error{
 	vpage := m.handleAck(message)
 	m.locks[vpage].Unlock()
 	return nil
 }
 
 
-func (m *Manager) handleAck(message network.Message) int{
+func (m *Manager) handleAck(message network.MultiviewMessage) int{
 	vpage := m.vm.GetPageAddr(message.Fault_addr) / m.vm.GetPageSize()
 	m.copies[vpage]=append(m.copies[vpage], message.From)
 	return vpage
 }
 
-func (m *Manager) HandleAlloc(message network.Message) (network.Message, error){
+func (m *Manager) HandleAlloc(message network.MultiviewMessage) (network.MultiviewMessage, error){
 
 	size := message.Minipage_size
 	ptr, _:= m.vm.Malloc(size)
@@ -229,7 +234,7 @@ func (m *Manager) HandleAlloc(message network.Message) (network.Message, error){
 
 }
 
-func (m *Manager) HandleFree(message network.Message) (network.Message, error){
+func (m *Manager) HandleFree(message network.MultiviewMessage) (network.MultiviewMessage, error){
 	var err error
 	message, err = m.translate(message)
 

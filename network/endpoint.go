@@ -5,7 +5,7 @@ import (
 	"fmt"
 )
 
-type Message struct{
+type MultiviewMessage struct{
 	From byte
 	To byte
 	Type string
@@ -17,6 +17,18 @@ type Message struct{
 	Err error
 	Data []byte //Data of the message
 
+}
+
+func (m MultiviewMessage) GetFrom() byte {
+	return m.From
+}
+
+func (m MultiviewMessage) GetTo() byte {
+	return m.To
+}
+type Message interface {
+	GetFrom() byte
+	GetTo() byte
 }
 
 type Endpoint struct{

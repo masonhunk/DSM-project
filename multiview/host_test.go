@@ -15,7 +15,7 @@ func TestHandlerREADWRITE_REPLY(t *testing.T) {
 	mw.chanMap = make(map[byte]chan string)
 	cMock := NewClientMock()
 	mw.StartAndConnect(4096, 128, cMock)
-	msg := network.Message{
+	msg := network.MultiviewMessage{
 		Type: WELCOME_MESSAGE,
 		To: byte(9),
 	}
@@ -26,7 +26,7 @@ func TestHandlerREADWRITE_REPLY(t *testing.T) {
 	//test read_reply, ie. from a read request
 	channel := make(chan string)
 	mw.chanMap[100] = channel
-	msg = network.Message{
+	msg = network.MultiviewMessage{
 		Type: READ_REPLY,
 		Data: []byte{byte(1), byte(2), byte(3)},
 		Privbase: 100,
@@ -55,7 +55,7 @@ func TestHandlerREADWRITE_REQ(t *testing.T) {
 	cMock := NewClientMock()
 	mw.StartAndConnect(4096, 128, cMock)
 	mw.Write(105, byte(12))
-	msg := network.Message{
+	msg := network.MultiviewMessage{
 		Type: WRITE_REQUEST,
 		To: byte(9),
 		From: byte(8),
@@ -76,7 +76,7 @@ func TestHandlerINVALIDATE(t *testing.T) {
 
 	cMock := NewClientMock()
 	mw.StartAndConnect(4096, 128, cMock)
-	msg := network.Message{
+	msg := network.MultiviewMessage{
 		Type: INVALIDATE_REQUEST,
 		Fault_addr: 255 + 4096,
 	}
@@ -90,6 +90,7 @@ func TestHandlerINVALIDATE(t *testing.T) {
 	}()
 	time.Sleep(time.Millisecond * 200)
 	mw.chanMap[cMock.messages[1].EventId] <- "ok"
+	time.Sleep(time.Millisecond * 200)
 }
 
 func TestHostMem_WriteAndRead(t *testing.T) {
@@ -123,8 +124,14 @@ func TestHostMem_WriteAndRead(t *testing.T) {
 }
 
 type clientMock struct {
-	messages []network.Message
-	handler func(msg network.Message)
+	messages []network.MultiviewMessage
+	handler func(msg network.MultiviewMessage)
+}
+
+func (c *clientMock) Send(message network.Message) error {
+	msg := message.(network.MultiviewMessage)
+	c.messages = append(c.messages, msg)
+	return nil
 }
 
 func (c *clientMock) GetTransciever() network.ITransciever {
@@ -138,14 +145,10 @@ func (c *clientMock) Connect(address string) error {
 func (c *clientMock) Close() {
 }
 
-func (c *clientMock) Send(message network.Message) error {
-	c.messages = append(c.messages, message)
-	return nil
-}
 
 func NewClientMock() *clientMock {
 	cMock := new(clientMock)
-	cMock.messages = make([]network.Message, 0)
+	cMock.messages = make([]network.MultiviewMessage, 0)
 
 	return cMock
 }

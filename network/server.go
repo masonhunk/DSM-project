@@ -36,8 +36,8 @@ func (s *Server) StopServer() {
 }
 
 func (s *Server) Send(message Message) {
-	t := s.Clients[message.To]
-	if message.From == 1 {
+	t := s.Clients[message.GetTo()]
+	if message.GetFrom() == 1 {
 		fmt.Println(" --> Manager sending ", message)
 	} else {
 		fmt.Println(" --> Client sending ", message)
@@ -47,7 +47,7 @@ func (s *Server) Send(message Message) {
 }
 
 func (s *Server) handleMessage(message Message) error {
-	if message.To != byte(0) {
+	if message.GetTo() != byte(0) {
 		s.Send(message)
 	}
 	return s.handler(message)
@@ -56,7 +56,7 @@ func (s *Server) handleMessage(message Message) error {
 
 func (s *Server)handleConnection(conn net.Conn) {
 	t := NewTransciever(conn, s.handleMessage)
-	t.Send(Message{From: 0, To: s.nonce, Type:"WELC"})
+	t.Send(MultiviewMessage{From: 0, To: s.nonce, Type: "WELC"})
 	s.Clients[s.nonce] = t
 	s.nonce = s.nonce + byte(1)
 }

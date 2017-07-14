@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"errors"
 	"time"
+	"encoding/gob"
 )
 
 
@@ -42,6 +43,7 @@ type hostMem struct {
 }
 
 func NewMultiView() *Multiview {
+	gob.Register(network.MultiviewMessage{})
 	m := new(Multiview)
 	m.chanMap = make(map[byte]chan string)
 	return m
@@ -69,7 +71,8 @@ func (m *Multiview) Join(memSize, pageByteSize int) error {
 	c := make(chan bool)
 	//handler for all incoming messages in the host process, ie. read/write requests/replies, and invalidation requests.
 	handler := func (message network.Message) error {
-		return m.messageHandler(message, c)
+		msg := message.(network.MultiviewMessage)
+		return m.messageHandler(msg, c)
 	}
 	client := network.NewClient(handler)
 	err := m.StartAndConnect(memSize, pageByteSize, client)
@@ -142,7 +145,7 @@ func (m *Multiview) Write(addr int, val byte) error {
 func (m *Multiview) Malloc(sizeInBytes int) (int, error) {
 	c := make(chan string)
 	m.chanMap[m.sequenceNumber] = c
-	msg := network.Message{
+	msg := network.MultiviewMessage{
 		Type: MALLOC_REQUEST,
 		From: m.id,
 		To: byte(1),
@@ -163,7 +166,7 @@ func (m *Multiview) Malloc(sizeInBytes int) (int, error) {
 func (m *Multiview) Free(pointer, length int) error {
 	c := make(chan string)
 	m.chanMap[m.sequenceNumber] = c
-	msg := network.Message{
+	msg := network.MultiviewMessage{
 		Type: FREE_REQUEST,
 		From: m.id,
 		To: byte(1),
@@ -195,7 +198,7 @@ func (m *Multiview) onFault(addr int, faultType byte) {
 	}
 	c := make(chan string)
 	m.chanMap[m.sequenceNumber] = c
-	msg := network.Message{
+	msg := network.MultiviewMessage{
 		Type: str,
 		From: m.id,
 		To: byte(1),
@@ -208,7 +211,7 @@ func (m *Multiview) onFault(addr int, faultType byte) {
 		m.chanMap[m.sequenceNumber] = nil
 		m.sequenceNumber++
 		//send ack
-		msg := network.Message{
+		msg := network.MultiviewMessage{
 			From: m.id,
 			To: byte(1),
 			Fault_addr: addr,
@@ -225,7 +228,7 @@ func (m *Multiview) onFault(addr int, faultType byte) {
 
 }
 
-func (m *Multiview) messageHandler(msg network.Message, c chan bool) error {
+func (m *Multiview) messageHandler(msg network.MultiviewMessage, c chan bool) error {
 	fmt.Println("received message at host with type:", msg.Type)
 	switch msg.Type {
 	case WELCOME_MESSAGE:

@@ -10,10 +10,10 @@ import (
 	"sync"
 )
 
-var messages []network.Message
+var messages []network.MultiviewMessage
 var mutex sync.Mutex
 
-func messageHandler(message network.Message) error{
+func messageHandler(message network.MultiviewMessage) error{
 	mutex.Lock()
 	messages = append(messages, message)
 	mutex.Unlock()
@@ -38,16 +38,16 @@ func TestEndpointCreationAndClose(t *testing.T) {
 func TestEndpointAndTranscieverConnectAndClose(t *testing.T){
 	e,_ := network.NewEndpoint("2000", func(conn net.Conn){return})
 	conn, _ := net.Dial("tcp", "localhost:2000")
-	network.NewTransciever(conn, func(message network.Message)error{fmt.Println(message.Type); return nil})
+	network.NewTransciever(conn, func(message network.MultiviewMessage)error{fmt.Println(message.Type); return nil})
 	e.Close()
 }
 
 func TestEndpointAndTranscieverConnectAndTalk(t *testing.T) {
-	messages = []network.Message{}
+	messages = []network.MultiviewMessage{}
 	e := createEndpoint("2000")
 	conn, _ := net.Dial("tcp", "localhost:2000")
 	tr := network.NewTransciever(conn, messageHandler)
-	tr.Send(network.Message{To: byte(10), Type: "Test", Data: []byte{1,2}})
+	tr.Send(network.MultiviewMessage{To: byte(10), Type: "Test", Data: []byte{1, 2}})
 	e.Close()
 	time.Sleep(1000000000)
 	assert.Len(t, messages, 1)
@@ -57,19 +57,19 @@ func TestEndpointAndTranscieverConnectAndTalk(t *testing.T) {
 }
 
 func TestServerCreationWithMultipleClients(t *testing.T){
-	messages = []network.Message{}
-	s,_ := network.NewServer(func(message network.Message)error{return nil}, "2000")
+	messages = []network.MultiviewMessage{}
+	s,_ := network.NewServer(func(message network.MultiviewMessage)error{return nil}, "2000")
 	c1 := network.NewClient(messageHandler)
 	c1.Connect("localhost:2000")
 	c2 := network.NewClient(messageHandler)
 	c2.Connect("localhost:2000")
 	c3 := network.NewClient(messageHandler)
 	c3.Connect("localhost:2000")
-	c1.Send(network.Message{To: byte(1), Type:  "Test", Data: []byte{1,3}})
+	c1.Send(network.MultiviewMessage{To: byte(1), Type: "Test", Data: []byte{1, 3}})
 	time.Sleep(time.Millisecond * 200)
-	c2.Send(network.Message{To: byte(1), Type: "Test", Data: []byte{1,4}})
+	c2.Send(network.MultiviewMessage{To: byte(1), Type: "Test", Data: []byte{1, 4}})
 	time.Sleep(time.Millisecond * 200)
-	c3.Send(network.Message{To: byte(1), Type: "Test", Data: []byte{1,5}})
+	c3.Send(network.MultiviewMessage{To: byte(1), Type: "Test", Data: []byte{1, 5}})
 	time.Sleep(time.Millisecond * 500)
 	c1.Close()
 	c2.Close()
@@ -82,14 +82,14 @@ func TestServerCreationWithMultipleClients(t *testing.T){
 }
 
 func TestMultiMessages(t *testing.T) {
-	messages = []network.Message{}
+	messages = []network.MultiviewMessage{}
 	s,_ := network.NewServer(messageHandler, "2000")
 	c := network.NewClient(messageHandler)
 	c.Connect("localhost:2000")
 	time.Sleep(1000000000)
-	c.Send(network.Message{To: 1, Type: "Test", Data: []byte{1,3}})
-	c.Send(network.Message{To: 1, Type: "Test", Data: []byte{1,4}})
-	c.Send(network.Message{To: 1, Type: "Test", Data: []byte{1,5}})
+	c.Send(network.MultiviewMessage{To: 1, Type: "Test", Data: []byte{1, 3}})
+	c.Send(network.MultiviewMessage{To: 1, Type: "Test", Data: []byte{1, 4}})
+	c.Send(network.MultiviewMessage{To: 1, Type: "Test", Data: []byte{1, 5}})
 	time.Sleep(1000000000)
 	c.Close()
 	s.StopServer()
@@ -98,15 +98,15 @@ func TestMultiMessages(t *testing.T) {
 }
 
 func TestServerSending(t *testing.T) {
-	messages = []network.Message{}
-	s,_ := network.NewServer(func(message network.Message)error{return nil}, "2000")
+	messages = []network.MultiviewMessage{}
+	s,_ := network.NewServer(func(message network.MultiviewMessage)error{return nil}, "2000")
 	c := network.NewClient(messageHandler)
 	c.Connect("localhost:2000")
 	for len(s.Clients) < 1{	}
-	s.Send(network.Message{To: 1, Type: "Test", Data: []byte{1,2}})
-	s.Send(network.Message{To: 1, Type: "Test", Data: []byte{1,2}})
-	s.Send(network.Message{To: 1, Type: "Test", Data: []byte{1,2}})
-	s.Send(network.Message{To: 1, Type: "Test", Data: []byte{1,2}})
+	s.Send(network.MultiviewMessage{To: 1, Type: "Test", Data: []byte{1, 2}})
+	s.Send(network.MultiviewMessage{To: 1, Type: "Test", Data: []byte{1, 2}})
+	s.Send(network.MultiviewMessage{To: 1, Type: "Test", Data: []byte{1, 2}})
+	s.Send(network.MultiviewMessage{To: 1, Type: "Test", Data: []byte{1, 2}})
 	time.Sleep(1000000000)
 	c.Close()
 	s.StopServer()
@@ -115,16 +115,16 @@ func TestServerSending(t *testing.T) {
 }
 
 func TestClientToClient(t *testing.T) {
-	m1 := []network.Message{}
-	m2 := []network.Message{}
+	m1 := []network.MultiviewMessage{}
+	m2 := []network.MultiviewMessage{}
 	s,_ := network.NewServer(messageHandler, "2000")
-	c1 := network.NewClient(func(message network.Message) error{m1 = append(m1, message); return nil})
+	c1 := network.NewClient(func(message network.MultiviewMessage) error{m1 = append(m1, message); return nil})
 	c1.Connect("localhost:2000")
-	c2 := network.NewClient(func(message network.Message) error{m2 = append(m2, message); return nil})
+	c2 := network.NewClient(func(message network.MultiviewMessage) error{m2 = append(m2, message); return nil})
 	c2.Connect("localhost:2000")
 
-	c1.Send(network.Message{To: 2, Type: "From c1 to c2", Data: []byte{1,2}})
-	c2.Send(network.Message{To: 1, Type: "From c2 to c1", Data: []byte{1,2}})
+	c1.Send(network.MultiviewMessage{To: 2, Type: "From c1 to c2", Data: []byte{1, 2}})
+	c2.Send(network.MultiviewMessage{To: 1, Type: "From c2 to c1", Data: []byte{1, 2}})
 
 	time.Sleep(1000000000)
 	c1.Close()

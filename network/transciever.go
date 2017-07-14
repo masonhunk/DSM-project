@@ -29,6 +29,7 @@ func NewTransciever(conn net.Conn, handler func(Message) error) *Transciever{
 		for {
 			//Do stuff with connections
 			var message Message
+
 			dec := gob.NewDecoder(rw)
 			err := dec.Decode(&message)
 			if err == io.EOF {
@@ -40,7 +41,7 @@ func NewTransciever(conn net.Conn, handler func(Message) error) *Transciever{
 				done <- true
 				return
 			}
-			go handler(message)
+			go handler(message.(Message))
 			time.Sleep(time.Millisecond*100)
 		}
 	}()
@@ -58,7 +59,7 @@ func (t *Transciever) Close(){
 }
 
 func (t *Transciever) Send(message Message) error {
-	if message.From == 0{
+	if message.GetFrom() == 0{
 		fmt.Print("--> server sending ")
 		fmt.Printf("%+v\n",message)	}
 	enc := gob.NewEncoder(t.rw)
