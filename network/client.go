@@ -2,7 +2,7 @@ package network
 
 import (
 	"net"
-	"fmt"
+	"log"
 )
 
 type IClient interface {
@@ -36,7 +36,7 @@ func NewClient(handler func(Message) error) *Client{
 func (c *Client) Connect(address string) error {
 	conn, err := net.Dial("tcp", address)
 	if err != nil {
-		fmt.Println("Connection failed")
+		log.Println("Connection failed:", err)
 		return err
 	}
 	c.t = NewTransciever(conn, c.handler)

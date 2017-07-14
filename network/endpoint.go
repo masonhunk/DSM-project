@@ -2,7 +2,7 @@ package network
 
 import (
 	"net"
-	"fmt"
+	"log"
 )
 
 type SimpleMessage struct{
@@ -61,8 +61,7 @@ type Endpoint struct{
 func NewEndpoint(port string, handler func(conn net.Conn)) (Endpoint, error) {
 	l, err := net.Listen("tcp", ":"+port)
 	if err != nil {
-		fmt.Println("Failed to listen")
-		fmt.Println(err)
+		log.Println("Failed to listen:", err)
 		return Endpoint{}, err
 	}
 	done := make(chan bool)
@@ -73,7 +72,7 @@ func NewEndpoint(port string, handler func(conn net.Conn)) (Endpoint, error) {
 			//Do stuff with connections
 			conn, err := l.Accept()
 			if err != nil{
-				fmt.Println("Endpoint - Accept failed. ", err)
+				log.Println("Endpoint - Accept failed:", err)
 				l.Close()
 				done <- true
 				return

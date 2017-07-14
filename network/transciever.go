@@ -4,9 +4,9 @@ import (
 	"io"
 	"net"
 	"bufio"
-	"fmt"
 	"encoding/gob"
 	"time"
+	"log"
 )
 
 type ITransciever interface {
@@ -32,11 +32,10 @@ func NewTransciever(conn net.Conn, handler func(Message) error) *Transciever{
 			dec := gob.NewDecoder(rw)
 			err := dec.Decode(&message)
 			if err == io.EOF {
-				fmt.Println("Reached end of file.")
 				done <- true
 				return
 			} else if err != nil {
-				fmt.Println("transciever stopped because of ", err)
+				log.Println("transciever stopped because of ", err)
 				done <- true
 				return
 			}
@@ -59,8 +58,8 @@ func (t *Transciever) Close(){
 
 func (t *Transciever) Send(message Message) error {
 	if message.GetFrom() == 0{
-		fmt.Print("--> server sending ")
-		fmt.Printf("%+v\n",message)	}
+		log.Print("--> server sending ")
+		log.Printf("%+v\n",message)	}
 	enc := gob.NewEncoder(t.rw)
 	err := enc.Encode(&message)
 	t.rw.Flush()

@@ -1,8 +1,8 @@
 package network
 
 import (
-	"fmt"
 	"net"
+	"log"
 )
 
 type Server struct{
@@ -18,11 +18,9 @@ func NewServer(handler func(Message) error, port string) (Server, error){
 	var err error
 	s.ep, err = NewEndpoint(port, s.handleConnection)
 	if err != nil {
-		fmt.Println("Could not create endpoint")
-		fmt.Println(err)
+		log.Println("Could not create endpoint:", err)
 		return Server{}, err
 	}
-
 	return s, nil
 }
 
@@ -38,9 +36,9 @@ func (s *Server) StopServer() {
 func (s *Server) Send(message Message) {
 	t := s.Clients[message.GetTo()]
 	if message.GetFrom() == 1 {
-		fmt.Println(" --> Manager sending ", message)
+		log.Println(" --> Manager sending ", message)
 	} else {
-		fmt.Println(" --> Client sending ", message)
+		log.Println(" --> Client sending ", message)
 	}
 
 	t.Send(message)

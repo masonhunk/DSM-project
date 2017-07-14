@@ -56,7 +56,7 @@ func(m *Manager) Connect(address string) {
 // This will call the correct functions, depending on the message type, and
 // then send whatever messages needs to be sent afterwards.
 func (m *Manager) HandleMessage(message network.MultiviewMessage) {
-	fmt.Println("Manager got message ", message)
+	log.Println("Manager got message ", message)
 	switch t := message.Type; t{
 
 	case READ_REQUEST:
@@ -110,11 +110,9 @@ func (m *Manager) HandleWriteReq(message *network.MultiviewMessage) {
 
 	m.locks[vpage].Lock()
 	message.Type = INVALIDATE_REQUEST
-	fmt.Println("Copies contained ", m.copies)
-
 	for _, p := range m.copies[vpage]{
 		message.To = p
-		fmt.Println("Sending invalidate to ", p)
+		log.Println("Manager sending invalidate to ", p)
 		m.tr.Send(*message)
 	}
 }
@@ -122,7 +120,6 @@ func (m *Manager) HandleWriteReq(message *network.MultiviewMessage) {
 func (m *Manager) HandleInvalidateReply(message *network.MultiviewMessage){
 	vpage :=  m.translate(message)
 	m.copyLock.Lock()
-	fmt.Println("Length of c is ", len(m.copies[vpage]))
 	if len(m.copies[vpage]) == 1{
 		message.Type = WRITE_REQUEST
 		message.To = m.copies[vpage][0]

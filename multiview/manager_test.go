@@ -6,7 +6,6 @@ import 	(
 	"github.com/stretchr/testify/assert"
 	"DSM-project/network"
 	"DSM-project/memory"
-	"fmt"
 	"time"
 )
 
@@ -55,8 +54,6 @@ func countChannelCont(c chan bool) int{
 func TestManagerInit(t *testing.T) {
 	vmem := memory.NewVmem(1024, 128)
 	NewManager(vmem)
-	//TODO just to avoid errors from compiler. Remove at some point.
-	fmt.Println("")
 }
 
 func TestManager_HandleReadReq(t *testing.T){

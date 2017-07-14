@@ -3,7 +3,6 @@ package multiview
 import (
 	"testing"
 	"github.com/stretchr/testify/assert"
-	"fmt"
 )
 
 func TestInitialize(t *testing.T) {
@@ -11,13 +10,10 @@ func TestInitialize(t *testing.T) {
 	mw.Initialize(4096, 128)
 	ptr, err := mw.Malloc(1000)
 	assert.Nil(t, err)
-	fmt.Println("hello")
 	mw.Write(ptr, byte(9))
-	val, err := mw.Read(ptr)
-	fmt.Println(val, err)
+	mw.Read(ptr)
 	mw.Write(ptr, byte(8))
-	val, err = mw.Read(ptr)
-	fmt.Println(val, err)
+	_, err = mw.Read(ptr)
 	mw.Shutdown()
 }
 
@@ -37,6 +33,7 @@ func TestMalloc(t *testing.T) {
 }
 
 func TestMultipleHosts(t *testing.T) {
+	//log.SetOutput(ioutil.Discard)
 	mw1 := NewMultiView()
 	mw2 := NewMultiView()
 	mw3 := NewMultiView()
@@ -49,18 +46,16 @@ func TestMultipleHosts(t *testing.T) {
 	mw4.Join(1024, 32)
 	mw5.Join(1024, 32)
 
-	ptr, err := mw2.Malloc(512)
-	fmt.Println(ptr, err)
+	ptr, _ := mw2.Malloc(512)
 
-	err = mw2.Write(ptr, byte(90))
-	res, err := mw3.Read(ptr)
+	mw2.Write(ptr, byte(90))
+	res, _ := mw3.Read(ptr)
 	assert.Equal(t, byte(90), res)
-	fmt.Println("hello")
 	mw3.Write(ptr, 91)
 
-	/*res, err = mw4.Read(ptr+1)
-	res2, err2 := mw5.Read(ptr+1)
-	res3, err3 := mw1.Read(ptr+1)
+	res, _ = mw4.Read(ptr+1)
+	/*mw5.Read(ptr+1)
+	/*res3, err3 := mw1.Read(ptr+1)
 	assert.Nil(t, err)
 	assert.Nil(t, err2)
 	assert.Nil(t, err3)

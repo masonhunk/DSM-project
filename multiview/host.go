@@ -3,11 +3,11 @@ package multiview
 import (
 	"DSM-project/network"
 	"DSM-project/memory"
-	"fmt"
 	"strconv"
 	"errors"
 	"time"
 	"encoding/gob"
+	"log"
 )
 
 
@@ -40,6 +40,7 @@ type hostMem struct {
 	vm	memory.VirtualMemory
 	accessMap map[int]byte //key = vpage number, value, access right
 	faultListeners []memory.FaultListener
+
 }
 
 func NewMultiView() *Multiview {
@@ -77,6 +78,7 @@ func (m *Multiview) Join(memSize, pageByteSize int) error {
 	client := network.NewClient(handler)
 	err := m.StartAndConnect(memSize, pageByteSize, client)
 	<- c
+	log.Println("host joined network with id: ", m.id)
 	return err
 }
 
@@ -223,13 +225,13 @@ func (m *Multiview) onFault(addr int, faultType byte) {
 		}
 		m.conn.Send(msg)
 	} else {
-		fmt.Println(err)
+		log.Println(err)
 	}
 
 }
 
 func (m *Multiview) messageHandler(msg network.MultiviewMessage, c chan bool) error {
-	fmt.Println("received message at host with type:", msg.Type)
+	log.Println("received message at host", m.id, "with type:", msg.Type)
 	switch msg.Type {
 	case WELCOME_MESSAGE:
 		m.id = msg.To
@@ -240,7 +242,7 @@ func (m *Multiview) messageHandler(msg network.MultiviewMessage, c chan bool) er
 		for i, byt := range msg.Data {
 			err := m.Write(privBase + i, byt)
 			if err != nil {
-				fmt.Println("failed to write to privileged view at addr: ", privBase + i, " with error: ", err)
+				log.Println("failed to write to privileged view at addr: ", privBase + i, " with error: ", err)
 				break
 			}
 		}
@@ -266,7 +268,7 @@ func (m *Multiview) messageHandler(msg network.MultiviewMessage, c chan bool) er
 		msg.To = msg.From
 		res, err := m.ReadBytes(msg.Privbase, msg.Minipage_size)
 		if err != nil {
-			fmt.Println(err)
+			log.Println(err)
 		} else {
 			msg.Data = res
 			m.conn.Send(msg)

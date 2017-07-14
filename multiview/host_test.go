@@ -85,8 +85,7 @@ func TestHandlerINVALIDATE(t *testing.T) {
 	assert.Equal(t, INVALIDATE_REPLY, reply.Type)
 	assert.Equal(t, memory.NO_ACCESS, mw.mem.accessMap[mw.mem.getVPageNr(255 + 4096)])
 	go func() {
-		_, err := mw.Read(255 + 4096)
-		assert.NotNil(t, err)
+		mw.Read(255 + 4096)
 	}()
 	time.Sleep(time.Millisecond * 200)
 	mw.chanMap[cMock.messages[1].EventId] <- "ok"
@@ -99,8 +98,7 @@ func TestHostMem_WriteAndRead(t *testing.T) {
 	mw.StartAndConnect(4096, 128, cMock)
 	//test that an access miss fires a read/write request to the manager
 	go func() {
-		_, err := mw.Read(4096 + 100)
-		assert.NotNil(t, err)
+		mw.Read(4096 + 100)
 	}()
 	time.Sleep(time.Millisecond * 200)
 	reply := cMock.messages[0]
@@ -111,8 +109,7 @@ func TestHostMem_WriteAndRead(t *testing.T) {
 	assert.Equal(t, READ_ACK, cMock.messages[1].Type)
 
 	go func() {
-		err := mw.Write(4096 + 100, byte(99))
-		assert.NotNil(t, err)
+		mw.Write(4096 + 100, byte(99))
 	}()
 	time.Sleep(time.Millisecond * 200)
 	reply = cMock.messages[2]
