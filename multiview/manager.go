@@ -49,6 +49,7 @@ func(m *Manager) Connect(address string) {
 // This will call the correct functions, depending on the message type, and
 // then send whatever messages needs to be sent afterwards.
 func (m *Manager) HandleMessage(message network.Message) error {
+	fmt.Println("Manager got message ", message)
 	switch t := message.Type; t{
 
 	case READ_REQUEST:

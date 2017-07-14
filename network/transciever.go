@@ -35,11 +35,11 @@ func NewTransciever(conn net.Conn, handler func(Message) error) *Transciever{
 				done <- true
 				return
 			} else if err != nil {
-				fmt.Println("transciever stopped.")
+				fmt.Println("transciever stopped because of ", err)
 				done <- true
 				return
 			}
-			handler(message)
+			go handler(message)
 		}
 	}()
 	 <- done
