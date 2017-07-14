@@ -28,8 +28,8 @@ func NewTransciever(conn net.Conn, handler func(Message) error) *Transciever{
 	t := new(Transciever)
 	t.conn = conn
 	t.rw = rw
-	t.Encoder = gob.NewEncoder(t.rw)
-	t.Decoder = gob.NewDecoder(t.rw)
+	t.Encoder = gob.NewEncoder(conn)
+	t.Decoder = gob.NewDecoder(conn)
 	done := make(chan bool, 1)
 	go func() {
 		done <- true

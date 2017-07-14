@@ -4,7 +4,6 @@ import (
 	"DSM-project/network"
 	"sync"
 	"DSM-project/memory"
-	"fmt"
 	"log"
 )
 
@@ -28,8 +27,6 @@ type Manager struct{
 
 // Returns the pointer to a manager object.
 func NewManager(vm memory.VirtualMemory) *Manager{
-	//TODO remove the line below
-	fmt.Println("") //Just to make to compiler be quiet for now.
 	m := Manager{
 		copyLock: new(sync.RWMutex),
 		copies: make(map[int][]byte),
