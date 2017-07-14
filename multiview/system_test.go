@@ -3,6 +3,7 @@ package multiview
 import (
 	"testing"
 	"github.com/stretchr/testify/assert"
+	"fmt"
 )
 
 func TestInitialize(t *testing.T) {
@@ -56,9 +57,17 @@ func TestMultipleHosts(t *testing.T) {
 	res, _ = mw4.Read(ptr+1)
 	mw2.Read(ptr+1)
 	mw5.Read(ptr+1)
+
 	res3, err3 := mw1.Read(ptr+1)
 	assert.Nil(t, err3)
 	assert.Equal(t, 90, res)
 	assert.Equal(t, 90, res3)
 
+
+	fmt.Println("done")
+	mw2.Leave()
+	mw3.Leave()
+	mw4.Leave()
+	mw5.Leave()
+	mw1.Shutdown()
 }

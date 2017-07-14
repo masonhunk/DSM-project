@@ -5,7 +5,6 @@ import (
 	"net"
 	"bufio"
 	"encoding/gob"
-	"time"
 	"log"
 )
 
@@ -18,19 +17,26 @@ type Transciever struct{
 	done chan bool
 	conn net.Conn
 	rw *bufio.ReadWriter
+	*gob.Encoder
+	*gob.Decoder
+
 }
 
 
 func NewTransciever(conn net.Conn, handler func(Message) error) *Transciever{
 	rw := bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn))
+	t := new(Transciever)
+	t.conn = conn
+	t.rw = rw
+	t.Encoder = gob.NewEncoder(t.rw)
+	t.Decoder = gob.NewDecoder(t.rw)
 	done := make(chan bool, 1)
 	go func() {
 		done <- true
 		for {
 			//Do stuff with connections
 			var message Message
-			dec := gob.NewDecoder(rw)
-			err := dec.Decode(&message)
+			err := t.Decode(&message)
 			if err == io.EOF {
 				done <- true
 				return
@@ -41,14 +47,10 @@ func NewTransciever(conn net.Conn, handler func(Message) error) *Transciever{
 			}
 			log.Println("Transciever recieved message : ", message)
 			go handler(message.(Message))
-			time.Sleep(time.Millisecond*100)
 		}
 	}()
-	 <- done
-	t := new(Transciever)
+	<- done
 	t.done = done
-	t.conn = conn
-	t.rw = rw
 	return t
 }
 
@@ -62,8 +64,7 @@ func (t *Transciever) Send(message Message) error {
 		log.Print("--> server sending ")
 		log.Printf("%+v\n",message)
 	}
-	enc := gob.NewEncoder(t.rw)
-	err := enc.Encode(&message)
+	err := t.Encode(&message)
 	t.rw.Flush()
 	if err != nil {
 		log.Println("Transciever experienced an error: ", err)
