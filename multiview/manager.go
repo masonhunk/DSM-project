@@ -75,7 +75,15 @@ func (m *Manager) HandleMessage(message network.Message) error {
 		message, err :=m.HandleFree(message)
 		if err != nil{return err}
 		m.tr.Send(message)
+	case WRITE_ACK:
+		err := m.HandleWriteAck(message)
+		if err != nil{return err}
+	case READ_ACK:
+		err := m.HandleReadAck(message)
+		if err != nil{return err}
 	}
+
+
 	return nil
 }
 

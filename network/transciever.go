@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"fmt"
 	"encoding/gob"
+	"time"
 )
 
 type ITransciever interface {
@@ -40,6 +41,7 @@ func NewTransciever(conn net.Conn, handler func(Message) error) *Transciever{
 				return
 			}
 			go handler(message)
+			time.Sleep(time.Millisecond*100)
 		}
 	}()
 	 <- done
