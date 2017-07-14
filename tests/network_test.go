@@ -13,15 +13,16 @@ import (
 var messages []network.Message
 var mutex sync.Mutex
 
-func messageHandler(message network.Message){
+func messageHandler(message network.Message) error{
 	mutex.Lock()
 	messages = append(messages, message)
 	mutex.Unlock()
 	time.Sleep(time.Millisecond * 50)
+	return nil
 }
 
 func createTransciever(conn net.Conn) {
-	network(conn, messageHandler)
+	network.NewTransciever(conn, messageHandler)
 }
 
 func createEndpoint(port string) network.Endpoint{
@@ -37,7 +38,7 @@ func TestEndpointCreationAndClose(t *testing.T) {
 func TestEndpointAndTranscieverConnectAndClose(t *testing.T){
 	e,_ := network.NewEndpoint("2000", func(conn net.Conn){return})
 	conn, _ := net.Dial("tcp", "localhost:2000")
-	network.NewTransciever(conn, func(message network.Message){fmt.Println(message.Type)})
+	network.NewTransciever(conn, func(message network.Message)error{fmt.Println(message.Type); return nil})
 	e.Close()
 }
 
@@ -57,7 +58,7 @@ func TestEndpointAndTranscieverConnectAndTalk(t *testing.T) {
 
 func TestServerCreationWithMultipleClients(t *testing.T){
 	messages = []network.Message{}
-	s,_ := network.NewServer(func(message network.Message){}, "2000")
+	s,_ := network.NewServer(func(message network.Message)error{return nil}, "2000")
 	c1 := network.NewClient(messageHandler)
 	c1.Connect("localhost:2000")
 	c2 := network.NewClient(messageHandler)
@@ -76,7 +77,7 @@ func TestServerCreationWithMultipleClients(t *testing.T){
 	s.StopServer()
 	fmt.Println(messages)
 
-	assert.Len(t, messages, 3)
+	assert.Len(t, messages, 6)
 	assert.Len(t, s.Clients, 3)
 }
 
@@ -92,13 +93,13 @@ func TestMultiMessages(t *testing.T) {
 	time.Sleep(1000000000)
 	c.Close()
 	s.StopServer()
-	assert.Len(t, messages, 6)
+	assert.Len(t, messages, 7)
 	assert.Len(t, s.Clients, 1)
 }
 
 func TestServerSending(t *testing.T) {
 	messages = []network.Message{}
-	s,_ := network.NewServer(func(message network.Message){}, "2000")
+	s,_ := network.NewServer(func(message network.Message)error{return nil}, "2000")
 	c := network.NewClient(messageHandler)
 	c.Connect("localhost:2000")
 	for len(s.Clients) < 1{	}
@@ -109,7 +110,7 @@ func TestServerSending(t *testing.T) {
 	time.Sleep(1000000000)
 	c.Close()
 	s.StopServer()
-	assert.Len(t, messages, 4)
+	assert.Len(t, messages, 5)
 	assert.Len(t, s.Clients, 1)
 }
 
@@ -117,9 +118,9 @@ func TestClientToClient(t *testing.T) {
 	m1 := []network.Message{}
 	m2 := []network.Message{}
 	s,_ := network.NewServer(messageHandler, "2000")
-	c1 := network.NewClient(func(message network.Message){m1 = append(m1, message)})
+	c1 := network.NewClient(func(message network.Message) error{m1 = append(m1, message); return nil})
 	c1.Connect("localhost:2000")
-	c2 := network.NewClient(func(message network.Message){m2 = append(m2, message)})
+	c2 := network.NewClient(func(message network.Message) error{m2 = append(m2, message); return nil})
 	c2.Connect("localhost:2000")
 
 	c1.Send(network.Message{To: 2, Type: "From c1 to c2", Data: []byte{1,2}})
@@ -129,7 +130,7 @@ func TestClientToClient(t *testing.T) {
 	c1.Close()
 	c2.Close()
 	s.StopServer()
-	assert.Len(t, m1, 1)
-	assert.Len(t, m2, 1)
+	assert.Len(t, m1, 2)
+	assert.Len(t, m2, 2)
 	assert.Len(t, s.Clients, 2)
 }
