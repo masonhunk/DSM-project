@@ -29,7 +29,6 @@ func NewTransciever(conn net.Conn, handler func(Message) error) *Transciever{
 		for {
 			//Do stuff with connections
 			var message Message
-
 			dec := gob.NewDecoder(rw)
 			err := dec.Decode(&message)
 			if err == io.EOF {
@@ -63,7 +62,7 @@ func (t *Transciever) Send(message Message) error {
 		fmt.Print("--> server sending ")
 		fmt.Printf("%+v\n",message)	}
 	enc := gob.NewEncoder(t.rw)
-	err := enc.Encode(message)
+	err := enc.Encode(&message)
 	t.rw.Flush()
 	return err
 }
