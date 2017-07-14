@@ -66,23 +66,23 @@ func (m *Manager) HandleMessage(message network.MultiviewMessage) {
 	switch t := message.Type; t{
 
 	case READ_REQUEST:
-		go m.HandleReadReq(&message)
+		go m.HandleReadReq(message)
 
 	case WRITE_REQUEST:
-		go m.HandleWriteReq(&message)
+		go m.HandleWriteReq(message)
 
 	case INVALIDATE_REPLY:
-		m.HandleInvalidateReply(&message)
+		m.HandleInvalidateReply(message)
 
 	case MALLOC_REQUEST:
-		m.HandleAlloc(&message)
+		m.HandleAlloc(message)
 
 	case FREE_REQUEST:
-		m.HandleFree(&message)
+		m.HandleFree(message)
 	case WRITE_ACK:
-		m.HandleWriteAck(&message)
+		m.HandleWriteAck(message)
 	case READ_ACK:
-		m.HandleReadAck(&message)
+		m.HandleReadAck(message)
 
 	}
 }
@@ -102,34 +102,34 @@ func (m *Manager) translate(message *network.MultiviewMessage)  int {
 }
 
 // This handles read requests.
-func (m *Manager) HandleReadReq(message *network.MultiviewMessage){
-	vpage := m.translate(message)
+func (m *Manager) HandleReadReq(message network.MultiviewMessage){
+	vpage := m.translate(&message)
 	m.locks[vpage].RLock()
 	p := m.copies[vpage][0]
 	message.To = p
-	m.tr.Send(*message)
+	m.tr.Send(message)
 }
 
 // This handles write requests.
-func (m *Manager) HandleWriteReq(message *network.MultiviewMessage) {
-	vpage := m.translate(message)
+func (m *Manager) HandleWriteReq(message network.MultiviewMessage) {
+	vpage := m.translate(&message)
 
 	m.locks[vpage].Lock()
 	message.Type = INVALIDATE_REQUEST
 	for _, p := range m.copies[vpage]{
 		message.To = p
 		log.Println("Manager sending invalidate to ", p)
-		m.tr.Send(*message)
+		m.tr.Send(message)
 	}
 }
 
-func (m *Manager) HandleInvalidateReply(message *network.MultiviewMessage){
-	vpage :=  m.translate(message)
+func (m *Manager) HandleInvalidateReply(message network.MultiviewMessage){
+	vpage :=  m.translate(&message)
 	m.copyLock.Lock()
 	if len(m.copies[vpage]) == 1{
 		message.Type = WRITE_REQUEST
 		message.To = m.copies[vpage][0]
-		m.tr.Send(*message)
+		m.tr.Send(message)
 		m.copies[vpage] = []byte{}
 	} else {
 		m.copies[vpage] = m.copies[vpage][:len(m.copies[vpage])-1]
@@ -137,19 +137,19 @@ func (m *Manager) HandleInvalidateReply(message *network.MultiviewMessage){
 	m.copyLock.Unlock()
 }
 
-func (m *Manager) HandleReadAck(message *network.MultiviewMessage) {
+func (m *Manager) HandleReadAck(message network.MultiviewMessage) {
 	vpage := m.handleAck(message)
 	m.locks[vpage].RUnlock()
 }
 
-func (m *Manager) HandleWriteAck(message *network.MultiviewMessage) {
+func (m *Manager) HandleWriteAck(message network.MultiviewMessage) {
 	vpage := m.handleAck(message)
 	m.locks[vpage].Unlock()
 }
 
 
-func (m *Manager) handleAck(message *network.MultiviewMessage) int{
-	vpage := m.translate(message)
+func (m *Manager) handleAck(message network.MultiviewMessage) int{
+	vpage := m.translate(&message)
 	alreadyHas := false
 	for _, c := range m.copies[vpage]{
 		if c == message.From{
@@ -162,7 +162,7 @@ func (m *Manager) handleAck(message *network.MultiviewMessage) int{
 	return vpage
 }
 
-func (m *Manager) HandleAlloc(message *network.MultiviewMessage){
+func (m *Manager) HandleAlloc(message network.MultiviewMessage){
 
 	size := message.Minipage_size
 	ptr, _:= m.vm.Malloc(size)
@@ -214,12 +214,12 @@ func (m *Manager) HandleAlloc(message *network.MultiviewMessage){
 	message.Fault_addr = startpg*m.vm.GetPageSize() + m.mpt[startpg].offset
 	message.Type = MALLOC_REPLY
 
-	m.tr.Send(*message)
+	m.tr.Send(message)
 
 }
 
-func (m *Manager) HandleFree(message *network.MultiviewMessage) {
-	vpage := m.translate(message)
+func (m *Manager) HandleFree(message network.MultiviewMessage) {
+	vpage := m.translate(&message)
 
 	//Then we loop over vpages from that vpage. If they point back to this vpage, we free them.
 	for i := vpage; true ; i++{
@@ -235,7 +235,7 @@ func (m *Manager) HandleFree(message *network.MultiviewMessage) {
 	m.vm.Free(message.Fault_addr % m.vm.Size())
 	message.Type = FREE_REPLY
 	message.To = message.From
-	m.tr.Send(*message)
+	m.tr.Send(message)
 }
 
 
