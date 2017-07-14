@@ -5,6 +5,24 @@ import (
 	"fmt"
 )
 
+type SimpleMessage struct{
+	From byte
+	To byte
+	Type string
+}
+
+func (m SimpleMessage) GetFrom() byte {
+	return m.From
+}
+
+func (m SimpleMessage) GetTo() byte {
+	return m.To
+}
+
+func (m SimpleMessage) GetType() string {
+	return m.Type
+}
+
 type MultiviewMessage struct{
 	From byte
 	To byte
@@ -16,7 +34,10 @@ type MultiviewMessage struct{
 	EventId byte
 	Err error
 	Data []byte //Data of the message
+}
 
+func (m MultiviewMessage) GetType() string {
+	return m.Type
 }
 
 func (m MultiviewMessage) GetFrom() byte {
@@ -29,6 +50,7 @@ func (m MultiviewMessage) GetTo() byte {
 type Message interface {
 	GetFrom() byte
 	GetTo() byte
+	GetType() string
 }
 
 type Endpoint struct{
@@ -51,8 +73,7 @@ func NewEndpoint(port string, handler func(conn net.Conn)) (Endpoint, error) {
 			//Do stuff with connections
 			conn, err := l.Accept()
 			if err != nil{
-				fmt.Println(err)
-				fmt.Println("Endpoint - Accept failed.")
+				fmt.Println("Endpoint - Accept failed. ", err)
 				l.Close()
 				done <- true
 				return

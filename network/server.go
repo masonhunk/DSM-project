@@ -56,7 +56,7 @@ func (s *Server) handleMessage(message Message) error {
 
 func (s *Server)handleConnection(conn net.Conn) {
 	t := NewTransciever(conn, s.handleMessage)
-	t.Send(MultiviewMessage{From: 0, To: s.nonce, Type: "WELC"})
+	t.Send(SimpleMessage{From: 0, To: s.nonce, Type: "WELC"})
 	s.Clients[s.nonce] = t
 	s.nonce = s.nonce + byte(1)
 }
