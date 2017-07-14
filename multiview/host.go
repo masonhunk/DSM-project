@@ -115,7 +115,6 @@ func (m *Multiview) Read(addr int) (byte, error) {
 		for _, l := range m.mem.faultListeners {
 			l(addr, 0)
 		}
-		return 0, memory.AccessDeniedErr
 	}
 	res, _ := m.mem.vm.Read(m.mem.translateAddr(addr))
 	return res, nil

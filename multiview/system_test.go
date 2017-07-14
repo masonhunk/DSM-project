@@ -56,4 +56,17 @@ func TestMultipleHosts(t *testing.T) {
 	fmt.Println("error:", err)
 	res, err := mw3.Read(ptr)
 	assert.Equal(t, byte(90), res)
+
+	mw3.Write(ptr, 91)
+
+	/*res, err = mw4.Read(ptr+1)
+	res2, err2 := mw5.Read(ptr+1)
+	res3, err3 := mw1.Read(ptr+1)
+	assert.Nil(t, err)
+	assert.Nil(t, err2)
+	assert.Nil(t, err3)
+	assert.Equal(t, 90, res)
+	assert.Equal(t, 90, res2)
+	assert.Equal(t, 90, res3)*/
+
 }
