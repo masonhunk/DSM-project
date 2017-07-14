@@ -136,7 +136,6 @@ func (m *Multiview) Write(addr int, val byte) error {
 		for _, l := range m.mem.faultListeners {
 			l(addr, 1)
 		}
-		return memory.AccessDeniedErr
 	}
 	return m.mem.vm.Write(m.mem.translateAddr(addr), val)
 }

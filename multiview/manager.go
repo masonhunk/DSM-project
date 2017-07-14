@@ -110,7 +110,6 @@ func (m *Manager) HandleReadReq(message network.Message) (network.Message, error
 	if _, ok := m.mpt[vpage]; !ok { //If the page doesnt exist, we return nil and an error.
 		return network.Message{}, errors.New("vpage have not been allocated.")
 	}
-
 	m.locks[vpage].RLock()
 	p := m.copies[vpage][0]
 	message.To = p
