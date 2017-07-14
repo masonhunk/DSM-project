@@ -84,6 +84,9 @@ func (m *Multiview) Join(memSize, pageByteSize int) error {
 	}
 	client := network.NewClient(handler)
 	err := m.StartAndConnect(memSize, pageByteSize, client)
+	if err != nil {
+		log.Println(err)
+	}
 	<- c
 	log.Println("host joined network with id: ", m.id)
 	return err
@@ -95,6 +98,7 @@ func (m *Multiview) Initialize(memSize, pageByteSize int) error {
 	if err != nil {
 		return err
 	}
+	log.Println("sucessfully started server")
 	time.Sleep(time.Millisecond * 100)
 	vm := memory.NewVmem(memSize, pageByteSize)
 	manager := NewManager(vm)
@@ -266,9 +270,12 @@ func (m *Multiview) messageHandler(msg network.MultiviewMessage, c chan bool) er
 		if msg.Type == READ_REQUEST && m.mem.accessMap[vpagenr] == memory.READ_WRITE &&
 				vpagenr >= m.mem.vm.Size()/m.mem.vm.GetPageSize() {
 			m.mem.accessMap[vpagenr] = memory.READ_ONLY
-			msg.Type = READ_REPLY
 		} else if msg.Type == WRITE_REQUEST && vpagenr >= m.mem.vm.Size()/m.mem.vm.GetPageSize() {
 			m.mem.accessMap[vpagenr] = memory.NO_ACCESS
+		}
+		if msg.Type == READ_REQUEST {
+			msg.Type = READ_REPLY
+		} else {
 			msg.Type = WRITE_REPLY
 		}
 		//send reply back to requester including data

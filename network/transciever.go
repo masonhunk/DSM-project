@@ -60,7 +60,8 @@ func (t *Transciever) Close(){
 func (t *Transciever) Send(message Message) error {
 	if message.GetFrom() == 0{
 		log.Print("--> server sending ")
-		log.Printf("%+v\n",message)	}
+		log.Printf("%+v\n",message)
+	}
 	enc := gob.NewEncoder(t.rw)
 	err := enc.Encode(&message)
 	t.rw.Flush()
