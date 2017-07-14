@@ -197,7 +197,6 @@ func (m *Multiview) onFault(addr int, faultType byte) {
 	}
 	c := make(chan string)
 	m.chanMap[m.sequenceNumber] = c
-	fmt.Println(m.sequenceNumber)
 	msg := network.Message{
 		Type: str,
 		From: m.id,
@@ -207,15 +206,14 @@ func (m *Multiview) onFault(addr int, faultType byte) {
 	}
 		err := m.conn.Send(msg)
 	if err == nil {
-		fmt.Println("a")
 		<- c
-		fmt.Println("b")
 		m.chanMap[m.sequenceNumber] = nil
 		m.sequenceNumber++
 		//send ack
 		msg := network.Message{
 			From: m.id,
 			To: byte(1),
+			Fault_addr: addr,
 		}
 		if faultType == 0 {
 			msg.Type = READ_ACK

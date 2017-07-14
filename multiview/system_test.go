@@ -52,7 +52,8 @@ func TestMultipleHosts(t *testing.T) {
 	ptr, err := mw2.Malloc(512)
 	fmt.Println(ptr, err)
 
-	mw2.Write(ptr, 90)
+	err = mw2.Write(ptr, 90)
+	fmt.Println("error:", err)
 	res, err := mw3.Read(ptr)
 	assert.Equal(t, 90, res)
 }
