@@ -132,7 +132,7 @@ func (m *Manager) HandleInvalidateReply(message network.MultiviewMessage){
 		m.tr.Send(message)
 		m.copies[vpage] = []byte{}
 	} else {
-		m.copies[vpage] = m.copies[vpage][:len(m.copies[vpage])-1]
+		m.copies[vpage] = m.copies[vpage][1:]
 	}
 	m.copyLock.Unlock()
 }
