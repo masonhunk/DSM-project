@@ -57,8 +57,8 @@ func (t *Transciever) Close(){
 
 func (t *Transciever) Send(message Message) error {
 	if message.From == 0{
-	fmt.Println(" --> Server sending ", message)
-	}
+		fmt.Print("--> server sending ")
+		fmt.Printf("%+v\n",message)	}
 	enc := gob.NewEncoder(t.rw)
 	err := enc.Encode(message)
 	t.rw.Flush()

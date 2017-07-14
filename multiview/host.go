@@ -42,7 +42,9 @@ type hostMem struct {
 }
 
 func NewMultiView() *Multiview {
-	return new(Multiview)
+	m := new(Multiview)
+	m.chanMap = make(map[byte]chan string)
+	return m
 }
 
 func NewHostMem(virtualMemory memory.VirtualMemory) *hostMem {
@@ -65,7 +67,6 @@ func (m *Multiview) Shutdown() {
 
 func (m *Multiview) Join(memSize, pageByteSize int) error {
 	c := make(chan bool)
-	m.chanMap = make(map[byte]chan string)
 	//handler for all incoming messages in the host process, ie. read/write requests/replies, and invalidation requests.
 	handler := func (message network.Message) error {
 		return m.messageHandler(message, c)
@@ -196,6 +197,7 @@ func (m *Multiview) onFault(addr int, faultType byte) {
 	}
 	c := make(chan string)
 	m.chanMap[m.sequenceNumber] = c
+	fmt.Println(m.sequenceNumber)
 	msg := network.Message{
 		Type: str,
 		From: m.id,
@@ -205,7 +207,9 @@ func (m *Multiview) onFault(addr int, faultType byte) {
 	}
 		err := m.conn.Send(msg)
 	if err == nil {
+		fmt.Println("a")
 		<- c
+		fmt.Println("b")
 		m.chanMap[m.sequenceNumber] = nil
 		m.sequenceNumber++
 		//send ack
@@ -226,6 +230,7 @@ func (m *Multiview) onFault(addr int, faultType byte) {
 }
 
 func (m *Multiview) messageHandler(msg network.Message, c chan bool) error {
+	fmt.Println("received message at host with type:", msg.Type)
 	switch msg.Type {
 	case WELCOME_MESSAGE:
 		m.id = msg.To
