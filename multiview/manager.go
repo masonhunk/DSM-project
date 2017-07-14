@@ -120,12 +120,12 @@ func (m *Manager) HandleWriteReq(message network.Message) ([]network.Message, er
 
 	m.locks[vpage].Lock()
 	message.Type = INVALIDATE_REQUEST
-	message.From = 1
 	messages := []network.Message{}
+	fmt.Println("Copies contained ", m.copies)
 
 	for _, p := range m.copies[vpage]{
 		message.To = p
-
+		fmt.Println("Sending invalidate to ", p)
 		messages = append(messages, message)
 	}
 	return messages, err
@@ -213,6 +213,7 @@ func (m *Manager) HandleAlloc(message network.Message) (network.Message, error){
 
 	//Send reply to alloc requester
 	message.To=message.From
+	message.From = 1
 	message.Fault_addr = startpg*m.vm.GetPageSize() + m.mpt[startpg].offset
 	message.Type = MALLOC_REPLY
 

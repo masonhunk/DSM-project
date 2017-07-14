@@ -145,7 +145,7 @@ func TestManager_HandleWriteReq(t *testing.T) {
 	message.Fault_addr = pointer.Fault_addr+1
 	reply, err = m.HandleWriteReq(message)
 	assert.Nil(t, err)
-	message = network.Message{Fault_addr:message.Fault_addr, From: byte(2), To: byte(2), Minipage_size: 128, Minipage_base: 1024, Privbase:0, Type:INVALIDATE_REQUEST}
+	message = network.Message{Fault_addr:message.Fault_addr, From: byte(1), To: byte(2), Minipage_size: 128, Minipage_base: 1024, Privbase:0, Type:INVALIDATE_REQUEST}
 	assert.Equal(t, []network.Message{message}, reply)
 	message.Type = INVALIDATE_REPLY
 	m.HandleInvalidateReply(message)

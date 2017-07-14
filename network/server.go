@@ -37,6 +37,12 @@ func (s *Server) StopServer() {
 
 func (s *Server) Send(message Message) {
 	t := s.Clients[message.To]
+	if message.From == 1 {
+		fmt.Println(" --> Manager sending ", message)
+	} else {
+		fmt.Println(" --> Client sending ", message)
+	}
+
 	t.Send(message)
 }
 
