@@ -58,18 +58,18 @@ type TreadMarks struct {
 	pageArray            PageArray
 	procArray            ProcArray
 	diffPool             DiffPool
-	vc 									 Vectorclock
+	vc                   Vectorclock
 	network.IClient
 }
 
 func NewTreadMarks(client network.IClient, virtualMemory memory.VirtualMemory) *TreadMarks {
 	tm := TreadMarks{
 		VirtualMemory: virtualMemory,
-		IClient: client,
-		pageArray: make(PageArray),
-		procArray: make(ProcArray, 0),
-		diffPool:  make(DiffPool, 0),
-		vc: Vectorclock{},
+		IClient:       client,
+		pageArray:     make(PageArray),
+		procArray:     make(ProcArray, 0),
+		diffPool:      make(DiffPool, 0),
+		vc:            Vectorclock{},
 	}
 	tm.VirtualMemory.AddFaultListener(func(addr int, faultType byte) {
 		//do fancy protocol stuff here
@@ -87,12 +87,12 @@ func (t *TreadMarks) Shutdown() {
 
 func (t *TreadMarks) AcquireLock(id int) {
 	msg := TM_Message{
-		Type: LOCK_ACQUIRE_REQUEST,
-		To: 1,
-		From: t.procId,
+		Type:  LOCK_ACQUIRE_REQUEST,
+		To:    1,
+		From:  t.procId,
 		Diffs: nil,
-		Id: id,
-		VC: t.vc,
+		Id:    id,
+		VC:    t.vc,
 	}
 	err := t.Send(msg)
 	panicOnErr(err)
@@ -100,11 +100,11 @@ func (t *TreadMarks) AcquireLock(id int) {
 
 func (t *TreadMarks) ReleaseLock(id int) {
 	msg := TM_Message{
-		Type: LOCK_RELEASE,
-		To: 1,
-		From: t.procId,
+		Type:  LOCK_RELEASE,
+		To:    1,
+		From:  t.procId,
 		Diffs: nil,
-		Id: id,
+		Id:    id,
 	}
 	err := t.Send(msg)
 	panicOnErr(err)
@@ -112,11 +112,10 @@ func (t *TreadMarks) ReleaseLock(id int) {
 
 func (t *TreadMarks) barrier(id int) {
 	msg := TM_Message{
-		Type: BARRIER_REQUEST,
-		To: 1,
-		From: t.procId,
+		To:    1,
+		From:  t.procId,
 		Diffs: nil,
-		Id: id,
+		Id:    id,
 	}
 	err := t.Send(msg)
 	panicOnErr(err)
