@@ -24,7 +24,29 @@ type ITreadMarks interface {
 	Shutdown()
 	AcquireLock(id int)
 	ReleaseLock(id int)
-	barrier(id int)
+	Barrier(id int)
+}
+
+type TM_Message struct {
+	From         byte
+	To           byte
+	Type         string
+	Diffs        []Diff
+	Id           int
+	VC           Vectorclock
+	WriteNotices []WriteNotice
+}
+
+func (m *TM_Message) GetFrom() byte {
+	return m.From
+}
+
+func (m *TM_Message) GetTo() byte {
+	return m.To
+}
+
+func (m *TM_Message) GetType() string {
+	return m.Type
 }
 
 type TreadMarks struct {
@@ -33,12 +55,16 @@ type TreadMarks struct {
 	procId               int
 	nrLocks              int
 	nrBarriers           int
+	pageArray            PageArray
+	procArray            ProcArray
+	diffPool             DiffPool
 	network.IClient
 }
 
-func NewTreadMarks(client network.IClient, virtualMemory memory.VirtualMemory) {
-	//TODO: setup virtual memory onFault listener
-	panic("implement me")
+func NewTreadMarks(client network.IClient, virtualMemory memory.VirtualMemory) *TreadMarks {
+	tm := TreadMarks{
+		VirtualMemory: virtualMemory,
+	}
 }
 
 func (t *TreadMarks) Startup() error {
