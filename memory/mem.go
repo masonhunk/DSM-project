@@ -11,7 +11,7 @@ const NO_ACCESS byte = 0
 const READ_ONLY byte = 1
 const READ_WRITE byte = 2
 
-type FaultListener func(addr int, faultType byte) //faultType = 0 => read fault, = 1 => write fault
+type FaultListener func(addr int, faultType byte, accessType string, value byte) //faultType = 0 => read fault, = 1 => write fault
 
 type VirtualMemory interface {
 	Read(addr int) (byte, error)
@@ -121,7 +121,7 @@ func (m *Vmem) Read(addr int) (byte, error) {
 	case NO_ACCESS:
 		//notify all listeners
 		for _, l := range m.faultListeners {
-			l(addr, 0)
+			l(addr, 0, "READ", 0)
 		}
 		return 127, errors.New("access denied")
 	case READ_ONLY:
@@ -144,7 +144,7 @@ func (m *Vmem) ReadBytes(addr, length int) ([]byte, error) {
 		case NO_ACCESS:
 			//notify all listeners
 			for _, l := range m.faultListeners {
-				l(addr, 0)
+				l(addr, 0, "READ", 0)
 			}
 			return nil, errors.New("access denied at location: " + strconv.Itoa(i))
 		case READ_WRITE, READ_ONLY:
@@ -166,13 +166,13 @@ func (m *Vmem) Write(addr int, val byte) error {
 	case NO_ACCESS:
 		//notify all listeners
 		for _, l := range m.faultListeners {
-			l(addr, 1)
+			l(addr, 1, "WRITE", val)
 		}
 		return errors.New("access denied")
 	case READ_ONLY:
 		//notify all listeners
 		for _, l := range m.faultListeners {
-			l(addr, 1)
+			l(addr, 1, "WRITE", val)
 		}
 		return errors.New("access denied")
 	case READ_WRITE:

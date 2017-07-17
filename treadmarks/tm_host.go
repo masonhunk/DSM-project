@@ -3,6 +3,7 @@ package treadmarks
 import (
 	"DSM-project/memory"
 	"DSM-project/network"
+	"errors"
 )
 
 const (
@@ -23,7 +24,7 @@ const (
 type ITreadMarks interface {
 	memory.VirtualMemory
 	Startup() error
-	Shutdown()
+	Shutdown(address string)
 	AcquireLock(id int)
 	ReleaseLock(id int)
 	Barrier(id int)
@@ -61,26 +62,74 @@ type TreadMarks struct {
 	procArray            ProcArray
 	diffPool             DiffPool
 	vc                   Vectorclock
+	copyMap              map[int][]byte
 	network.IClient
 }
 
-func NewTreadMarks(client network.IClient, virtualMemory memory.VirtualMemory) *TreadMarks {
+func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarriers int) *TreadMarks {
+
 	tm := TreadMarks{
 		VirtualMemory: virtualMemory,
-		IClient:       client,
 		pageArray:     make(PageArray),
 		procArray:     make(ProcArray, 0),
 		diffPool:      make(DiffPool, 0),
-		vc:            Vectorclock{},
+		vc:            Vectorclock{make([]uint, nrProcs)},
+		nrProcs:       nrProcs,
+		nrLocks:       nrLocks,
+		nrBarriers:    nrBarriers,
 	}
-	tm.VirtualMemory.AddFaultListener(func(addr int, faultType byte) {
+
+	tm.VirtualMemory.AddFaultListener(func(addr int, faultType byte, accessType string, value byte) {
 		//do fancy protocol stuff here
+		switch accessType {
+		case "WRITE":
+			//create a copy
+			tm.SetRights(addr, memory.READ_WRITE)
+			val, err := tm.ReadBytes(tm.GetPageAddr(addr), tm.GetPageSize())
+			panicOnErr(err)
+			tm.copyMap[tm.GetPageAddr(addr)] = val
+			err = tm.Write(addr, value)
+			panicOnErr(err)
+		}
 	})
 	return &tm
 }
 
-func (t *TreadMarks) Startup() error {
+func (t *TreadMarks) Startup(address string) error {
+	c := make(chan bool)
 
+	msgHandler := func(message network.Message) error {
+		//handle incoming messages
+		msg, ok := message.(TM_Message)
+		if !ok {
+			return errors.New("invalid message struct type")
+		}
+		switch msg.GetType() {
+		case WELCOME_MESSAGE:
+			t.procId = msg.To
+			c <- true
+		case LOCK_ACQUIRE_REQUEST:
+
+		case LOCK_ACQUIRE_RESPONSE:
+
+		case BARRIER_RESPONSE:
+
+		case DIFF_REQUEST:
+
+		case DIFF_RESPONSE:
+
+		default:
+			return errors.New("unrecognized message type value: " + msg.Type)
+		}
+		return nil
+	}
+	client := network.NewClient(msgHandler)
+	t.IClient = client
+	if err := t.Connect(address); err != nil {
+		return err
+	}
+	<-c
+	return nil
 }
 
 func (t *TreadMarks) Shutdown() {
@@ -114,6 +163,7 @@ func (t *TreadMarks) ReleaseLock(id int) {
 
 func (t *TreadMarks) barrier(id int) {
 	msg := TM_Message{
+		Type:  BARRIER_REQUEST,
 		To:    1,
 		From:  t.procId,
 		Diffs: nil,
