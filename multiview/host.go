@@ -1,46 +1,44 @@
 package multiview
 
 import (
-	"DSM-project/network"
 	"DSM-project/memory"
-	"strconv"
-	"errors"
-	"time"
+	"DSM-project/network"
 	"encoding/gob"
+	"errors"
 	"log"
+	"strconv"
+	"time"
 )
 
-
 const (
-	READ_REQUEST = "RR"
-	WRITE_REQUEST = "WR"
-	READ_REPLY = "RRPL"
-	WRITE_REPLY = "WRPL"
-	INVALIDATE_REPLY = "INV"
+	READ_REQUEST       = "RR"
+	WRITE_REQUEST      = "WR"
+	READ_REPLY         = "RRPL"
+	WRITE_REPLY        = "WRPL"
+	INVALIDATE_REPLY   = "INV"
 	INVALIDATE_REQUEST = "INVQ"
-	MALLOC_REQUEST = "MR"
-	FREE_REQUEST = "FR"
-	MALLOC_REPLY = "MRPL"
-	FREE_REPLY = "FRPL"
-	WELCOME_MESSAGE = "WELC"
-	READ_ACK = "RA"
-	WRITE_ACK = "WA"
+	MALLOC_REQUEST     = "MR"
+	FREE_REQUEST       = "FR"
+	MALLOC_REPLY       = "MRPL"
+	FREE_REPLY         = "FRPL"
+	WELCOME_MESSAGE    = "WELC"
+	READ_ACK           = "RA"
+	WRITE_ACK          = "WA"
 )
 
 type Multiview struct {
-	conn network.IClient
-	mem *hostMem
-	id byte
-	server network.Server
-	chanMap map[byte]chan string
+	conn           network.IClient
+	mem            *hostMem
+	id             byte
+	server         network.Server
+	chanMap        map[byte]chan string
 	sequenceNumber byte
 }
 
 type hostMem struct {
-	vm	memory.VirtualMemory
-	accessMap map[int]byte //key = vpage number, value, access right
+	vm             memory.VirtualMemory
+	accessMap      map[int]byte //key = vpage number, value, access right
 	faultListeners []memory.FaultListener
-
 }
 
 func NewMultiView() *Multiview {
@@ -72,9 +70,9 @@ func (m *Multiview) Shutdown() {
 func (m *Multiview) Join(memSize, pageByteSize int) error {
 	c := make(chan bool)
 	//handler for all incoming messages in the host process, ie. read/write requests/replies, and invalidation requests.
-	handler := func (message network.Message) error {
+	handler := func(message network.Message) error {
 		var msg network.MultiviewMessage
-		switch message.(type){
+		switch message.(type) {
 		case network.SimpleMessage:
 			msg = network.MultiviewMessage{From: message.GetFrom(), To: message.GetTo(), Type: message.GetType()}
 		case network.MultiviewMessage:
@@ -87,14 +85,14 @@ func (m *Multiview) Join(memSize, pageByteSize int) error {
 	if err != nil {
 		log.Println(err)
 	}
-	<- c
+	<-c
 	log.Println("host joined network with id: ", m.id)
 	return err
 }
 
 func (m *Multiview) Initialize(memSize, pageByteSize int) error {
 	var err error
-	m.server, err = network.NewServer(func(message network.Message) error {return nil}, "2000")
+	m.server, err = network.NewServer(func(message network.Message) error { return nil }, "2000")
 	if err != nil {
 		return err
 	}
@@ -117,13 +115,12 @@ func (m *Multiview) StartAndConnect(memSize, pageByteSize int, client network.IC
 	return m.conn.Connect("localhost:2000")
 }
 
-
 func (m *hostMem) translateAddr(addr int) int {
 	return addr % m.vm.Size()
 }
 
 func (m *hostMem) getVPageNr(addr int) int {
-	return addr/m.vm.GetPageSize()
+	return addr / m.vm.GetPageSize()
 }
 
 func (m *Multiview) Read(addr int) (byte, error) {
@@ -138,7 +135,7 @@ func (m *Multiview) Read(addr int) (byte, error) {
 
 func (m *Multiview) ReadBytes(addr, length int) ([]byte, error) {
 	//check access rights
-	for i := addr; i < addr + length; i += m.mem.vm.GetPageSize() {
+	for i := addr; i < addr+length; i += m.mem.vm.GetPageSize() {
 		if m.mem.accessMap[m.mem.getVPageNr(addr)] == memory.NO_ACCESS {
 			return nil, errors.New("Access Denied")
 		}
@@ -159,14 +156,14 @@ func (m *Multiview) Malloc(sizeInBytes int) (int, error) {
 	c := make(chan string)
 	m.chanMap[m.sequenceNumber] = c
 	msg := network.MultiviewMessage{
-		Type: MALLOC_REQUEST,
-		From: m.id,
-		To: byte(1),
-		EventId: m.sequenceNumber,
+		Type:          MALLOC_REQUEST,
+		From:          m.id,
+		To:            byte(1),
+		EventId:       m.sequenceNumber,
 		Minipage_size: sizeInBytes, //<- contains the size for the allocation!
 	}
 	m.conn.Send(msg)
-	s := <- c
+	s := <-c
 	m.chanMap[m.sequenceNumber] = nil
 	m.sequenceNumber++
 	res, err := strconv.Atoi(s)
@@ -180,15 +177,15 @@ func (m *Multiview) Free(pointer, length int) error {
 	c := make(chan string)
 	m.chanMap[m.sequenceNumber] = c
 	msg := network.MultiviewMessage{
-		Type: FREE_REQUEST,
-		From: m.id,
-		To: byte(1),
-		EventId: m.sequenceNumber,
-		Fault_addr: pointer,
+		Type:          FREE_REQUEST,
+		From:          m.id,
+		To:            byte(1),
+		EventId:       m.sequenceNumber,
+		Fault_addr:    pointer,
 		Minipage_size: length, //<- length here
 	}
 	m.conn.Send(msg)
-	res := <- c
+	res := <-c
 	m.chanMap[m.sequenceNumber] = nil
 	m.sequenceNumber++
 	if res != "ok" {
@@ -212,21 +209,21 @@ func (m *Multiview) onFault(addr int, faultType byte) {
 	c := make(chan string)
 	m.chanMap[m.sequenceNumber] = c
 	msg := network.MultiviewMessage{
-		Type: str,
-		From: m.id,
-		To: byte(1),
-		EventId: m.sequenceNumber,
+		Type:       str,
+		From:       m.id,
+		To:         byte(1),
+		EventId:    m.sequenceNumber,
 		Fault_addr: addr,
 	}
-		err := m.conn.Send(msg)
+	err := m.conn.Send(msg)
 	if err == nil {
-		<- c
+		<-c
 		m.chanMap[m.sequenceNumber] = nil
 		m.sequenceNumber++
 		//send ack
 		msg := network.MultiviewMessage{
-			From: m.id,
-			To: byte(1),
+			From:       m.id,
+			To:         byte(1),
 			Fault_addr: addr,
 		}
 		if faultType == 0 {
@@ -251,9 +248,9 @@ func (m *Multiview) messageHandler(msg network.MultiviewMessage, c chan bool) er
 		privBase := msg.Privbase
 		//write data to privileged view, ie. the actual memory representation
 		for i, byt := range msg.Data {
-			err := m.Write(privBase + i, byt)
+			err := m.Write(privBase+i, byt)
 			if err != nil {
-				log.Println("failed to write to privileged view at addr: ", privBase + i, " with error: ", err)
+				log.Println("failed to write to privileged view at addr: ", privBase+i, " with error: ", err)
 				break
 			}
 		}
@@ -268,7 +265,7 @@ func (m *Multiview) messageHandler(msg network.MultiviewMessage, c chan bool) er
 	case READ_REQUEST, WRITE_REQUEST:
 		vpagenr := m.mem.getVPageNr(msg.Fault_addr)
 		if msg.Type == READ_REQUEST && m.mem.accessMap[vpagenr] == memory.READ_WRITE &&
-				vpagenr >= m.mem.vm.Size()/m.mem.vm.GetPageSize() {
+			vpagenr >= m.mem.vm.Size()/m.mem.vm.GetPageSize() {
 			m.mem.accessMap[vpagenr] = memory.READ_ONLY
 		} else if msg.Type == WRITE_REQUEST && vpagenr >= m.mem.vm.Size()/m.mem.vm.GetPageSize() {
 			m.mem.accessMap[vpagenr] = memory.NO_ACCESS

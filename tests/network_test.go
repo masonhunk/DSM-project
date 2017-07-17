@@ -1,20 +1,20 @@
 package tests
 
 import (
-	"testing"
 	"DSM-project/network"
-	"net"
-	"fmt"
-	"time"
-	"github.com/stretchr/testify/assert"
-	"sync"
 	"encoding/gob"
+	"fmt"
+	"github.com/stretchr/testify/assert"
+	"net"
+	"sync"
+	"testing"
+	"time"
 )
 
 var messages []network.SimpleMessage
 var mutex sync.Mutex
 
-func messageHandler(message network.Message) error{
+func messageHandler(message network.Message) error {
 	mutex.Lock()
 	messages = append(messages, message.(network.SimpleMessage))
 	mutex.Unlock()
@@ -26,20 +26,20 @@ func createTransciever(conn net.Conn) {
 	network.NewTransciever(conn, messageHandler)
 }
 
-func createEndpoint(port string) network.Endpoint{
+func createEndpoint(port string) network.Endpoint {
 	e, _ := network.NewEndpoint(port, createTransciever)
 	return e
 }
 
 func TestEndpointCreationAndClose(t *testing.T) {
-	e,_ := network.NewEndpoint("2000", func(conn net.Conn){return})
+	e, _ := network.NewEndpoint("2000", func(conn net.Conn) { return })
 	e.Close()
 }
 
-func TestEndpointAndTranscieverConnectAndClose(t *testing.T){
-	e,_ := network.NewEndpoint("2000", func(conn net.Conn){return})
+func TestEndpointAndTranscieverConnectAndClose(t *testing.T) {
+	e, _ := network.NewEndpoint("2000", func(conn net.Conn) { return })
 	conn, _ := net.Dial("tcp", "localhost:2000")
-	network.NewTransciever(conn, func(message network.Message)error{fmt.Println(message.GetType()); return nil})
+	network.NewTransciever(conn, func(message network.Message) error { fmt.Println(message.GetType()); return nil })
 	e.Close()
 }
 
@@ -57,10 +57,10 @@ func TestEndpointAndTranscieverConnectAndTalk(t *testing.T) {
 	assert.Equal(t, messages[0].GetTo(), byte(1))
 }
 
-func TestServerCreationWithMultipleClients(t *testing.T){
+func TestServerCreationWithMultipleClients(t *testing.T) {
 	gob.Register(network.SimpleMessage{})
 	messages = []network.SimpleMessage{}
-	s,_ := network.NewServer(func(message network.Message)error{return nil}, "2000")
+	s, _ := network.NewServer(func(message network.Message) error { return nil }, "2000")
 	c1 := network.NewClient(messageHandler)
 	c1.Connect("localhost:2000")
 	c2 := network.NewClient(messageHandler)
@@ -86,7 +86,7 @@ func TestServerCreationWithMultipleClients(t *testing.T){
 func TestMultiMessages(t *testing.T) {
 	gob.Register(network.SimpleMessage{})
 	messages = []network.SimpleMessage{}
-	s,_ := network.NewServer(messageHandler, "2000")
+	s, _ := network.NewServer(messageHandler, "2000")
 	c := network.NewClient(messageHandler)
 	c.Connect("localhost:2000")
 	time.Sleep(1000000000)
@@ -103,10 +103,11 @@ func TestMultiMessages(t *testing.T) {
 func TestServerSending(t *testing.T) {
 	gob.Register(network.SimpleMessage{})
 	messages = []network.SimpleMessage{}
-	s,_ := network.NewServer(func(message network.Message)error{return nil}, "2000")
+	s, _ := network.NewServer(func(message network.Message) error { return nil }, "2000")
 	c := network.NewClient(messageHandler)
 	c.Connect("localhost:2000")
-	for len(s.Clients) < 1{	}
+	for len(s.Clients) < 1 {
+	}
 	s.Send(network.SimpleMessage{To: 1, Type: "Test"})
 	s.Send(network.SimpleMessage{To: 1, Type: "Test"})
 	s.Send(network.SimpleMessage{To: 1, Type: "Test"})
@@ -122,14 +123,14 @@ func TestClientToClient(t *testing.T) {
 	gob.Register(network.SimpleMessage{})
 	m1 := []network.SimpleMessage{}
 	m2 := []network.SimpleMessage{}
-	s,_ := network.NewServer(messageHandler, "2000")
-	c1 := network.NewClient(func(message network.Message) error{m1 = append(m1, message.(network.SimpleMessage)); return nil})
+	s, _ := network.NewServer(messageHandler, "2000")
+	c1 := network.NewClient(func(message network.Message) error { m1 = append(m1, message.(network.SimpleMessage)); return nil })
 	c1.Connect("localhost:2000")
-	c2 := network.NewClient(func(message network.Message) error{m2 = append(m2, message.(network.SimpleMessage)); return nil})
+	c2 := network.NewClient(func(message network.Message) error { m2 = append(m2, message.(network.SimpleMessage)); return nil })
 	c2.Connect("localhost:2000")
 
-	c1.Send(network.SimpleMessage{To: 2, Type: "From c1 to c2", })
-	c2.Send(network.SimpleMessage{To: 1, Type: "From c2 to c1", })
+	c1.Send(network.SimpleMessage{To: 2, Type: "From c1 to c2"})
+	c2.Send(network.SimpleMessage{To: 1, Type: "From c2 to c1"})
 
 	time.Sleep(1000000000)
 	c1.Close()

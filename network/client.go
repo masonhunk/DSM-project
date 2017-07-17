@@ -1,8 +1,8 @@
 package network
 
 import (
-	"net"
 	"log"
+	"net"
 )
 
 type IClient interface {
@@ -12,9 +12,9 @@ type IClient interface {
 	GetTransciever() ITransciever
 }
 
-type Client struct{
-	conn net.Conn
-	t ITransciever
+type Client struct {
+	conn    net.Conn
+	t       ITransciever
 	handler func(Message) error
 	running bool
 }
@@ -23,7 +23,7 @@ func (c *Client) GetTransciever() ITransciever {
 	return c.t
 }
 
-func NewClient(handler func(Message) error) *Client{
+func NewClient(handler func(Message) error) *Client {
 	c := new(Client)
 	c.conn = nil
 	c.t = &Transciever{}
@@ -43,14 +43,10 @@ func (c *Client) Connect(address string) error {
 	return nil
 }
 
-func (c *Client) Close(){
+func (c *Client) Close() {
 	c.GetTransciever().Close()
 }
 
 func (c *Client) Send(message Message) error {
 	return c.GetTransciever().Send(message)
 }
-
-
-
-

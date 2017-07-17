@@ -16,10 +16,10 @@ type ITreadMarks interface {
 
 type TreadMarks struct {
 	memory.VirtualMemory //embeds this interface type
-	nrProcs int
-	procId int
-	nrLocks int
-	nrBarriers int
+	nrProcs              int
+	procId               int
+	nrLocks              int
+	nrBarriers           int
 	network.IClient
 }
 
@@ -47,6 +47,3 @@ func (t *TreadMarks) ReleaseLock(id int) {
 func (t *TreadMarks) barrier(id int) {
 	panic("implement me")
 }
-
-
-
