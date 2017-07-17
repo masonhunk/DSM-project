@@ -64,6 +64,8 @@ func NewBarrierManagerImp(nodes int) *BarrierManagerImp {
 	bm := new(BarrierManagerImp)
 	bm.nodes = nodes
 	bm.barriers = make(map[int]*sync.WaitGroup)
+	bm.Mutex = new(sync.Mutex)
+
 	return bm
 }
 
@@ -102,5 +104,6 @@ func (m *tm_Manager) Connect(addr string) error {
 
 		return nil
 	})
+
 	return nil
 }
