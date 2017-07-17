@@ -5,6 +5,19 @@ import (
 	"DSM-project/network"
 )
 
+const (
+	LOCK_ACQUIRE_REQUEST  = "l_acq_req"
+	LOCK_ACQUIRE_RESPONSE = "l_acq_resp"
+	LOCK_RELEASE          = "l_rel"
+	DIFF_REQUEST          = "diff_req"
+	DIFF_RESPONSE         = "diff_resp"
+	MALLOC_REQUEST        = "mal_req"
+	FREE_REQUEST          = "free_req"
+	MALLOC_REPLY          = "mal_repl"
+	FREE_REPLY            = "free_repl"
+	WELCOME_MESSAGE       = "WELC"
+)
+
 type ITreadMarks interface {
 	memory.VirtualMemory
 	Startup() error
