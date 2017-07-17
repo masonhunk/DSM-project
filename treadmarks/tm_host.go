@@ -52,37 +52,78 @@ func (m *TM_Message) GetType() string {
 type TreadMarks struct {
 	memory.VirtualMemory //embeds this interface type
 	nrProcs              int
-	procId               int
+	procId               byte
 	nrLocks              int
 	nrBarriers           int
 	pageArray            PageArray
 	procArray            ProcArray
 	diffPool             DiffPool
+	vc 									 Vectorclock
 	network.IClient
 }
 
 func NewTreadMarks(client network.IClient, virtualMemory memory.VirtualMemory) *TreadMarks {
 	tm := TreadMarks{
 		VirtualMemory: virtualMemory,
+		IClient: client,
+		pageArray: make(PageArray),
+		procArray: make(ProcArray, 0),
+		diffPool:  make(DiffPool, 0),
+		vc: Vectorclock{},
 	}
+	tm.VirtualMemory.AddFaultListener(func(addr int, faultType byte) {
+		//do fancy protocol stuff here
+	})
+	return &tm
 }
 
 func (t *TreadMarks) Startup() error {
-	panic("implement me")
+
 }
 
 func (t *TreadMarks) Shutdown() {
-	panic("implement me")
+	t.Close()
 }
 
 func (t *TreadMarks) AcquireLock(id int) {
-	panic("implement me")
+	msg := TM_Message{
+		Type: LOCK_ACQUIRE_REQUEST,
+		To: 1,
+		From: t.procId,
+		Diffs: nil,
+		Id: id,
+		VC: t.vc,
+	}
+	err := t.Send(msg)
+	panicOnErr(err)
 }
 
 func (t *TreadMarks) ReleaseLock(id int) {
-	panic("implement me")
+	msg := TM_Message{
+		Type: LOCK_RELEASE,
+		To: 1,
+		From: t.procId,
+		Diffs: nil,
+		Id: id,
+	}
+	err := t.Send(msg)
+	panicOnErr(err)
 }
 
 func (t *TreadMarks) barrier(id int) {
-	panic("implement me")
+	msg := TM_Message{
+		Type: BARRIER_REQUEST,
+		To: 1,
+		From: t.procId,
+		Diffs: nil,
+		Id: id,
+	}
+	err := t.Send(msg)
+	panicOnErr(err)
+}
+
+func panicOnErr(err error) {
+	if err != nil {
+		panic(err)
+	}
 }

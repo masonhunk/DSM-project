@@ -25,7 +25,7 @@ type VirtualMemory interface {
 	GetPageSize() int
 	Size() int
 	AccessRightsDisabled(b bool)
-	addFaultListener(l FaultListener)
+	AddFaultListener(l FaultListener)
 }
 
 type Vmem struct {
@@ -38,7 +38,7 @@ type Vmem struct {
 	faultListeners []FaultListener
 }
 
-func (m *Vmem) addFaultListener(l FaultListener) {
+func (m *Vmem) AddFaultListener(l FaultListener) {
 	m.faultListeners = append(m.faultListeners, l)
 }
 
