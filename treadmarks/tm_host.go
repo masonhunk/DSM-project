@@ -8,6 +8,8 @@ import (
 const (
 	LOCK_ACQUIRE_REQUEST  = "l_acq_req"
 	LOCK_ACQUIRE_RESPONSE = "l_acq_resp"
+	BARRIER_REQUEST       = "b_req"
+	BARRIER_RESPONSE      = "b_resp"
 	LOCK_RELEASE          = "l_rel"
 	DIFF_REQUEST          = "diff_req"
 	DIFF_RESPONSE         = "diff_resp"
