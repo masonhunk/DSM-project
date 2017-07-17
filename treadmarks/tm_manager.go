@@ -2,16 +2,76 @@ package treadmarks
 
 import (
 	"DSM-project/network"
+	"errors"
 	"net"
+	"sync"
 )
 
+//Interfaces
 type LockManager interface {
 	handleLockAcquire(id int)
-	handleLockRelease(id int)
+	handleLockRelease(id int) error
 }
 
 type BarrierManager interface {
 	handleBarrier(id int)
+}
+
+//Lock manager implementation
+type LockManagerImp struct {
+	locks   map[int]*sync.Mutex
+	history map[int]int
+}
+
+func NewLockManagerImp() *LockManagerImp {
+	lm := new(LockManagerImp)
+	lm.locks = make(map[int]*sync.Mutex)
+	return lm
+}
+
+func (lm *LockManagerImp) handleLockAcquire(id int) {
+	lock, ok := lm.locks[id]
+	if ok == false {
+		lock = new(sync.Mutex)
+		lm.locks[id] = lock
+	}
+	lock.Lock()
+}
+
+func (lm *LockManagerImp) handleLockRelease(id int) error {
+	lock, ok := lm.locks[id]
+	if ok == false {
+		return errors.New("LockManager doesn't have a lock with ID " + string(id))
+	}
+	lock.Unlock()
+	return nil
+}
+
+//Barrier manager implementation
+type BarrierManagerImp struct {
+	barriers map[int]*sync.WaitGroup
+	nodes    int
+	*sync.Mutex
+}
+
+func NewBarrierManagerImp(nodes int) *BarrierManagerImp {
+	bm := new(BarrierManagerImp)
+	bm.nodes = nodes
+	bm.barriers = make(map[int]*sync.WaitGroup)
+	return bm
+}
+
+func (bm *BarrierManagerImp) handleBarrier(id int) {
+	bm.Lock()
+	barrier, ok := bm.barriers[id]
+	if ok == false {
+		barrier = new(sync.WaitGroup)
+		barrier.Add(bm.nodes)
+		bm.barriers[id] = barrier
+	}
+	bm.Unlock()
+	barrier.Done()
+	barrier.Wait()
 }
 
 type tm_Manager struct {
@@ -20,8 +80,10 @@ type tm_Manager struct {
 	network.ITransciever //embedded type
 }
 
-func NewTM_Manager() *tm_Manager {
+func NewTM_Manager(bm BarrierManager, lm LockManager) *tm_Manager {
 	m := new(tm_Manager)
+	m.BarrierManager = bm
+	m.LockManager = lm
 	return m
 }
 
