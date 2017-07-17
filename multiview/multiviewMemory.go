@@ -7,10 +7,10 @@ import (
 
 // implements the VirtualMemory interface and is also a decorator/proxy for it
 type MVMem struct {
-	vm         memory.VirtualMemory
-	AddrToPage []VPage
-	VPAGE_SIZE int
-	FreeVPages []interval
+	vm            memory.VirtualMemory
+	AddrToPage    []VPage
+	VPAGE_SIZE    int
+	FreeVPages    []interval
 	mallocHistory map[int]int //maps address to length
 }
 
@@ -27,7 +27,6 @@ type VPage struct {
 	Offset, Length int
 	Access_right   byte
 }
-
 
 func NewMVMem(virtualMemory memory.VirtualMemory) *MVMem {
 	m := new(MVMem)
@@ -56,13 +55,13 @@ func (m *MVMem) Read(addr int) (byte, error) {
 //returns all data in the minipage for which the address resides
 func (m *MVMem) ReadMinipage(addr int) ([]byte, error) {
 	vp := m.AddrToPage[m.GetPageAddr(addr)/m.GetPageSize()]
-	return m.ReadBytes(m.GetPageAddr(addr) + vp.Offset, vp.Length)
+	return m.ReadBytes(m.GetPageAddr(addr)+vp.Offset, vp.Length)
 }
 
 // reads a variable size, up to the size of the minipage
 func (m *MVMem) ReadBytes(addr, length int) ([]byte, error) {
 	//check access rights
-	for i := addr; i < addr + length; i += m.VPAGE_SIZE {
+	for i := addr; i < addr+length; i += m.VPAGE_SIZE {
 		vp := m.AddrToPage[m.GetPageAddr(i)/m.GetPageSize()]
 		if vp.Access_right == memory.NO_ACCESS {
 			return nil, errors.New("Access Denied")
@@ -74,7 +73,7 @@ func (m *MVMem) ReadBytes(addr, length int) ([]byte, error) {
 
 func (m *MVMem) Write(addr int, val byte) error {
 	vp := m.AddrToPage[m.GetPageAddr(addr)/m.GetPageSize()]
-	if vp.Access_right == memory.NO_ACCESS || vp.Access_right == memory.READ_ONLY  {
+	if vp.Access_right == memory.NO_ACCESS || vp.Access_right == memory.READ_ONLY {
 		return errors.New("access denied")
 
 	}
@@ -95,7 +94,7 @@ func (m *MVMem) SetRights(addr int, access byte) {
 
 //returns the vPage address for this addr
 func (m *MVMem) GetPageAddr(addr int) int {
-	return addr - addr % m.VPAGE_SIZE
+	return addr - addr%m.VPAGE_SIZE
 }
 
 func (m *MVMem) Malloc(sizeInBytes int) (int, error) {
@@ -109,7 +108,7 @@ func (m *MVMem) Malloc(sizeInBytes int) (int, error) {
 	for sizeLeft > 0 {
 		nextPageAddr := i + m.vm.GetPageSize() - (i % m.vm.GetPageSize())
 		length := 0
-		if nextPageAddr - i > sizeLeft {
+		if nextPageAddr-i > sizeLeft {
 			length = sizeLeft
 		} else {
 			length = nextPageAddr - i
@@ -127,10 +126,10 @@ func (m *MVMem) Malloc(sizeInBytes int) (int, error) {
 
 	//find suitable free spot in vPage array to insert. Otherwise just append
 	for i, interval := range m.FreeVPages {
-		if interval.end - interval.start >= len(resultArray) {
+		if interval.end-interval.start >= len(resultArray) {
 			//insert into free interval
 			m.AddrToPage = append(m.AddrToPage[:interval.start], append(resultArray, m.AddrToPage[interval.start:]...)...)
-			if interval.end - interval.start == len(resultArray) {
+			if interval.end-interval.start == len(resultArray) {
 				//remove interval in freevpages list
 				m.FreeVPages = append(m.FreeVPages[:i], m.FreeVPages[i+1:]...)
 			} else {
@@ -140,7 +139,7 @@ func (m *MVMem) Malloc(sizeInBytes int) (int, error) {
 		}
 	}
 	//else if no free spots, append
-	resultPtr := len(m.AddrToPage) * m.VPAGE_SIZE + resultArray[0].Offset
+	resultPtr := len(m.AddrToPage)*m.VPAGE_SIZE + resultArray[0].Offset
 	m.AddrToPage = append(m.AddrToPage, resultArray...)
 	m.mallocHistory[resultPtr] = sizeInBytes
 	return resultPtr, nil
@@ -164,9 +163,9 @@ func (m *MVMem) Free(pointer int) error {
 	var newlist []interval
 	j := -1
 	for i, pair := range m.FreeVPages {
-		if pair.end + 1 < start  {
+		if pair.end+1 < start {
 			newlist = append(newlist, pair)
-		} else if end + 1 < pair.start {
+		} else if end+1 < pair.start {
 			j = i
 			break
 		} else {
@@ -181,15 +180,12 @@ func (m *MVMem) Free(pointer int) error {
 	}
 	m.FreeVPages = newlist
 
-
 	return nil
 }
-
 
 func (m *MVMem) GetPageSize() int {
 	return m.VPAGE_SIZE
 }
-
 
 func (m *MVMem) AccessRightsDisabled(b bool) {
 	panic("implement me")
@@ -201,18 +197,14 @@ func (m *MVMem) vPageAddrToMemoryAddr(addr int) (int, error) {
 	return vp.PageAddr + (addr - m.GetPageAddr(addr)), nil
 }
 
-
 func (m *MVMem) Size() int {
 	return m.vm.Size()
 }
 
-
 func (m *MVMem) getLastAddr() int {
-	lastVP := m.AddrToPage[len(m.AddrToPage) - 1]
+	lastVP := m.AddrToPage[len(m.AddrToPage)-1]
 	return len(m.AddrToPage)*m.VPAGE_SIZE - m.VPAGE_SIZE + lastVP.Length - 1
 }
-
-
 
 func min(a, b int) int {
 	if a < b {
@@ -220,7 +212,6 @@ func min(a, b int) int {
 	}
 	return b
 }
-
 
 func max(a, b int) int {
 	if a < b {
