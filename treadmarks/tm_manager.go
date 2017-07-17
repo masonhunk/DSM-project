@@ -9,40 +9,46 @@ import (
 
 //Interfaces
 type LockManager interface {
-	handleLockAcquire(id int)
-	handleLockRelease(id int) error
+	HandleLockAcquire(id int)
+	HandleLockRelease(id int) error
 }
 
 type BarrierManager interface {
-	handleBarrier(id int)
+	HandleBarrier(id int)
 }
 
 //Lock manager implementation
 type LockManagerImp struct {
 	locks   map[int]*sync.Mutex
 	history map[int]int
+	*sync.Mutex
 }
 
 func NewLockManagerImp() *LockManagerImp {
 	lm := new(LockManagerImp)
 	lm.locks = make(map[int]*sync.Mutex)
+	lm.Mutex = new(sync.Mutex)
 	return lm
 }
 
-func (lm *LockManagerImp) handleLockAcquire(id int) {
+func (lm *LockManagerImp) HandleLockAcquire(id int) {
+	lm.Lock()
 	lock, ok := lm.locks[id]
 	if ok == false {
 		lock = new(sync.Mutex)
 		lm.locks[id] = lock
 	}
+	lm.Unlock()
 	lock.Lock()
 }
 
-func (lm *LockManagerImp) handleLockRelease(id int) error {
+func (lm *LockManagerImp) HandleLockRelease(id int) error {
+	lm.Lock()
 	lock, ok := lm.locks[id]
 	if ok == false {
 		return errors.New("LockManager doesn't have a lock with ID " + string(id))
 	}
+	lm.Unlock()
 	lock.Unlock()
 	return nil
 }
@@ -61,7 +67,7 @@ func NewBarrierManagerImp(nodes int) *BarrierManagerImp {
 	return bm
 }
 
-func (bm *BarrierManagerImp) handleBarrier(id int) {
+func (bm *BarrierManagerImp) HandleBarrier(id int) {
 	bm.Lock()
 	barrier, ok := bm.barriers[id]
 	if ok == false {
