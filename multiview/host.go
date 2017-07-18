@@ -126,7 +126,7 @@ func (m *hostMem) getVPageNr(addr int) int {
 func (m *Multiview) Read(addr int) (byte, error) {
 	if m.mem.accessMap[m.mem.getVPageNr(addr)] == 0 {
 		for _, l := range m.mem.faultListeners {
-			l(addr, 0)
+			l(addr, 0, "READ", 0)
 		}
 	}
 	res, _ := m.mem.vm.Read(m.mem.translateAddr(addr))
@@ -146,7 +146,7 @@ func (m *Multiview) ReadBytes(addr, length int) ([]byte, error) {
 func (m *Multiview) Write(addr int, val byte) error {
 	if m.mem.accessMap[m.mem.getVPageNr(addr)] != memory.READ_WRITE {
 		for _, l := range m.mem.faultListeners {
-			l(addr, 1)
+			l(addr, 1, "WRITE", val)
 		}
 	}
 	return m.mem.vm.Write(m.mem.translateAddr(addr), val)
@@ -199,7 +199,7 @@ func (m *hostMem) addFaultListener(l memory.FaultListener) {
 }
 
 //ID's are placeholder values waiting for integration. faultType = memory.READ_REQUEST OR memory.WRITE_REQUEST
-func (m *Multiview) onFault(addr int, faultType byte) {
+func (m *Multiview) onFault(addr int, faultType byte, accessType string, value byte) {
 	str := ""
 	if faultType == 0 {
 		str = READ_REQUEST
