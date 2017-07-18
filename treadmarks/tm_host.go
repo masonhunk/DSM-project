@@ -158,18 +158,6 @@ func (t *TreadMarks) updateDatastructures() {
 	}
 
 	for key, _ := range t.copyMap {
-		wn := WriteNoticeRecord{
-			Interval:   &interval,
-			PrevRecord: nil,
-		}
-		//add to front of linked list in page array
-		interval.WriteNotices = append(interval.WriteNotices, &wn)
-		var head *WriteNoticeRecord = t.pageArray[int(key)].ProcArr[t.procId]
-		if head != nil {
-			head.PrevRecord = &wn
-			wn.NextRecord = head
-		}
-
 		//if entry doesn't exist yet, initialize it
 		entry := t.pageArray[int(key)]
 		if entry.ProcArr == nil && entry.CopySet == nil {
@@ -178,19 +166,13 @@ func (t *TreadMarks) updateDatastructures() {
 				ProcArr: make(map[byte]*WriteNoticeRecord),
 			}
 		}
-		t.pageArray[int(key)].ProcArr[t.procId] = &wn
+		wn := t.pageArray.PrependWriteNotice(t.procId, WriteNotice{pageNr: int(key)})
+		wn.Interval = &interval
+		interval.WriteNotices = append(interval.WriteNotices, wn)
 
 		//add interval record to front of linked list in procArray
 		var p *Pair = &t.procArray[t.procId]
-		if p.car != nil {
-			head := p.car.(*IntervalRecord)
-			head.PrevIr = &interval
-			interval.NextIr = head
-		} else {
-			p.cdr = &interval
-		}
-		p.car = &interval
-
+		p.PrependIntervalRecord(&interval)
 	}
 }
 
