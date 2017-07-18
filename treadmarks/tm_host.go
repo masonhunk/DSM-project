@@ -33,14 +33,14 @@ type ITreadMarks interface {
 }
 
 type TM_Message struct {
-	From         byte
-	To           byte
-	Type         string
-	Diffs        []Diff
-	Id           int
-	VC           Vectorclock
-	Intervals 	 []Interval
-	Event				 *chan string
+	From      byte
+	To        byte
+	Type      string
+	Diffs     []Diff
+	Id        int
+	VC        Vectorclock
+	Intervals []Interval
+	Event     *chan string
 }
 
 func (m TM_Message) GetFrom() byte {
@@ -159,8 +159,8 @@ func (t *TreadMarks) updateDatastructures() {
 
 	for key, _ := range t.copyMap {
 		wn := WriteNoticeRecord{
-			Interval:    &interval,
-			PrevRecord:  nil,
+			Interval:   &interval,
+			PrevRecord: nil,
 		}
 		//add to front of linked list in page array
 		interval.WriteNotices = append(interval.WriteNotices, &wn)
@@ -169,10 +169,19 @@ func (t *TreadMarks) updateDatastructures() {
 			head.PrevRecord = &wn
 			wn.NextRecord = head
 		}
+
+		//if entry doesn't exist yet, initialize it
+		entry := t.pageArray[int(key)]
+		if entry.ProcArr == nil && entry.CopySet == nil {
+			t.pageArray[int(key)] = PageArrayEntry{
+				CopySet: []int{},
+				ProcArr: make(map[byte]*WriteNoticeRecord),
+			}
+		}
 		t.pageArray[int(key)].ProcArr[t.procId] = &wn
 
 		//add interval record to front of linked list in procArray
-		var p Pair = t.procArray[t.procId]
+		var p *Pair = &t.procArray[t.procId]
 		if p.car != nil {
 			head := p.car.(*IntervalRecord)
 			head.PrevIr = &interval
@@ -181,7 +190,6 @@ func (t *TreadMarks) updateDatastructures() {
 			p.cdr = &interval
 		}
 		p.car = &interval
-
 
 	}
 }

@@ -16,7 +16,7 @@ type PageArray map[int]PageArrayEntry
 
 type PageArrayEntry struct {
 	CopySet []int
-	ProcArr []*WriteNoticeRecord
+	ProcArr map[byte]*WriteNoticeRecord
 }
 
 type IntervalRecord struct {
@@ -27,15 +27,15 @@ type IntervalRecord struct {
 }
 
 type WriteNoticeRecord struct {
-	NextRecord  *WriteNoticeRecord
-	PrevRecord  *WriteNoticeRecord
-	Interval    *IntervalRecord
-	Diff        *Diff
+	NextRecord *WriteNoticeRecord
+	PrevRecord *WriteNoticeRecord
+	Interval   *IntervalRecord
+	Diff       *Diff
 }
 
-type Interval struct{
-	Proc byte
-	Vt Vectorclock
+type Interval struct {
+	Proc         byte
+	Vt           Vectorclock
 	WriteNotices []WriteNotice
 }
 

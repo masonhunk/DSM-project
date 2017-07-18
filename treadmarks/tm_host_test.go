@@ -2,7 +2,6 @@ package treadmarks
 
 import (
 	"DSM-project/memory"
-	"fmt"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
@@ -19,7 +18,15 @@ func TestUpdateDatastructures(t *testing.T) {
 	tm.procId = 3
 	tm.copyMap[0] = []byte{4, 4, 4, 4, 4, 4, 4, 4}
 	tm.copyMap[1] = []byte{1, 1, 1, 1, 1, 1, 1, 1}
-	tm.copyMap[2] = []byte{2, 2, 2, 2, 2, 2, 2, 2}
+	tm.procArray = make(ProcArray, 4)
 	tm.updateDatastructures()
-	fmt.Println()
+	headWNRecord := tm.pageArray[0].ProcArr[3]
+	headIntervalRecord := tm.procArray[3].car
+	assert.Len(t, headIntervalRecord.(*IntervalRecord).WriteNotices, 2)
+	assert.True(t, headWNRecord == headIntervalRecord.(*IntervalRecord).WriteNotices[0])
+	assert.True(t, headIntervalRecord == headWNRecord.Interval)
+
+	headWNRecord1 := tm.pageArray[1].ProcArr[3]
+
+	assert.True(t, headWNRecord1 == headIntervalRecord.(*IntervalRecord).WriteNotices[1])
 }
