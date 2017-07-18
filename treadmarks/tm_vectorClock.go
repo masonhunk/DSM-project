@@ -24,14 +24,31 @@ func NewVectorclock(nodes int) *Vectorclock {
 	return v
 }
 
-func (v *Vectorclock) Increment(id int){
+func (v *Vectorclock) Merge(o *Vectorclock) *Vectorclock{
+	nv := new(Vectorclock)
+	nv.value = make([]uint, len(v.value))
+	for i := range nv.value{
+		nv.value[i] = Max(v.value[i], o.value[i])
+	}
+	return nv
+}
+
+func (v *Vectorclock) Increment(id byte){
 	v.value[id] = v.value[id]+1
 }
 
-func (v *Vectorclock) GetTick(id int) uint{
+func (v *Vectorclock) GetTick(id byte) uint{
 	return v.value[id]
 }
 
-func (v *Vectorclock) SetTick(id int, tick uint){
+func (v *Vectorclock) SetTick(id byte, tick uint){
 	v.value[id] = tick
+}
+
+// Here is some utility stuff
+func Max(x, y uint) uint {
+	if x > y {
+		return x
+	}
+	return y
 }
