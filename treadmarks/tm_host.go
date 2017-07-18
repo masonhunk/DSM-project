@@ -114,9 +114,9 @@ func (t *TreadMarks) Startup(address string) error {
 			t.procId = msg.To
 			c <- true
 		case LOCK_ACQUIRE_REQUEST:
-			t.handleLockAcquireRequest(&msg)
+			t.HandleLockAcquireRequest(&msg)
 		case LOCK_ACQUIRE_RESPONSE:
-			t.handleLockAcquireResponse(&msg)
+			t.HandleLockAcquireResponse(&msg)
 			*msg.Event <- "continue"
 		case BARRIER_RESPONSE:
 			*msg.Event <- "continue"
@@ -137,13 +137,14 @@ func (t *TreadMarks) Startup(address string) error {
 	<-c
 	return nil
 }
-func (t *TreadMarks) handleLockAcquireResponse(message *TM_Message) {
+
+func (t *TreadMarks) HandleLockAcquireResponse(message *TM_Message) {
 	//Here we need to add the incoming intervals to the correct write notices.
 	//We assume that the
 
 }
 
-func (t *TreadMarks) handleLockAcquireRequest(msg *TM_Message) {
+func (t *TreadMarks) HandleLockAcquireRequest(msg *TM_Message) TM_Message{
 	//send write notices back and stuff
 	//start by incrementing vc
 	t.vc.Increment(t.procId)
@@ -154,9 +155,12 @@ func (t *TreadMarks) handleLockAcquireRequest(msg *TM_Message) {
 		if pair == (Pair{}) || pair.car == nil {
 			continue
 		}
-		var iRecord IntervalRecord = pair.car.(IntervalRecord)
+		var iRecord *IntervalRecord = pair.car.(*IntervalRecord)
 		//loop through the interval records for this process
 		for {
+			if iRecord == nil {
+				break
+			}
 			// if this record has older ts than the requester, break
 			if iRecord.Timestamp.Compare(&msg.VC) == -1 {
 				break
@@ -169,12 +173,14 @@ func (t *TreadMarks) handleLockAcquireRequest(msg *TM_Message) {
 				i.WriteNotices = append(i.WriteNotices, wn.WriteNotice)
 			}
 			msg.Intervals = append(msg.Intervals, i)
-			if iRecord.NextIr == nil {
-				break
-			}
-			iRecord = *iRecord.NextIr
+
+			iRecord = iRecord.NextIr
 		}
 	}
+	msg.From, msg.To = msg.To, msg.From
+	msg.Type = LOCK_ACQUIRE_RESPONSE
+	msg.VC = t.vc
+	return *msg
 }
 
 func (t *TreadMarks) updateDatastructures() {
@@ -184,9 +190,9 @@ func (t *TreadMarks) updateDatastructures() {
 	}
 	//add interval record to front of linked list in procArray
 	var p *Pair = &t.procArray[t.procId]
-	p.PrependIntervalRecord(&interval)
 
-	for key, _ := range t.copyMap {
+
+	for key := range t.copyMap {
 		//if entry doesn't exist yet, initialize it
 		entry := t.pageArray[int(key)]
 		if entry.ProcArr == nil && entry.CopySet == nil {
@@ -200,6 +206,11 @@ func (t *TreadMarks) updateDatastructures() {
 		wn.WriteNotice = WriteNotice{int(key)}
 		interval.WriteNotices = append(interval.WriteNotices, wn)
 
+	}
+
+	//We only actually add the interval if we have any writenotices
+	if len(interval.WriteNotices) > 0 {
+		p.PrependIntervalRecord(&interval)
 	}
 }
 
