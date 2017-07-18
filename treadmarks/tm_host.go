@@ -40,15 +40,15 @@ type TM_Message struct {
 	WriteNotices []WriteNotice
 }
 
-func (m *TM_Message) GetFrom() byte {
+func (m TM_Message) GetFrom() byte {
 	return m.From
 }
 
-func (m *TM_Message) GetTo() byte {
+func (m TM_Message) GetTo() byte {
 	return m.To
 }
 
-func (m *TM_Message) GetType() string {
+func (m TM_Message) GetType() string {
 	return m.Type
 }
 
