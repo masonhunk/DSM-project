@@ -50,7 +50,7 @@ func NewPageArrayEntry() *PageArrayEntry{
 	return &PageArrayEntry{[]int{}, make(map[byte]*WriteNoticeRecord)}
 }
 
-func (p *PageArrayEntry) AddWriteNotice(procId byte) *WriteNoticeRecord{
+func (p *PageArrayEntry) PrependWriteNotice(procId byte) *WriteNoticeRecord{
 	wn := new(WriteNoticeRecord)
 	head, ok := p.ProcArr[procId]
 	if ok == true {
@@ -62,9 +62,9 @@ func (p *PageArrayEntry) AddWriteNotice(procId byte) *WriteNoticeRecord{
 	return wn
 }
 
-func (p *PageArray) AddWriteNotice(procId byte, wn WriteNotice) *WriteNoticeRecord {
+func (p *PageArray) PrependWriteNotice(procId byte, wn WriteNotice) *WriteNoticeRecord {
 	pe := (*p)[int(wn.pageNr)]
-	return pe.AddWriteNotice(procId)
+	return pe.PrependWriteNotice(procId)
 }
 
 func (p *Pair) AppendIntervalRecord(ir *IntervalRecord) {

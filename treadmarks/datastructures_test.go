@@ -25,12 +25,12 @@ func TestPageArray(t *testing.T) {
 
 func TestPageArrayEntry_AddWriteNotice(t *testing.T) {
 	pe := NewPageArrayEntry()
-	wn1 := pe.AddWriteNotice(byte(0))
-	assert.Equal(t, wn1, pe.ProcArr[0])
-	wn2 := pe.AddWriteNotice(byte(0))
-	assert.Equal(t, wn2, pe.ProcArr[0])
-	assert.Equal(t, wn1, pe.ProcArr[0].NextRecord)
-	assert.Equal(t, wn2, pe.ProcArr[0].NextRecord.PrevRecord)
+	wn1 := pe.PrependWriteNotice(byte(0))
+	assert.True(t, wn1 == pe.ProcArr[0])
+	wn2 := pe.PrependWriteNotice(byte(0))
+	assert.True(t, wn2 == pe.ProcArr[0])
+	assert.True(t, wn1 == pe.ProcArr[0].NextRecord)
+	assert.True(t, wn2 == pe.ProcArr[0].NextRecord.PrevRecord)
 }
 
 func TestPair_AppendIntervalRecord(t *testing.T) {
