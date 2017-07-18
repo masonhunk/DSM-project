@@ -32,6 +32,7 @@ func (t *TranscieverMock) Send(message network.Message) error {
 
 //Here we test if the lock manager can handle getting locked and such.
 func TestLockManagerCreation(t *testing.T) {
+	fmt.Println()
 	var lm treadmarks.LockManager
 	lm = treadmarks.NewLockManagerImp()
 	id1 := lm.HandleLockAcquire(2)
@@ -98,14 +99,65 @@ func TestBarrierManager(t *testing.T){
 	assert.Equal(t, true, <- done, "All the goroutines should be finished by now.")
 }
 
-func TestManagerHandleMessage(t *testing.T){
+func TestManagerHandleLockAcquireNotExistMessage(t *testing.T){
 	messages := make([]treadmarks.TM_Message, 0)
 	tr := NewTranscieverMock(messages)
-	tr.Send(treadmarks.TM_Message{Type:"Something"})
-	fmt.Println(tr.messages)
 	bm := treadmarks.NewBarrierManagerImp(4)
 	lm := treadmarks.NewLockManagerImp()
-	m := treadmarks.NewTM_Manager(tr, bm, lm)
-	m.HandleMessage(treadmarks.TM_Message{Type:treadmarks.LOCK_ACQUIRE_REQUEST, Id:1, From:1, To:2})
-	assert.Equal(t, treadmarks.TM_Message{Type:treadmarks.LOCK_ACQUIRE_REQUEST, To: 0, Id:1, From:1}, tr.messages[0])
+	m := treadmarks.NewTM_Manager(tr, bm, lm, 4)
+	m.HandleMessage(treadmarks.TM_Message{Type:treadmarks.LOCK_ACQUIRE_REQUEST, Id:1, From:byte(1), To:byte(2)})
+	assert.Equal(t, treadmarks.TM_Message{Type:treadmarks.LOCK_ACQUIRE_RESPONSE, To: byte(1), Id:1, From:byte(0)}, tr.messages[0])
+}
+
+func TestManagerHandleLockAcquireExistsMessage(t *testing.T){
+	messages := make([]treadmarks.TM_Message, 0)
+	tr := NewTranscieverMock(messages)
+	bm := treadmarks.NewBarrierManagerImp(4)
+	lm := treadmarks.NewLockManagerImp()
+	m := treadmarks.NewTM_Manager(tr, bm, lm, 4)
+	m.HandleMessage(treadmarks.TM_Message{Type:treadmarks.LOCK_ACQUIRE_REQUEST, Id:1, From:byte(1), To:byte(2)})
+	assert.Equal(t, treadmarks.TM_Message{Type:treadmarks.LOCK_ACQUIRE_RESPONSE, To: byte(1), Id:1, From:byte(0)}, tr.messages[0])
+	m.HandleMessage(treadmarks.TM_Message{Type:treadmarks.LOCK_RELEASE, Id:1, From:byte(1), To:byte(2)})
+	m.HandleMessage(treadmarks.TM_Message{Type:treadmarks.LOCK_ACQUIRE_REQUEST, Id:1, From:byte(3), To:byte(2)})
+	assert.Equal(t, treadmarks.TM_Message{Type:treadmarks.LOCK_ACQUIRE_REQUEST, To: byte(1), Id:1, From:byte(3)}, tr.messages[1])
+}
+
+func TestManagerHandleLockReleaseMessageError(t *testing.T){
+	messages := make([]treadmarks.TM_Message, 0)
+	tr := NewTranscieverMock(messages)
+	bm := treadmarks.NewBarrierManagerImp(4)
+	lm := treadmarks.NewLockManagerImp()
+	m := treadmarks.NewTM_Manager(tr, bm, lm, 4)
+	err := m.HandleMessage(treadmarks.TM_Message{Type:treadmarks.LOCK_RELEASE, Id:1, From:byte(1), To:byte(2)})
+	assert.EqualError(t, err, "LockManager doesn't have a lock with ID 1", "Since this lock has" +
+		"not been locked before, it should give an error when unlocked.")
+	assert.Equal(t, 0, len(tr.messages))
+}
+
+func TestManagerHandleBarrierMessage(t *testing.T){
+	messages := make([]treadmarks.TM_Message, 0)
+	tr := NewTranscieverMock(messages)
+	bm := treadmarks.NewBarrierManagerImp(2)
+	lm := treadmarks.NewLockManagerImp()
+	m := treadmarks.NewTM_Manager(tr, bm, lm, 4)
+	started := make(chan bool)
+	done := make(chan bool, 2)
+	go func(){
+		started <- true
+		m.HandleMessage(treadmarks.TM_Message{Type:treadmarks.BARRIER_REQUEST, Id:1, From:byte(1), To:byte(0)})
+		done <- true
+	}()
+
+	go func(){
+		started <- true
+		m.HandleMessage(treadmarks.TM_Message{Type:treadmarks.BARRIER_REQUEST, Id:1, From:byte(2), To:byte(0)})
+		done <- true
+	}()
+	<- started
+	assert.Len(t, tr.messages, 0, "When only one is started, we should have sent any messages.")
+	<- started
+	<- done
+	<- done
+	assert.Contains(t, tr.messages, treadmarks.TM_Message{Type:treadmarks.BARRIER_RESPONSE, Id:1, From:byte(0), To:byte(1)})
+	assert.Contains(t, tr.messages, treadmarks.TM_Message{Type:treadmarks.BARRIER_RESPONSE, Id:1, From:byte(0), To:byte(2)})
 }
