@@ -40,7 +40,7 @@ type TM_Message struct {
 	Id           int
 	VC           Vectorclock
 	WriteNotices []WriteNotice
-	Event				 *chan string
+	Event        *chan string
 }
 
 func (m TM_Message) GetFrom() byte {
@@ -74,10 +74,10 @@ func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarri
 	tm := TreadMarks{
 		VirtualMemory: virtualMemory,
 		pageArray:     make(PageArray),
-		procArray:     make(ProcArray, 0),
+		procArray:     make(ProcArray, nrProcs),
 		diffPool:      make(DiffPool, 0),
 		vc:            Vectorclock{make([]uint, nrProcs)},
-		copyMap: 			 make(map[pageNr][]byte),
+		copyMap:       make(map[pageNr][]byte),
 		nrProcs:       nrProcs,
 		nrLocks:       nrLocks,
 		nrBarriers:    nrBarriers,
@@ -117,6 +117,7 @@ func (t *TreadMarks) Startup(address string) error {
 			t.handleLockAcquireRequest(&msg)
 		case LOCK_ACQUIRE_RESPONSE:
 			t.handleLockAcquireResponse(&msg)
+			*msg.Event <- "continue"
 		case BARRIER_RESPONSE:
 			*msg.Event <- "continue"
 		case DIFF_REQUEST:
@@ -146,16 +147,20 @@ func (t *TreadMarks) handleLockAcquireRequest(msg *TM_Message) {
 	//start by incrementing vc
 	t.vc.Increment(t.procId)
 	//create new interval and make write notices for all twinned pages since last sync
+	t.updateDatastructures()
+}
+
+func (t *TreadMarks) updateDatastructures() {
 	interval := IntervalRecord{
-		Timestamp: t.vc,
+		Timestamp:    t.vc,
 		WriteNotices: make([]*WriteNoticeRecord, 0),
 	}
 
 	for key, _ := range t.copyMap {
 		wn := WriteNoticeRecord{
-			Interval: &interval,
+			Interval:    &interval,
 			WriteNotice: WriteNotice{pageNr: int(key)},
-			PrevRecord: nil,
+			PrevRecord:  nil,
 		}
 		//add to front of linked list in page array
 		interval.WriteNotices = append(interval.WriteNotices, &wn)
@@ -177,7 +182,6 @@ func (t *TreadMarks) handleLockAcquireRequest(msg *TM_Message) {
 		}
 		p.car = &interval
 
-
 	}
 }
 
@@ -198,7 +202,7 @@ func (t *TreadMarks) AcquireLock(id int) {
 	}
 	err := t.Send(msg)
 	panicOnErr(err)
-	<- c
+	<-c
 }
 
 func (t *TreadMarks) ReleaseLock(id int) {
@@ -225,7 +229,7 @@ func (t *TreadMarks) barrier(id int) {
 	}
 	err := t.Send(msg)
 	panicOnErr(err)
-	<- c
+	<-c
 }
 
 func panicOnErr(err error) {

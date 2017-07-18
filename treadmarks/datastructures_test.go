@@ -1,7 +1,6 @@
 package treadmarks
 
 import (
-	"DSM-project/memory"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
@@ -13,9 +12,8 @@ func TestPageArray(t *testing.T) {
 	wn2 := WriteNoticeRecord{Diff: nil, Interval: nil, NextRecord: nil, PrevRecord: &wn1}
 	wn1.NextRecord = &wn2
 	pageArray[1] = PageArrayEntry{
-		CopySet:   []int{1, 2},
-		PageState: memory.NO_ACCESS,
-		ProcArr:   []*WriteNoticeRecord{&wn1},
+		CopySet: []int{1, 2},
+		ProcArr: []*WriteNoticeRecord{&wn1},
 	}
 	assert.Equal(t, wn1, *pageArray[1].ProcArr[0])
 	assert.Nil(t, pageArray[1].ProcArr[0].PrevRecord)
