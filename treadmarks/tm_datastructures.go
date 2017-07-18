@@ -46,6 +46,51 @@ type Diff struct {
 	Diffs []Pair
 }
 
+func NewPageArrayEntry() *PageArrayEntry{
+	return &PageArrayEntry{[]int{}, make(map[byte]*WriteNoticeRecord)}
+}
+
+func (p *PageArrayEntry) PrependWriteNotice(procId byte) *WriteNoticeRecord{
+	wn := new(WriteNoticeRecord)
+	head, ok := p.ProcArr[procId]
+	if ok == true {
+		head.PrevRecord = wn
+		wn.NextRecord = head
+	}
+	p.ProcArr[procId] = wn
+
+	return wn
+}
+
+func (p *PageArray) PrependWriteNotice(procId byte, wn WriteNotice) *WriteNoticeRecord {
+	pe := (*p)[int(wn.pageNr)]
+	return pe.PrependWriteNotice(procId)
+}
+
+func (p *Pair) AppendIntervalRecord(ir *IntervalRecord) {
+	if p.cdr == nil{
+		p.car = ir
+		p.cdr = ir
+	} else {
+		tail := p.cdr.(*IntervalRecord)
+		tail.NextIr = ir
+		ir.PrevIr = tail
+		p.cdr = ir
+	}
+}
+
+func (p *Pair) PrependIntervalRecord(ir *IntervalRecord) {
+	if p.car == nil{
+		p.car = ir
+		p.cdr = ir
+	} else {
+		head := p.car.(*IntervalRecord)
+		head.PrevIr = ir
+		ir.NextIr = head
+		p.car = ir
+	}
+}
+
 func CreateDiff(original, new []byte) Diff {
 	res := make([]Pair, 0)
 	for i, data := range original {
@@ -79,3 +124,4 @@ func (p *Page) ValueAt(offset int) byte {
 	(*p.vm).AccessRightsDisabled(false)
 	return res
 }
+
