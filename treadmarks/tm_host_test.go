@@ -30,3 +30,14 @@ func TestUpdateDatastructures(t *testing.T) {
 
 	assert.True(t, headWNRecord1 == headIntervalRecord.(*IntervalRecord).WriteNotices[1])
 }
+
+func TestPreprendInterval(t *testing.T) {
+	p := Pair{nil, nil}
+	a := &IntervalRecord{}
+	b := &IntervalRecord{}
+	c := &IntervalRecord{}
+	p.PrependIntervalRecord(c)
+	p.PrependIntervalRecord(b)
+	p.PrependIntervalRecord(a)
+	assert.True(t, p.car == a)
+}

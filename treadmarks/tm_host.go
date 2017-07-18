@@ -149,6 +149,32 @@ func (t *TreadMarks) handleLockAcquireRequest(msg *TM_Message) {
 	t.vc.Increment(t.procId)
 	//create new interval and make write notices for all twinned pages since last sync
 	t.updateDatastructures()
+	//find all the write notices to send
+	for i, pair := range t.procArray {
+		if pair == (Pair{}) || pair.car == nil {
+			continue
+		}
+		var iRecord IntervalRecord = pair.car.(IntervalRecord)
+		//loop through the interval records for this process
+		for {
+			// if this record has older ts than the requester, break
+			if iRecord.Timestamp.Compare(&msg.VC) == -1 {
+				break
+			}
+			i := Interval{
+				Proc: byte(i),
+				Vt:   iRecord.Timestamp,
+			}
+			for _, wn := range iRecord.WriteNotices {
+				i.WriteNotices = append(i.WriteNotices, wn.WriteNotice)
+			}
+			msg.Intervals = append(msg.Intervals, i)
+			if iRecord.NextIr == nil {
+				break
+			}
+			iRecord = *iRecord.NextIr
+		}
+	}
 }
 
 func (t *TreadMarks) updateDatastructures() {
@@ -156,6 +182,9 @@ func (t *TreadMarks) updateDatastructures() {
 		Timestamp:    t.vc,
 		WriteNotices: make([]*WriteNoticeRecord, 0),
 	}
+	//add interval record to front of linked list in procArray
+	var p *Pair = &t.procArray[t.procId]
+	p.PrependIntervalRecord(&interval)
 
 	for key, _ := range t.copyMap {
 		//if entry doesn't exist yet, initialize it
@@ -168,11 +197,9 @@ func (t *TreadMarks) updateDatastructures() {
 		}
 		wn := t.pageArray.PrependWriteNotice(t.procId, WriteNotice{pageNr: int(key)})
 		wn.Interval = &interval
+		wn.WriteNotice = WriteNotice{int(key)}
 		interval.WriteNotices = append(interval.WriteNotices, wn)
 
-		//add interval record to front of linked list in procArray
-		var p *Pair = &t.procArray[t.procId]
-		p.PrependIntervalRecord(&interval)
 	}
 }
 

@@ -27,10 +27,11 @@ type IntervalRecord struct {
 }
 
 type WriteNoticeRecord struct {
-	NextRecord *WriteNoticeRecord
-	PrevRecord *WriteNoticeRecord
-	Interval   *IntervalRecord
-	Diff       *Diff
+	WriteNotice WriteNotice
+	NextRecord  *WriteNoticeRecord
+	PrevRecord  *WriteNoticeRecord
+	Interval    *IntervalRecord
+	Diff        *Diff
 }
 
 type Interval struct {

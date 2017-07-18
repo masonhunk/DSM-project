@@ -23,7 +23,6 @@ func TestPageArray(t *testing.T) {
 
 }
 
-
 func TestPageArrayEntry_AddWriteNotice(t *testing.T) {
 	pe := NewPageArrayEntry()
 	wn1 := pe.PrependWriteNotice(byte(0))
@@ -55,7 +54,6 @@ func TestPair_AppendIntervalRecord(t *testing.T) {
 	assert.Equal(t, uint(2), cdr.Timestamp.GetTick(byte(0)))
 }
 
-
 func TestPair_PrependIntervalRecord(t *testing.T) {
 	pair := new(Pair)
 	v1 := NewVectorclock(2)
@@ -76,4 +74,3 @@ func TestPair_PrependIntervalRecord(t *testing.T) {
 	assert.Equal(t, uint(2), car.Timestamp.GetTick(byte(0)))
 	assert.Equal(t, uint(1), cdr.Timestamp.GetTick(byte(1)))
 }
-
