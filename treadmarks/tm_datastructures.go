@@ -27,11 +27,16 @@ type IntervalRecord struct {
 }
 
 type WriteNoticeRecord struct {
-	WriteNotice WriteNotice
 	NextRecord  *WriteNoticeRecord
 	PrevRecord  *WriteNoticeRecord
 	Interval    *IntervalRecord
 	Diff        *Diff
+}
+
+type Interval struct{
+	Proc byte
+	Vt Vectorclock
+	WriteNotices []WriteNotice
 }
 
 type WriteNotice struct {
