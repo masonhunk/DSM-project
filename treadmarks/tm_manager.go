@@ -3,8 +3,8 @@ package treadmarks
 import (
 	"DSM-project/network"
 	"errors"
-	"sync"
 	"strconv"
+	"sync"
 )
 
 //Interfaces
@@ -19,8 +19,8 @@ type BarrierManager interface {
 
 //Lock manager implementation
 type LockManagerImp struct {
-	locks   map[int]*sync.Mutex
-	last    map[int]byte
+	locks map[int]*sync.Mutex
+	last  map[int]byte
 	*sync.Mutex
 }
 
@@ -32,7 +32,7 @@ func NewLockManagerImp() *LockManagerImp {
 	return lm
 }
 
-func (lm *LockManagerImp) HandleLockAcquire(id int) byte{
+func (lm *LockManagerImp) HandleLockAcquire(id int) byte {
 	lm.Lock()
 	lock, ok := lm.locks[id]
 	if ok == false {
@@ -90,7 +90,7 @@ type tm_Manager struct {
 	BarrierManager
 	LockManager
 	network.ITransciever //embedded type
-	nodes int
+	nodes                int
 }
 
 func NewTM_Manager(tr network.ITransciever, bm BarrierManager, lm LockManager, nodes int) *tm_Manager {
@@ -103,9 +103,9 @@ func NewTM_Manager(tr network.ITransciever, bm BarrierManager, lm LockManager, n
 	return m
 }
 
-func (m *tm_Manager) HandleMessage(message network.Message) error{
-	msg,ok := message.(TM_Message)
-	if ok == false{
+func (m *tm_Manager) HandleMessage(message network.Message) error {
+	msg, ok := message.(TM_Message)
+	if ok == false {
 		panic("Message could not be converted.")
 	}
 	response := TM_Message{}
@@ -123,7 +123,7 @@ func (m *tm_Manager) HandleMessage(message network.Message) error{
 		panic("Implement me!")
 	}
 
-	if response.Type != ""{
+	if response.Type != "" {
 		m.ITransciever.Send(response)
 	}
 	return err
@@ -133,7 +133,7 @@ func (m *tm_Manager) handleLockAcquireRequest(message TM_Message) TM_Message {
 	id := message.Id
 	lastOwner := m.HandleLockAcquire(id)
 	message.To = lastOwner
-	if lastOwner == 0{
+	if lastOwner == 0 {
 		message.To = message.From
 		message.From = m.myId
 		message.Type = LOCK_ACQUIRE_RESPONSE
@@ -141,12 +141,12 @@ func (m *tm_Manager) handleLockAcquireRequest(message TM_Message) TM_Message {
 	return message
 }
 
-func (m *tm_Manager) handleLockReleaseRequest(message TM_Message) error{
+func (m *tm_Manager) handleLockReleaseRequest(message TM_Message) error {
 	id := message.Id
 	return m.HandleLockRelease(id, message.From)
 }
 
-func (m *tm_Manager) handleBarrierRequest(message TM_Message) TM_Message{
+func (m *tm_Manager) handleBarrierRequest(message TM_Message) TM_Message {
 	id := message.Id
 	m.HandleBarrier(id)
 	message.From, message.To = message.To, message.From
