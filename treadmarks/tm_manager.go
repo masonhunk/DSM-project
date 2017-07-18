@@ -108,28 +108,30 @@ func (m *tm_Manager) HandleMessage(message network.Message) error {
 	if ok == false {
 		panic("Message could not be converted.")
 	}
-	response := TM_Message{}
+	response := new(TM_Message)
 	var err error
 	switch msg.Type {
 	case LOCK_ACQUIRE_REQUEST:
-		response = m.handleLockAcquireRequest(msg)
+		response = m.handleLockAcquireRequest(&msg)
 	case LOCK_RELEASE:
-		err = m.handleLockReleaseRequest(msg)
+		err = m.handleLockReleaseRequest(&msg)
 	case BARRIER_REQUEST:
-		response = m.handleBarrierRequest(msg)
+		response = m.handleBarrierRequest(&msg)
 	case MALLOC_REQUEST:
 		panic("Implement me!")
 	case FREE_REQUEST:
 		panic("Implement me!")
+	default:
+		panic("I saw a message I was not allowed to see!")
 	}
 
 	if response.Type != "" {
-		m.ITransciever.Send(response)
+		m.ITransciever.Send(*response)
 	}
 	return err
 }
 
-func (m *tm_Manager) handleLockAcquireRequest(message TM_Message) TM_Message {
+func (m *tm_Manager) handleLockAcquireRequest(message *TM_Message) *TM_Message {
 	id := message.Id
 	lastOwner := m.HandleLockAcquire(id)
 	message.To = lastOwner
@@ -141,12 +143,12 @@ func (m *tm_Manager) handleLockAcquireRequest(message TM_Message) TM_Message {
 	return message
 }
 
-func (m *tm_Manager) handleLockReleaseRequest(message TM_Message) error {
+func (m *tm_Manager) handleLockReleaseRequest(message *TM_Message) error {
 	id := message.Id
 	return m.HandleLockRelease(id, message.From)
 }
 
-func (m *tm_Manager) handleBarrierRequest(message TM_Message) TM_Message {
+func (m *tm_Manager) handleBarrierRequest(message *TM_Message) *TM_Message {
 	id := message.Id
 	m.HandleBarrier(id)
 	message.From, message.To = message.To, message.From

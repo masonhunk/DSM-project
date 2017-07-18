@@ -39,8 +39,8 @@ type TM_Message struct {
 	Diffs        []Diff
 	Id           int
 	VC           Vectorclock
-	WriteNotices []WriteNotice
-	Event        *chan string
+	Intervals 	 []Interval
+	Event				 *chan string
 }
 
 func (m TM_Message) GetFrom() byte {
@@ -138,7 +138,8 @@ func (t *TreadMarks) Startup(address string) error {
 	return nil
 }
 func (t *TreadMarks) handleLockAcquireResponse(message *TM_Message) {
-	//create diffs, update vc, insert into data structures
+	//Here we need to add the incoming intervals to the correct write notices.
+	//We assume that the
 
 }
 
@@ -159,7 +160,6 @@ func (t *TreadMarks) updateDatastructures() {
 	for key, _ := range t.copyMap {
 		wn := WriteNoticeRecord{
 			Interval:    &interval,
-			WriteNotice: WriteNotice{pageNr: int(key)},
 			PrevRecord:  nil,
 		}
 		//add to front of linked list in page array
@@ -181,6 +181,7 @@ func (t *TreadMarks) updateDatastructures() {
 			p.cdr = &interval
 		}
 		p.car = &interval
+
 
 	}
 }
