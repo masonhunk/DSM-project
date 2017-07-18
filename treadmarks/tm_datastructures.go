@@ -20,7 +20,8 @@ type PageArrayEntry struct {
 }
 
 type IntervalRecord struct {
-	WriteNotice *WriteNoticeRecord
+	Timestamp		Vectorclock
+	WriteNotices []*WriteNoticeRecord
 	NextIr      *IntervalRecord
 	PrevIr      *IntervalRecord
 }
@@ -38,6 +39,20 @@ type WriteNotice struct {
 }
 type Diff struct {
 	Diffs []Pair
+}
+
+func CreateDiff(original, new Page) Diff {
+	origBytes, err := (*original.vm).ReadBytes(original.addr, (*original.vm).GetPageSize())
+	panicOnErr(err)
+	newBytes, err := (*original.vm).ReadBytes(original.addr, (*original.vm).GetPageSize())
+	panicOnErr(err)
+	res := make([]Pair, 0)
+	for i, data := range origBytes {
+		if newBytes[i] != data {
+			res = append(res, Pair{i, newBytes[i]})
+		}
+	}
+	return Diff{res}
 }
 
 type Pair struct {

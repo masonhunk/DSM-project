@@ -21,6 +21,8 @@ const (
 	WELCOME_MESSAGE       = "WELC"
 )
 
+type pageNr int
+
 type ITreadMarks interface {
 	memory.VirtualMemory
 	Startup() error
@@ -38,6 +40,7 @@ type TM_Message struct {
 	Id           int
 	VC           Vectorclock
 	WriteNotices []WriteNotice
+	Event				 *chan string
 }
 
 func (m TM_Message) GetFrom() byte {
@@ -62,7 +65,7 @@ type TreadMarks struct {
 	procArray            ProcArray
 	diffPool             DiffPool
 	vc                   Vectorclock
-	copyMap              map[int][]byte
+	copyMap              map[pageNr][]byte //contains twins since last sync.
 	network.IClient
 }
 
@@ -74,12 +77,14 @@ func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarri
 		procArray:     make(ProcArray, 0),
 		diffPool:      make(DiffPool, 0),
 		vc:            Vectorclock{make([]uint, nrProcs)},
+		copyMap: 			 make(map[pageNr][]byte),
 		nrProcs:       nrProcs,
 		nrLocks:       nrLocks,
 		nrBarriers:    nrBarriers,
 	}
 
 	tm.VirtualMemory.AddFaultListener(func(addr int, faultType byte, accessType string, value byte) {
+		//c := make(chan string)
 		//do fancy protocol stuff here
 		switch accessType {
 		case "WRITE":
@@ -87,7 +92,7 @@ func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarri
 			tm.SetRights(addr, memory.READ_WRITE)
 			val, err := tm.ReadBytes(tm.GetPageAddr(addr), tm.GetPageSize())
 			panicOnErr(err)
-			tm.copyMap[tm.GetPageAddr(addr)] = val
+			tm.copyMap[pageNr(tm.GetPageAddr(addr)/tm.GetPageSize())] = val
 			err = tm.Write(addr, value)
 			panicOnErr(err)
 		}
@@ -109,11 +114,11 @@ func (t *TreadMarks) Startup(address string) error {
 			t.procId = msg.To
 			c <- true
 		case LOCK_ACQUIRE_REQUEST:
-
+			t.handleLockAcquireRequest(&msg)
 		case LOCK_ACQUIRE_RESPONSE:
-
+			t.handleLockAcquireResponse(&msg)
 		case BARRIER_RESPONSE:
-
+			*msg.Event <- "continue"
 		case DIFF_REQUEST:
 
 		case DIFF_RESPONSE:
@@ -131,12 +136,57 @@ func (t *TreadMarks) Startup(address string) error {
 	<-c
 	return nil
 }
+func (t *TreadMarks) handleLockAcquireResponse(message *TM_Message) {
+	//create diffs, update vc, insert into data structures
+
+}
+
+func (t *TreadMarks) handleLockAcquireRequest(msg *TM_Message) {
+	//send write notices back and stuff
+	//start by incrementing vc
+	t.vc.Increment(t.procId)
+	//create new interval and make write notices for all twinned pages since last sync
+	interval := IntervalRecord{
+		Timestamp: t.vc,
+		WriteNotices: make([]*WriteNoticeRecord, 0),
+	}
+
+	for key, _ := range t.copyMap {
+		wn := WriteNoticeRecord{
+			Interval: &interval,
+			WriteNotice: WriteNotice{pageNr: int(key)},
+			PrevRecord: nil,
+		}
+		//add to front of linked list in page array
+		interval.WriteNotices = append(interval.WriteNotices, &wn)
+		var head *WriteNoticeRecord = t.pageArray[int(key)].ProcArr[t.procId]
+		if head != nil {
+			head.PrevRecord = &wn
+			wn.NextRecord = head
+		}
+		t.pageArray[int(key)].ProcArr[t.procId] = &wn
+
+		//add interval record to front of linked list in procArray
+		var p Pair = t.procArray[t.procId]
+		if p.car != nil {
+			head := p.car.(*IntervalRecord)
+			head.PrevIr = &interval
+			interval.NextIr = head
+		} else {
+			p.cdr = &interval
+		}
+		p.car = &interval
+
+
+	}
+}
 
 func (t *TreadMarks) Shutdown() {
 	t.Close()
 }
 
 func (t *TreadMarks) AcquireLock(id int) {
+	c := make(chan string)
 	msg := TM_Message{
 		Type:  LOCK_ACQUIRE_REQUEST,
 		To:    1,
@@ -144,9 +194,11 @@ func (t *TreadMarks) AcquireLock(id int) {
 		Diffs: nil,
 		Id:    id,
 		VC:    t.vc,
+		Event: &c,
 	}
 	err := t.Send(msg)
 	panicOnErr(err)
+	<- c
 }
 
 func (t *TreadMarks) ReleaseLock(id int) {
@@ -162,15 +214,18 @@ func (t *TreadMarks) ReleaseLock(id int) {
 }
 
 func (t *TreadMarks) barrier(id int) {
+	c := make(chan string)
 	msg := TM_Message{
 		Type:  BARRIER_REQUEST,
 		To:    1,
 		From:  t.procId,
 		Diffs: nil,
 		Id:    id,
+		Event: &c,
 	}
 	err := t.Send(msg)
 	panicOnErr(err)
+	<- c
 }
 
 func panicOnErr(err error) {
