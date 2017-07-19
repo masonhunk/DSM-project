@@ -10,9 +10,70 @@ type IPage interface {
 	ValueAt(offset int) byte
 }
 
+type TM_IDataStructures interface {
+	GetCopyset(pageNr int) *[]int
+	GetWriteNoticeListHead(pageNr int, procNr byte) *WriteNoticeRecord
+	GetIntervalRecordHead(procNr byte) *IntervalRecord
+	GetIntervalRecordTail(procNr byte) *IntervalRecord
+	MapWriteNotices(f func(wn *WriteNoticeRecord), pageNr int, procNr byte)
+	MapIntervalRecords(f func(ir *IntervalRecord), procNr byte)
+}
+
 type DiffPool []Diff
 type ProcArray []Pair
 type PageArray map[int]PageArrayEntry
+
+type TM_DataStructures struct {
+	diffPool DiffPool
+	procArray ProcArray
+	pageArray PageArray
+}
+
+func (d *TM_DataStructures) GetIntervalRecordHead(procNr byte) *IntervalRecord {
+	return d.procArray[procNr].car.(*IntervalRecord)
+}
+
+func (d *TM_DataStructures) GetIntervalRecordTail(procNr byte) *IntervalRecord {
+	return d.procArray[procNr].cdr.(*IntervalRecord)
+}
+
+func (d *TM_DataStructures) MapWriteNotices(f func(wn *WriteNoticeRecord), pageNr int, procNr byte) {
+	wn := d.GetWriteNoticeListHead(pageNr, procNr)
+	if wn == nil {
+		return
+	}
+	for {
+		f(wn)
+		if wn.NextRecord != nil {
+			wn = wn.NextRecord
+		} else {
+			break
+		}
+	}
+}
+
+func (d *TM_DataStructures) MapIntervalRecords(f func(ir *IntervalRecord), procNr byte) {
+	interval := d.GetIntervalRecordHead(procNr)
+	if interval == nil {
+		return
+	}
+	for {
+		f(interval)
+		if interval.NextIr != nil {
+			interval = interval.NextIr
+		} else {
+			break
+		}
+	}
+}
+
+func (d *TM_DataStructures) GetCopyset(pageNr int) *[]int {
+	return &d.pageArray[pageNr].CopySet
+}
+
+func (d *TM_DataStructures) GetWriteNoticeListHead(pageNr int, procNr byte) *WriteNoticeRecord {
+	return d.pageArray[pageNr].ProcArr[procNr]
+}
 
 type PageArrayEntry struct {
 	CopySet []int
