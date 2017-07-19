@@ -117,32 +117,32 @@ func TestTreadMarks_GenerateDiffRequest(t *testing.T){
 	vc1.Increment(byte(0))
 	//First we make one interval record with matching write notice records
 	ir1 := &IntervalRecord{Timestamp: *vc1, WriteNotices: make([]*WriteNoticeRecord, 0)}
-	wr1_1 := tm.pageArray.PrependWriteNotice(byte(2), WriteNotice{pageNr: 0})
-	wr1_2 := tm.pageArray.PrependWriteNotice(byte(0), WriteNotice{pageNr: 3})
+	wr1_1 := tm.TM_IDataStructures.PrependWriteNotice(byte(2), WriteNotice{pageNr: 0})
+	wr1_2 := tm.TM_IDataStructures.PrependWriteNotice(byte(0), WriteNotice{pageNr: 3})
 	ir1.WriteNotices = []*WriteNoticeRecord{wr1_1, wr1_2}
 	wr1_1.Interval = ir1
 	wr1_2.Interval = ir1
-	tm.procArray[1].PrependIntervalRecord(ir1)
+	tm.TM_IDataStructures.PrependIntervalRecord(byte(1), ir1)
 
 	//Then we make another interval record with matching write notice records.
 	vc2.SetTick(byte(2), 4)
 	ir2 := &IntervalRecord{Timestamp: *vc2, WriteNotices: make([]*WriteNoticeRecord, 0)}
-	wr2_1 := tm.pageArray.PrependWriteNotice(byte(0), WriteNotice{pageNr: 1})
-	wr2_2 := tm.pageArray.PrependWriteNotice(byte(1), WriteNotice{pageNr: 3})
+	wr2_1 := tm.TM_IDataStructures.PrependWriteNotice(byte(0), WriteNotice{pageNr: 1})
+	wr2_2 := tm.TM_IDataStructures.PrependWriteNotice(byte(1), WriteNotice{pageNr: 3})
 	ir2.WriteNotices = []*WriteNoticeRecord{wr2_1, wr2_2}
 	wr2_1.Interval = ir2
 	wr2_2.Interval = ir2
-	tm.procArray[1].PrependIntervalRecord(ir2)
+	tm.TM_IDataStructures.PrependIntervalRecord(byte(1), ir2)
 
 	//Then we make another interval record with matching write notice records.
 	vc3.SetTick(byte(3), 4)
 	ir3 := &IntervalRecord{Timestamp: *vc3, WriteNotices: make([]*WriteNoticeRecord, 0)}
-	wr3_1 := tm.pageArray.PrependWriteNotice(byte(0), WriteNotice{pageNr: 2})
-	wr3_2 := tm.pageArray.PrependWriteNotice(byte(2), WriteNotice{pageNr: 3})
+	wr3_1 := tm.TM_IDataStructures.PrependWriteNotice(byte(0), WriteNotice{pageNr: 2})
+	wr3_2 := tm.TM_IDataStructures.PrependWriteNotice(byte(2), WriteNotice{pageNr: 3})
 	ir3.WriteNotices = []*WriteNoticeRecord{wr3_1, wr3_2}
 	wr3_1.Interval = ir3
 	wr3_2.Interval = ir3
-	tm.procArray[1].PrependIntervalRecord(ir3)
+	tm.TM_IDataStructures.PrependIntervalRecord(byte(1), ir3)
 
 	result := tm.GenerateDiffRequests(0)
 	assert.Len(t, result, 1)
@@ -165,12 +165,12 @@ func TestTreadMarks_GenerateDiffRequest(t *testing.T){
 	vc4.SetTick(byte(2), 5)
 	vc4.SetTick(byte(0), 5)
 	ir4 := &IntervalRecord{Timestamp: *vc4, WriteNotices: make([]*WriteNoticeRecord, 0)}
-	wr4_1 := tm.pageArray.PrependWriteNotice(byte(0), WriteNotice{pageNr: 2})
-	wr4_2 := tm.pageArray.PrependWriteNotice(byte(2), WriteNotice{pageNr: 3})
+	wr4_1 := tm.TM_IDataStructures.PrependWriteNotice(byte(0), WriteNotice{pageNr: 2})
+	wr4_2 := tm.TM_IDataStructures.PrependWriteNotice(byte(2), WriteNotice{pageNr: 3})
 	ir3.WriteNotices = []*WriteNoticeRecord{wr4_1, wr4_2}
 	wr4_1.Interval = ir4
 	wr4_2.Interval = ir4
-	tm.procArray[1].PrependIntervalRecord(ir4)
+	tm.TM_IDataStructures.PrependIntervalRecord(byte(1), ir4)
 	result = tm.GenerateDiffRequests(3)
 	assert.Contains(t, result, TM_Message{From: tm.procId, To: byte(2), Type:DIFF_REQUEST, VC:*vc3, PageNr:3})
 	assert.Len(t, result, 1)

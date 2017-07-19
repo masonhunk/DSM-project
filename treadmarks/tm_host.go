@@ -222,7 +222,8 @@ func (t *TreadMarks) GenerateDiffRequests(pageNr int) []TM_Message{
 	// a diff.
 	// During this, we also find the lowest timestamp for this process, where we are missing diffs.
 	intrec := make([]*IntervalRecord, t.nrProcs)
-	for proc,wnr := range t.pageArray[pageNr].ProcArr{
+	for proc:= byte(0); proc < byte(t.nrProcs); proc = proc + byte(1){
+		wnr := t.TM_IDataStructures.GetWriteNoticeListHead(pageNr, proc)
 		if wnr != nil && wnr.Diff == nil{
 			intrec[int(proc)] = wnr.Interval
 			for {
