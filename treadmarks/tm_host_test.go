@@ -106,7 +106,7 @@ func TestTreadMarks_handleLockAcquireRequest(t *testing.T) {
 		"We should only recieve intervals later than our timestamp.")
 }
 
-func TestTreadMarks_GenerateDiffRequest(t *testing.T){
+func TestTreadMarks_GenerateDiffRequest(t *testing.T) {
 	vm := memory.NewVmem(128, 8)
 	tm := NewTreadMarks(vm, 4, 1, 1)
 	tm.procId = 1
@@ -146,18 +146,18 @@ func TestTreadMarks_GenerateDiffRequest(t *testing.T){
 
 	result := tm.GenerateDiffRequests(0)
 	assert.Len(t, result, 1)
-	assert.Contains(t, result, TM_Message{From: tm.procId, To: byte(2), Type:DIFF_REQUEST, VC:*vc1, PageNr:0})
+	assert.Contains(t, result, TM_Message{From: tm.procId, To: byte(2), Type: DIFF_REQUEST, VC: *vc1, PageNr: 0})
 	result = tm.GenerateDiffRequests(1)
 	assert.Len(t, result, 1)
-	assert.Contains(t, result, TM_Message{From: tm.procId, To: byte(0), Type:DIFF_REQUEST, VC:*vc2, PageNr:1})
+	assert.Contains(t, result, TM_Message{From: tm.procId, To: byte(0), Type: DIFF_REQUEST, VC: *vc2, PageNr: 1})
 	result = tm.GenerateDiffRequests(2)
 	assert.Len(t, result, 1)
-	assert.Contains(t, result, TM_Message{From: tm.procId, To: byte(0), Type:DIFF_REQUEST, VC:*vc3, PageNr:2})
+	assert.Contains(t, result, TM_Message{From: tm.procId, To: byte(0), Type: DIFF_REQUEST, VC: *vc3, PageNr: 2})
 
 	result = tm.GenerateDiffRequests(3)
-	assert.Contains(t, result, TM_Message{From: tm.procId, To: byte(2), Type:DIFF_REQUEST, VC:*vc3, PageNr:3})
-	assert.Contains(t, result, TM_Message{From: tm.procId, To: byte(1), Type:DIFF_REQUEST, VC:*vc2, PageNr:3})
-	assert.Contains(t, result, TM_Message{From: tm.procId, To: byte(0), Type:DIFF_REQUEST, VC:*vc1, PageNr:3})
+	assert.Contains(t, result, TM_Message{From: tm.procId, To: byte(2), Type: DIFF_REQUEST, VC: *vc3, PageNr: 3})
+	assert.Contains(t, result, TM_Message{From: tm.procId, To: byte(1), Type: DIFF_REQUEST, VC: *vc2, PageNr: 3})
+	assert.Contains(t, result, TM_Message{From: tm.procId, To: byte(0), Type: DIFF_REQUEST, VC: *vc1, PageNr: 3})
 	assert.Len(t, result, 3)
 
 	//Then we make another interval record with matching write notice records.
@@ -172,12 +172,52 @@ func TestTreadMarks_GenerateDiffRequest(t *testing.T){
 	wr4_2.Interval = ir4
 	tm.TM_IDataStructures.PrependIntervalRecord(byte(1), ir4)
 	result = tm.GenerateDiffRequests(3)
-	assert.Contains(t, result, TM_Message{From: tm.procId, To: byte(2), Type:DIFF_REQUEST, VC:*vc3, PageNr:3})
+	assert.Contains(t, result, TM_Message{From: tm.procId, To: byte(2), Type: DIFF_REQUEST, VC: *vc3, PageNr: 3})
 	assert.Len(t, result, 1)
 
 	wr3_2.Diff = new(Diff)
 
 	result = tm.GenerateDiffRequests(3)
-	assert.Contains(t, result, TM_Message{From: tm.procId, To: byte(2), Type:DIFF_REQUEST, VC:*vc4, PageNr:3})
+	assert.Contains(t, result, TM_Message{From: tm.procId, To: byte(2), Type: DIFF_REQUEST, VC: *vc4, PageNr: 3})
 	assert.Len(t, result, 1)
+}
+
+func TestApplyingIntervalsToDataStructure(t *testing.T) {
+	tm := NewTreadMarks(memory.NewVmem(128, 8), 4, 1, 1)
+	tm.procId = byte(2) //this host id
+	msg := TM_Message{
+		//test non-overlapping intervals
+		//newest interval first when from same process
+		Intervals: []Interval{
+			{
+				Vt:           Vectorclock{[]uint{1, 0, 0, 0}},
+				Proc:         byte(0),
+				WriteNotices: []WriteNotice{{1}, {2}, {3}},
+			},
+			{
+				Vt:           Vectorclock{[]uint{1, 2, 0, 0}},
+				Proc:         byte(1),
+				WriteNotices: []WriteNotice{{1}, {3}, {4}},
+			},
+			{
+				Vt:           Vectorclock{[]uint{0, 1, 0, 0}},
+				Proc:         byte(1),
+				WriteNotices: []WriteNotice{{1}, {5}, {6}},
+			},
+		},
+	}
+	tm.incorporateIntervalsIntoDatastructures(&msg)
+	assert.Equal(t, Vectorclock{[]uint{1, 0, 0, 0}}, tm.GetIntervalRecordHead(0).Timestamp)
+	assert.Equal(t, Vectorclock{[]uint{1, 2, 0, 0}}, tm.GetIntervalRecordHead(1).Timestamp)
+	assert.Equal(t, Vectorclock{[]uint{0, 1, 0, 0}}, tm.GetIntervalRecordHead(1).NextIr.Timestamp)
+
+	assert.Equal(t, tm.GetIntervalRecordHead(0).WriteNotices[0], tm.GetWriteNoticeListHead(1, 0))
+	assert.Equal(t, tm.GetIntervalRecordHead(0).WriteNotices[1], tm.GetWriteNoticeListHead(2, 0))
+	assert.Equal(t, tm.GetIntervalRecordHead(0).WriteNotices[2], tm.GetWriteNoticeListHead(3, 0))
+
+	assert.Equal(t, tm.GetIntervalRecordHead(1).WriteNotices[0], tm.GetWriteNoticeListHead(1, 1))
+	assert.Equal(t, tm.GetIntervalRecordHead(1).WriteNotices[1], tm.GetWriteNoticeListHead(3, 1))
+
+	assert.Equal(t, tm.GetIntervalRecordHead(1).NextIr.WriteNotices[0], tm.GetWriteNoticeListHead(1, 1).NextRecord)
+
 }

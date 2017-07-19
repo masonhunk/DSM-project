@@ -21,7 +21,6 @@ const (
 	WELCOME_MESSAGE       = "WELC"
 )
 
-
 type ITreadMarks interface {
 	memory.VirtualMemory
 	Startup() error
@@ -37,7 +36,7 @@ type TM_Message struct {
 	Type      string
 	Diffs     []Diff
 	Id        int
-	PageNr		int
+	PageNr    int
 	VC        Vectorclock
 	Intervals []Interval
 	Event     *chan string
@@ -210,9 +209,9 @@ func (t *TreadMarks) updateDatastructures() {
 	}
 }
 
-func (t *TreadMarks) GenerateDiffRequests(pageNr int) []TM_Message{
+func (t *TreadMarks) GenerateDiffRequests(pageNr int) []TM_Message {
 	//First we check if we have the page already or need to request a copy.
-	if t.copyMap[pageNr] == nil{
+	if t.copyMap[pageNr] == nil {
 		//TODO We dont have a copy, so we need to request a new copy of the page.
 	}
 	messages := make([]TM_Message, 0)
@@ -222,40 +221,40 @@ func (t *TreadMarks) GenerateDiffRequests(pageNr int) []TM_Message{
 	// a diff.
 	// During this, we also find the lowest timestamp for this process, where we are missing diffs.
 	intrec := make([]*IntervalRecord, t.nrProcs)
-	for proc:= byte(0); proc < byte(t.nrProcs); proc = proc + byte(1){
+	for proc := byte(0); proc < byte(t.nrProcs); proc = proc + byte(1) {
 		wnr := t.TM_IDataStructures.GetWriteNoticeListHead(pageNr, proc)
-		if wnr != nil && wnr.Diff == nil{
+		if wnr != nil && wnr.Diff == nil {
 			intrec[int(proc)] = wnr.Interval
 			for {
 				vc[int(proc)] = wnr.Interval.Timestamp
 				wnr = wnr.NextRecord
-				if wnr == nil || wnr.Diff != nil{
+				if wnr == nil || wnr.Diff != nil {
 					break
 				}
 			}
 		}
 	}
 	// After that we remove the ones, that is overshadowed by others.
-	for proc1,int1 := range intrec{
-		if int1 == nil{
+	for proc1, int1 := range intrec {
+		if int1 == nil {
 			continue
 		}
 		overshadowed := false
-		for _,int2 := range intrec{
-			if int2 == nil{
+		for _, int2 := range intrec {
+			if int2 == nil {
 				continue
 			}
-			if int1.Timestamp.Compare(&int2.Timestamp) < 0{
+			if int1.Timestamp.Compare(&int2.Timestamp) < 0 {
 				overshadowed = true
 				break
 			}
 		}
-		if overshadowed == false{
+		if overshadowed == false {
 			message := TM_Message{
-				From:t.procId,
-				To:byte(proc1),
-				Type:DIFF_REQUEST,
-				VC:vc[proc1],
+				From:   t.procId,
+				To:     byte(proc1),
+				Type:   DIFF_REQUEST,
+				VC:     vc[proc1],
 				PageNr: pageNr,
 			}
 			messages = append(messages, message)
@@ -319,9 +318,20 @@ func (t *TreadMarks) incorporateIntervalsIntoDatastructures(msg *TM_Message) {
 		}
 		t.PrependIntervalRecord(interval.Proc, &ir)
 		for _, wn := range interval.WriteNotices {
+			//prepend to write notice list and update pointers
 			var res *WriteNoticeRecord = t.PrependWriteNotice(interval.Proc, wn)
 			res.Interval = &ir
 			ir.WriteNotices = append(ir.WriteNotices, res)
+			//check if I have a write notice for this page with no diff at head of list. If so, create diff.
+			if myWn := t.GetWriteNoticeListHead(wn.pageNr, t.procId); myWn != nil && myWn.Diff == nil {
+				pageVal, err := t.ReadBytes(wn.pageNr*t.GetPageSize(), t.GetPageSize())
+				panicOnErr(err)
+				diff := CreateDiff(t.copyMap[wn.pageNr], pageVal)
+				t.copyMap[wn.pageNr] = nil
+				myWn.Diff = &diff
+			}
+			//finally invalidate the page
+			t.SetRights(wn.pageNr*t.GetPageSize(), memory.NO_ACCESS)
 		}
 	}
 }
