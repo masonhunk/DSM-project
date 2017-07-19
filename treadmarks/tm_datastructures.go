@@ -11,12 +11,19 @@ type IPage interface {
 }
 
 type TM_IDataStructures interface {
-	GetCopyset(pageNr int) *[]int
+	PrependEmptyWriteNotice(pageNr int, procId byte) *WriteNoticeRecord
+	PrependWriteNotice(procId byte, wn WriteNotice) *WriteNoticeRecord
+	AppendIntervalRecord(procNr byte, ir *IntervalRecord)
+	PrependIntervalRecord(procNr byte, ir *IntervalRecord)
+	GetCopyset(pageNr int) []int
 	GetWriteNoticeListHead(pageNr int, procNr byte) *WriteNoticeRecord
 	GetIntervalRecordHead(procNr byte) *IntervalRecord
 	GetIntervalRecordTail(procNr byte) *IntervalRecord
+	GetPageEntry(pageNr int) PageArrayEntry
+	SetPageEntry(pageNr int, p PageArrayEntry)
 	MapWriteNotices(f func(wn *WriteNoticeRecord), pageNr int, procNr byte)
 	MapIntervalRecords(f func(ir *IntervalRecord), procNr byte)
+	MapProcArray(f func(p *Pair, procNr byte))
 }
 
 type DiffPool []Diff
@@ -24,9 +31,41 @@ type ProcArray []Pair
 type PageArray map[int]PageArrayEntry
 
 type TM_DataStructures struct {
-	diffPool DiffPool
+	diffPool  DiffPool
 	procArray ProcArray
 	pageArray PageArray
+}
+
+func (d *TM_DataStructures) AppendIntervalRecord(procNr byte, ir *IntervalRecord) {
+	//var p Pair = d.procArray[procNr]
+	//(&p).AppendIntervalRecord(ir)
+}
+
+func (d *TM_DataStructures) SetPageEntry(pageNr int, p PageArrayEntry) {
+	d.pageArray[pageNr] = p
+}
+
+func (d *TM_DataStructures) GetPageEntry(pageNr int) PageArrayEntry {
+	return d.pageArray[pageNr]
+}
+
+func (d *TM_DataStructures) PrependEmptyWriteNotice(pageNr int, procId byte) *WriteNoticeRecord {
+	var p PageArrayEntry = d.pageArray[pageNr]
+	return p.PrependWriteNotice(procId)
+}
+
+func (d *TM_DataStructures) PrependWriteNotice(procId byte, wn WriteNotice) *WriteNoticeRecord {
+	return d.pageArray.PrependWriteNotice(procId, wn)
+}
+
+func (d *TM_DataStructures) PrependIntervalRecord(procNr byte, ir *IntervalRecord) {
+	d.procArray[procNr].PrependIntervalRecord(ir)
+}
+
+func (d *TM_DataStructures) MapProcArray(f func(p *Pair, procNr byte)) {
+	for i, p := range d.procArray {
+		f(&p, byte(i))
+	}
 }
 
 func (d *TM_DataStructures) GetIntervalRecordHead(procNr byte) *IntervalRecord {
@@ -67,8 +106,8 @@ func (d *TM_DataStructures) MapIntervalRecords(f func(ir *IntervalRecord), procN
 	}
 }
 
-func (d *TM_DataStructures) GetCopyset(pageNr int) *[]int {
-	return &d.pageArray[pageNr].CopySet
+func (d *TM_DataStructures) GetCopyset(pageNr int) []int {
+	return d.pageArray[pageNr].CopySet
 }
 
 func (d *TM_DataStructures) GetWriteNoticeListHead(pageNr int, procNr byte) *WriteNoticeRecord {
@@ -112,7 +151,6 @@ func NewPageArrayEntry() *PageArrayEntry {
 	return &PageArrayEntry{[]int{}, make(map[byte]*WriteNoticeRecord)}
 }
 
-
 func (p *PageArrayEntry) PrependWriteNotice(procId byte) *WriteNoticeRecord {
 	wn := new(WriteNoticeRecord)
 	head, ok := p.ProcArr[procId]
@@ -126,8 +164,8 @@ func (p *PageArrayEntry) PrependWriteNotice(procId byte) *WriteNoticeRecord {
 }
 
 func (p *PageArray) PrependWriteNotice(procId byte, wn WriteNotice) *WriteNoticeRecord {
-	pe,ok := (*p)[int(wn.pageNr)]
-	if ok == false{
+	pe, ok := (*p)[int(wn.pageNr)]
+	if ok == false {
 		(*p)[int(wn.pageNr)] = *NewPageArrayEntry()
 		pe = (*p)[int(wn.pageNr)]
 	}

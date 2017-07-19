@@ -18,17 +18,21 @@ func TestUpdateDatastructures(t *testing.T) {
 	tm.procId = 3
 	tm.copyMap[0] = []byte{4, 4, 4, 4, 4, 4, 4, 4}
 	tm.copyMap[1] = []byte{1, 1, 1, 1, 1, 1, 1, 1}
-	tm.procArray = make(ProcArray, 4)
+	procArray := make(ProcArray, 4)
+	tm.TM_IDataStructures = &TM_DataStructures{procArray: procArray, pageArray: make(PageArray)}
 	tm.updateDatastructures()
-	headWNRecord := tm.pageArray[0].ProcArr[3]
-	headIntervalRecord := tm.procArray[3].car
-	assert.Len(t, headIntervalRecord.(*IntervalRecord).WriteNotices, 2)
-	assert.True(t, headWNRecord == headIntervalRecord.(*IntervalRecord).WriteNotices[0])
+	headWNRecord := tm.GetWriteNoticeListHead(0, 3)
+	//headWNRecord := tm.pageArray[0].ProcArr[3]
+	//headIntervalRecord := tm.procArray[3].car
+	headIntervalRecord := tm.GetIntervalRecordHead(3)
+	assert.Len(t, headIntervalRecord.WriteNotices, 2)
+	assert.True(t, headWNRecord == headIntervalRecord.WriteNotices[0])
 	assert.True(t, headIntervalRecord == headWNRecord.Interval)
 
-	headWNRecord1 := tm.pageArray[1].ProcArr[3]
+	//headWNRecord1 := tm.pageArray[1].ProcArr[3]
+	headWNRecord1 := tm.GetWriteNoticeListHead(1, 3)
 
-	assert.True(t, headWNRecord1 == headIntervalRecord.(*IntervalRecord).WriteNotices[1])
+	assert.True(t, headWNRecord1 == headIntervalRecord.WriteNotices[1])
 }
 
 func TestPreprendInterval(t *testing.T) {
@@ -52,23 +56,23 @@ func TestTreadMarks_handleLockAcquireRequest(t *testing.T) {
 	vc1.Increment(byte(0))
 	//First we make one interval record with matching write notice records
 	ir1 := &IntervalRecord{Timestamp: *vc1, WriteNotices: make([]*WriteNoticeRecord, 0)}
-	wr1_1 := tm.pageArray.PrependWriteNotice(byte(0), WriteNotice{pageNr: 0})
-	wr1_2 := tm.pageArray.PrependWriteNotice(byte(0), WriteNotice{pageNr: 3})
+	wr1_1 := tm.PrependWriteNotice(byte(0), WriteNotice{pageNr: 0})
+	wr1_2 := tm.PrependWriteNotice(byte(0), WriteNotice{pageNr: 3})
 	ir1.WriteNotices = []*WriteNoticeRecord{wr1_1, wr1_2}
 	wr1_1.Interval = ir1
 	wr1_2.Interval = ir1
-	tm.procArray[0].PrependIntervalRecord(ir1)
+	tm.PrependIntervalRecord(0, ir1)
 
 	//Then we make another interval record with matching write notice records.
 	vc2.Increment(byte(0))
 	vc2.Increment(byte(0))
 	ir2 := &IntervalRecord{Timestamp: *vc2, WriteNotices: make([]*WriteNoticeRecord, 0)}
-	wr2_1 := tm.pageArray.PrependWriteNotice(byte(0), WriteNotice{pageNr: 2})
-	wr2_2 := tm.pageArray.PrependWriteNotice(byte(0), WriteNotice{pageNr: 3})
+	wr2_1 := tm.PrependWriteNotice(byte(0), WriteNotice{pageNr: 2})
+	wr2_2 := tm.PrependWriteNotice(byte(0), WriteNotice{pageNr: 3})
 	ir2.WriteNotices = []*WriteNoticeRecord{wr2_1, wr2_2}
 	wr2_1.Interval = ir2
 	wr2_2.Interval = ir2
-	tm.procArray[0].PrependIntervalRecord(ir2)
+	tm.PrependIntervalRecord(0, ir2)
 
 	//Now we see how the host responds when we request a lock.
 	msg := new(TM_Message)
