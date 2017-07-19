@@ -21,7 +21,6 @@ const (
 	WELCOME_MESSAGE       = "WELC"
 )
 
-type pageNr int
 
 type ITreadMarks interface {
 	memory.VirtualMemory
@@ -38,6 +37,7 @@ type TM_Message struct {
 	Type      string
 	Diffs     []Diff
 	Id        int
+	PageNr		int
 	VC        Vectorclock
 	Intervals []Interval
 	Event     *chan string
@@ -63,7 +63,7 @@ type TreadMarks struct {
 	nrBarriers           int
 	TM_IDataStructures
 	vc      Vectorclock
-	copyMap map[pageNr][]byte //contains twins since last sync.
+	copyMap map[int][]byte //contains twins since last sync.
 	network.IClient
 }
 
@@ -75,7 +75,7 @@ func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarri
 		VirtualMemory:      virtualMemory,
 		TM_IDataStructures: &TM_DataStructures{diffPool, procArray, pageArray},
 		vc:                 Vectorclock{make([]uint, nrProcs)},
-		copyMap:            make(map[pageNr][]byte),
+		copyMap:            make(map[int][]byte),
 		nrProcs:            nrProcs,
 		nrLocks:            nrLocks,
 		nrBarriers:         nrBarriers,
@@ -90,7 +90,7 @@ func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarri
 			tm.SetRights(addr, memory.READ_WRITE)
 			val, err := tm.ReadBytes(tm.GetPageAddr(addr), tm.GetPageSize())
 			panicOnErr(err)
-			tm.copyMap[pageNr(tm.GetPageAddr(addr)/tm.GetPageSize())] = val
+			tm.copyMap[tm.GetPageAddr(addr)/tm.GetPageSize()] = val
 			err = tm.Write(addr, value)
 			panicOnErr(err)
 		}
@@ -208,6 +208,59 @@ func (t *TreadMarks) updateDatastructures() {
 	if len(interval.WriteNotices) > 0 {
 		t.PrependIntervalRecord(t.procId, &interval)
 	}
+}
+
+func (t *TreadMarks) GenerateDiffRequests(pageNr int) []TM_Message{
+	//First we check if we have the page already or need to request a copy.
+	if t.copyMap[pageNr] == nil{
+		//TODO We dont have a copy, so we need to request a new copy of the page.
+	}
+	messages := make([]TM_Message, 0)
+	vc := make([]Vectorclock, t.nrProcs)
+	// First we figure out what processes we actually need to send messages to.
+	// To do this, we first find the largest interval for each process, where there is a write notice without
+	// a diff.
+	// During this, we also find the lowest timestamp for this process, where we are missing diffs.
+	intrec := make([]*IntervalRecord, t.nrProcs)
+	for proc,wnr := range t.pageArray[pageNr].ProcArr{
+		if wnr != nil && wnr.Diff == nil{
+			intrec[int(proc)] = wnr.Interval
+			for {
+				vc[int(proc)] = wnr.Interval.Timestamp
+				wnr = wnr.NextRecord
+				if wnr == nil || wnr.Diff != nil{
+					break
+				}
+			}
+		}
+	}
+	// After that we remove the ones, that is overshadowed by others.
+	for proc1,int1 := range intrec{
+		if int1 == nil{
+			continue
+		}
+		overshadowed := false
+		for _,int2 := range intrec{
+			if int2 == nil{
+				continue
+			}
+			if int1.Timestamp.Compare(&int2.Timestamp) < 0{
+				overshadowed = true
+				break
+			}
+		}
+		if overshadowed == false{
+			message := TM_Message{
+				From:t.procId,
+				To:byte(proc1),
+				Type:DIFF_REQUEST,
+				VC:vc[proc1],
+				PageNr: pageNr,
+			}
+			messages = append(messages, message)
+		}
+	}
+	return messages
 }
 
 func (t *TreadMarks) Shutdown() {
