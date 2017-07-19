@@ -138,8 +138,7 @@ func (t *TreadMarks) Startup(address string) error {
 
 func (t *TreadMarks) HandleLockAcquireResponse(message *TM_Message) {
 	//Here we need to add the incoming intervals to the correct write notices.
-	//We assume that the
-
+	t.incorporateIntervalsIntoDatastructures(message)
 }
 
 func (t *TreadMarks) HandleLockAcquireRequest(msg *TM_Message) TM_Message {
@@ -256,6 +255,21 @@ func (t *TreadMarks) barrier(id int) {
 	err := t.Send(msg)
 	panicOnErr(err)
 	<-c
+}
+
+func (t *TreadMarks) incorporateIntervalsIntoDatastructures(msg *TM_Message) {
+	for i := len(msg.Intervals) - 1; i >= 0; i-- {
+		interval := msg.Intervals[i]
+		ir := IntervalRecord{
+			Timestamp: interval.Vt,
+		}
+		t.PrependIntervalRecord(interval.Proc, &ir)
+		for _, wn := range interval.WriteNotices {
+			var res *WriteNoticeRecord = t.PrependWriteNotice(interval.Proc, wn)
+			res.Interval = &ir
+			ir.WriteNotices = append(ir.WriteNotices, res)
+		}
+	}
 }
 
 func panicOnErr(err error) {
