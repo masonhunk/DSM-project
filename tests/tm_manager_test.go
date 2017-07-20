@@ -104,7 +104,7 @@ func TestManagerHandleLockAcquireNotExistMessage(t *testing.T) {
 	tr := NewTranscieverMock(messages)
 	bm := treadmarks.NewBarrierManagerImp(4)
 	lm := treadmarks.NewLockManagerImp()
-	m := treadmarks.NewTM_Manager(tr, bm, lm, 4)
+	m := treadmarks.NewTest_TM_Manager(tr, bm, lm, 4, nil)
 	m.HandleMessage(treadmarks.TM_Message{Type: treadmarks.LOCK_ACQUIRE_REQUEST, Id: 1, From: byte(1), To: byte(2)})
 	assert.Equal(t, treadmarks.TM_Message{Type: treadmarks.LOCK_ACQUIRE_RESPONSE, To: byte(1), Id: 1, From: byte(0)}, tr.messages[0])
 }
@@ -114,7 +114,7 @@ func TestManagerHandleLockAcquireExistsMessage(t *testing.T) {
 	tr := NewTranscieverMock(messages)
 	bm := treadmarks.NewBarrierManagerImp(4)
 	lm := treadmarks.NewLockManagerImp()
-	m := treadmarks.NewTM_Manager(tr, bm, lm, 4)
+	m := treadmarks.NewTest_TM_Manager(tr, bm, lm, 4, nil)
 	m.HandleMessage(treadmarks.TM_Message{Type: treadmarks.LOCK_ACQUIRE_REQUEST, Id: 1, From: byte(1), To: byte(2)})
 	assert.Equal(t, treadmarks.TM_Message{Type: treadmarks.LOCK_ACQUIRE_RESPONSE, To: byte(1), Id: 1, From: byte(0)}, tr.messages[0])
 	m.HandleMessage(treadmarks.TM_Message{Type: treadmarks.LOCK_RELEASE, Id: 1, From: byte(1), To: byte(2)})
@@ -127,7 +127,7 @@ func TestManagerHandleLockReleaseMessageError(t *testing.T) {
 	tr := NewTranscieverMock(messages)
 	bm := treadmarks.NewBarrierManagerImp(4)
 	lm := treadmarks.NewLockManagerImp()
-	m := treadmarks.NewTM_Manager(tr, bm, lm, 4)
+	m := treadmarks.NewTest_TM_Manager(tr, bm, lm, 4, nil)
 	err := m.HandleMessage(treadmarks.TM_Message{Type: treadmarks.LOCK_RELEASE, Id: 1, From: byte(1), To: byte(2)})
 	assert.EqualError(t, err, "LockManager doesn't have a lock with ID 1", "Since this lock has"+
 		"not been locked before, it should give an error when unlocked.")
@@ -139,7 +139,7 @@ func TestManagerHandleBarrierMessage(t *testing.T) {
 	tr := NewTranscieverMock(messages)
 	bm := treadmarks.NewBarrierManagerImp(2)
 	lm := treadmarks.NewLockManagerImp()
-	m := treadmarks.NewTM_Manager(tr, bm, lm, 4)
+	m := treadmarks.NewTest_TM_Manager(tr, bm, lm, 4, nil)
 	started := make(chan bool)
 	done := make(chan bool, 2)
 	go func() {

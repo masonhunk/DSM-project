@@ -2,6 +2,7 @@ package treadmarks
 
 import (
 	"DSM-project/memory"
+	"sync"
 )
 
 type IPage interface {
@@ -26,6 +27,7 @@ type TM_IDataStructures interface {
 	MapProcArray(f func(p *Pair, procNr byte))
 	GetAllUnseenIntervals(ts Vectorclock) []Interval
 	GetUnseenIntervalsAtProc(ts Vectorclock, procNr byte) []Interval
+	sync.Locker
 }
 
 type DiffPool []Diff
@@ -33,6 +35,7 @@ type ProcArray []Pair
 type PageArray map[int]PageArrayEntry
 
 type TM_DataStructures struct {
+	*sync.RWMutex
 	diffPool  DiffPool
 	procArray ProcArray
 	pageArray PageArray

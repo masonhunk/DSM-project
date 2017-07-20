@@ -4,6 +4,7 @@ import (
 	"DSM-project/memory"
 	"DSM-project/network"
 	"errors"
+	"sync"
 )
 
 const (
@@ -75,7 +76,7 @@ func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarri
 	diffPool := make(DiffPool, 0)
 	tm := TreadMarks{
 		VirtualMemory:      virtualMemory,
-		TM_IDataStructures: &TM_DataStructures{diffPool, procArray, pageArray},
+		TM_IDataStructures: &TM_DataStructures{new(sync.RWMutex), diffPool, procArray, pageArray},
 		vc:                 Vectorclock{make([]uint, nrProcs)},
 		twinMap:            make(map[int][]byte),
 		nrProcs:            nrProcs,
@@ -305,13 +306,22 @@ func (t *TreadMarks) ReleaseLock(id int) {
 
 func (t *TreadMarks) Barrier(id int) {
 	c := make(chan string)
+	//last known timestamp from manager that this host has seen
+	managerTs := t.GetIntervalRecordHead(byte(0)).Timestamp
+	/*if managerTs.Compare(NewVectorclock(t.nrProcs)) == 0 {
+	}*/
+	if &managerTs == nil {
+		managerTs = *NewVectorclock(t.nrProcs)
+	}
 	msg := TM_Message{
-		Type:  BARRIER_REQUEST,
-		To:    1,
-		From:  t.procId,
-		Diffs: nil,
-		Id:    id,
-		Event: &c,
+		Type:      BARRIER_REQUEST,
+		To:        1,
+		From:      t.procId,
+		Diffs:     nil,
+		VC:        t.vc,
+		Id:        id,
+		Event:     &c,
+		Intervals: t.GetUnseenIntervalsAtProc(managerTs, t.procId),
 	}
 	err := t.Send(msg)
 	panicOnErr(err)
@@ -319,6 +329,7 @@ func (t *TreadMarks) Barrier(id int) {
 }
 
 func (t *TreadMarks) incorporateIntervalsIntoDatastructures(msg *TM_Message) {
+	t.Lock()
 	for i := len(msg.Intervals) - 1; i >= 0; i-- {
 		interval := msg.Intervals[i]
 		ir := IntervalRecord{
@@ -342,6 +353,7 @@ func (t *TreadMarks) incorporateIntervalsIntoDatastructures(msg *TM_Message) {
 			t.SetRights(wn.pageNr*t.GetPageSize(), memory.NO_ACCESS)
 		}
 	}
+	t.Unlock()
 }
 
 func (t *TreadMarks) sendCopyRequest(pageNr int, procNr byte) {

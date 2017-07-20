@@ -3,6 +3,7 @@ package treadmarks
 import (
 	"DSM-project/network"
 	"errors"
+	"net"
 	"strconv"
 	"sync"
 )
@@ -14,7 +15,7 @@ type LockManager interface {
 }
 
 type BarrierManager interface {
-	HandleBarrier(id int)
+	HandleBarrier(id int, f func()) *sync.WaitGroup
 }
 
 //Lock manager implementation
@@ -68,11 +69,10 @@ func NewBarrierManagerImp(nodes int) *BarrierManagerImp {
 	bm.nodes = nodes
 	bm.barriers = make(map[int]*sync.WaitGroup)
 	bm.Mutex = new(sync.Mutex)
-
 	return bm
 }
 
-func (bm *BarrierManagerImp) HandleBarrier(id int) {
+func (bm *BarrierManagerImp) HandleBarrier(id int, f func()) *sync.WaitGroup {
 	bm.Lock()
 	barrier, ok := bm.barriers[id]
 	if ok == false {
@@ -81,8 +81,10 @@ func (bm *BarrierManagerImp) HandleBarrier(id int) {
 		bm.barriers[id] = barrier
 	}
 	bm.Unlock()
+	f()
 	barrier.Done()
 	barrier.Wait()
+	return barrier
 }
 
 type tm_Manager struct {
@@ -91,15 +93,33 @@ type tm_Manager struct {
 	LockManager
 	network.ITransciever //embedded type
 	nodes                int
+	tm                   *TreadMarks //the host instance on which this manager runs
+
 }
 
-func NewTM_Manager(tr network.ITransciever, bm BarrierManager, lm LockManager, nodes int) *tm_Manager {
+func NewTest_TM_Manager(tr network.ITransciever, bm BarrierManager, lm LockManager, nodes int, tm *TreadMarks) *tm_Manager {
 	m := new(tm_Manager)
 	m.BarrierManager = bm
 	m.LockManager = lm
 	m.ITransciever = tr
 	m.nodes = nodes
 	m.myId = byte(0)
+	m.tm = tm
+
+	return m
+}
+
+func NewTM_Manager(conn net.Conn, bm BarrierManager, lm LockManager, tm *TreadMarks) *tm_Manager {
+	m := new(tm_Manager)
+	m.BarrierManager = bm
+	m.LockManager = lm
+	m.ITransciever = network.NewTransciever(conn, func(message network.Message) error {
+		return m.HandleMessage(message)
+	})
+	m.nodes = tm.nrProcs
+	m.myId = byte(0)
+	m.tm = tm
+
 	return m
 }
 
@@ -150,7 +170,14 @@ func (m *tm_Manager) handleLockReleaseRequest(message *TM_Message) error {
 
 func (m *tm_Manager) handleBarrierRequest(message *TM_Message) *TM_Message {
 	id := message.Id
-	m.HandleBarrier(id)
+	m.HandleBarrier(id, func() {
+		m.tm.incorporateIntervalsIntoDatastructures(message)
+	})
+	//barrier over
+	if m.tm != nil {
+		message.Intervals = m.tm.GetAllUnseenIntervals(message.VC)
+
+	}
 	message.From, message.To = message.To, message.From
 	message.Type = BARRIER_RESPONSE
 	return message
