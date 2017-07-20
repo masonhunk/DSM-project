@@ -233,10 +233,10 @@ func (p *PageArrayEntry) PrependWriteNotice(procId byte) *WriteNoticeRecord {
 }
 
 func (p *PageArray) PrependWriteNotice(procId byte, wn WriteNotice) *WriteNoticeRecord {
-	pe, ok := (*p)[int(wn.pageNr)]
+	pe, ok := (*p)[wn.pageNr]
 	if ok == false {
 		(*p)[int(wn.pageNr)] = *NewPageArrayEntry()
-		pe = (*p)[int(wn.pageNr)]
+		pe = (*p)[wn.pageNr]
 	}
 	result := pe.PrependWriteNotice(procId)
 	result.WriteNotice = wn

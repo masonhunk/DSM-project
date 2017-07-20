@@ -5,8 +5,11 @@ import (
 	"DSM-project/network"
 	"github.com/stretchr/testify/assert"
 	"testing"
+	"fmt"
 	"time"
 )
+//TODO remove when done. Is only there to make the compiler shut up.
+var _ = fmt.Print
 
 func TestCreateDiff(t *testing.T) {
 	original := []byte{0, 1, 2, 3, 4}
@@ -286,3 +289,135 @@ func NewClientMock() *ClientMock {
 
 	return cMock
 }
+
+func SetupHandleDiffRequest() *TreadMarks{
+	vm := memory.NewVmem(128, 8)
+	tm := NewTreadMarks(vm, 2, 1, 1)
+	tm.procId = 1
+
+	//Setup
+	//First we make three vectorclocks.
+	vc := NewVectorclock(3)
+	vc.SetTick(byte(1), 3)
+	tm.vc = *vc
+
+	//Then we make the interval record
+	ir0 := &IntervalRecord{Timestamp: *vc, WriteNotices: make([]*WriteNoticeRecord, 0)}
+	ir1 := &IntervalRecord{Timestamp: *vc, WriteNotices: make([]*WriteNoticeRecord, 0)}
+
+	//Then the writenoticerecords
+	wr1 := tm.TM_IDataStructures.PrependWriteNotice(byte(0), WriteNotice{pageNr: 0})
+	wr2 := tm.TM_IDataStructures.PrependWriteNotice(byte(0), WriteNotice{pageNr: 1})
+	wr3 := tm.TM_IDataStructures.PrependWriteNotice(byte(1), WriteNotice{pageNr: 0})
+	wr4 := tm.TM_IDataStructures.PrependWriteNotice(byte(1), WriteNotice{pageNr: 1})
+	//We add the writenoticerecords to the interval record.
+	ir0.WriteNotices = []*WriteNoticeRecord{wr1, wr2}
+	ir1.WriteNotices = []*WriteNoticeRecord{wr3, wr4}
+
+	//Then we fix the interval record pointer for each of the writenoticerecords
+	wr1.Interval = ir0
+	wr2.Interval = ir0
+	wr3.Interval = ir1
+	wr4.Interval = ir1
+
+	//Lastly we add a diff to two of the write notices.
+	wr1.Diff = &Diff{[]Pair{{byte(0), byte(1)}}}
+	wr2.Diff = &Diff{[]Pair{{byte(0), byte(2)}}}
+
+	//In the end we add the two interval records.
+	tm.TM_IDataStructures.PrependIntervalRecord(byte(0), ir0)
+	tm.TM_IDataStructures.PrependIntervalRecord(byte(1), ir1)
+	return tm
+}
+
+func TestTreadMarks_HandleDiffRequest_DiffsAfterRequestVC(t *testing.T) {
+	tm := SetupHandleDiffRequest()
+	vc := tm.vc
+
+	//First we test when the diffs have a vectorclock later than our vectorclock.
+	testVC := NewVectorclock(3)
+	request := TM_Message{From: byte(0), To: byte(1), Type:DIFF_REQUEST, VC:*testVC, PageNr:0}
+	diffs := tm.HandleDiffRequest(request)
+	assert.Equal(t, diffs.Diffs, []Pair{{vc, tm.GetWriteNoticeListHead(0, 0).Diff.Diffs}},
+		"We should recieve the diffs of WR1, with the vectorclock ", vc)
+	request = TM_Message{From: byte(0), To: byte(1), Type:DIFF_REQUEST, VC:*testVC, PageNr:1}
+	diffs = tm.HandleDiffRequest(request)
+	assert.Equal(t, diffs.Diffs, []Pair{{vc, tm.GetWriteNoticeListHead(1, 0).Diff.Diffs}},
+		"We should recieve the diffs of WR2, with the vectorclock ", vc)
+}
+
+func TestTreadMarks_HandleDiffRequest_DiffsVCConcurrentToRequestVC(t *testing.T) {
+	tm := SetupHandleDiffRequest()
+	vc := tm.vc
+
+	testVC := NewVectorclock(3)
+
+	//Now we make the vectorclock concurrent with the vectorclock of the writenotices.
+	//We should recieve the same output as before.
+	testVC.SetTick(byte(0), 3)
+	request := TM_Message{From: byte(0), To: byte(1), Type:DIFF_REQUEST, VC:*testVC, PageNr:0}
+	diffs := tm.HandleDiffRequest(request)
+	assert.Equal(t, diffs.Diffs, []Pair{{vc, tm.GetWriteNoticeListHead(0, 0).Diff.Diffs}},
+		"We should recieve the diffs of WR1, with the vectorclock ", vc)
+	request = TM_Message{From: byte(0), To: byte(1), Type:DIFF_REQUEST, VC:*testVC, PageNr:1}
+	diffs = tm.HandleDiffRequest(request)
+	assert.Equal(t, diffs.Diffs, []Pair{{vc, tm.GetWriteNoticeListHead(1, 0).Diff.Diffs}},
+		"We should recieve the diffs of WR2, with the vectorclock ", vc)
+
+}
+
+func TestTreadMarks_HandleDiffRequest_DiffVCEqualToRequestVC(t *testing.T) {
+	tm := SetupHandleDiffRequest()
+	vc := tm.vc
+
+	testVC := NewVectorclock(3)
+
+	//Now we make a vector timestamp that is equal to the former vector timestamp.
+	//This should also give us the diffs.
+	testVC.SetTick(byte(0), 0)
+	testVC.SetTick(byte(1), 3)
+	request := TM_Message{From: byte(0), To: byte(1), Type:DIFF_REQUEST, VC:*testVC, PageNr:0}
+	diffs := tm.HandleDiffRequest(request)
+	assert.Equal(t, diffs.Diffs, []Pair{{vc, tm.GetWriteNoticeListHead(0, 0).Diff.Diffs}},
+		"We should recieve the diffs of WR1, with the vectorclock ", vc)
+	request = TM_Message{From: byte(0), To: byte(1), Type:DIFF_REQUEST, VC:*testVC, PageNr:1}
+	diffs = tm.HandleDiffRequest(request)
+	assert.Equal(t, diffs.Diffs, []Pair{{vc, tm.GetWriteNoticeListHead(1, 0).Diff.Diffs}},
+		"We should recieve the diffs of WR2, with the vectorclock ", vc)
+}
+
+func TestTreadMarks_HandleDiffRequest_DiffVCBeforeRequestVC_case1(t *testing.T) {
+	tm := SetupHandleDiffRequest()
+	testVC := NewVectorclock(3)
+
+	//Lastly we make a timestamp thats ahead of interval timestamp. In this case, we should get no diffs.
+	testVC.SetTick(byte(1), 4)
+	request := TM_Message{From: byte(0), To: byte(1), Type:DIFF_REQUEST, VC:*testVC, PageNr:0}
+	diffs := tm.HandleDiffRequest(request)
+	assert.Len(t, diffs.Diffs, 0,
+		"We shouldnt recieve any diffs, because all diffs are before the timestamp")
+	request = TM_Message{From: byte(0), To: byte(1), Type:DIFF_REQUEST, VC:*testVC, PageNr:1}
+	diffs = tm.HandleDiffRequest(request)
+	assert.Len(t, diffs.Diffs, 0,
+		"We shouldnt recieve any diffs, because all diffs are before the timestamp")
+}
+
+func TestTreadMarks_HandleDiffRequest_DiffVCBeforeRequestVC_case2(t *testing.T) {
+	tm := SetupHandleDiffRequest()
+	testVC := NewVectorclock(3)
+
+	//This is just another version of above.
+	testVC.SetTick(byte(0), 1)
+	testVC.SetTick(byte(1), 3)
+	request := TM_Message{From: byte(0), To: byte(1), Type:DIFF_REQUEST, VC:*testVC, PageNr:0}
+	diffs := tm.HandleDiffRequest(request)
+	assert.Len(t, diffs.Diffs, 0,
+		"We shouldnt recieve any diffs, because all diffs are before the timestamp")
+	request = TM_Message{From: byte(0), To: byte(1), Type:DIFF_REQUEST, VC:*testVC, PageNr:1}
+	diffs = tm.HandleDiffRequest(request)
+	assert.Len(t, diffs.Diffs, 0,
+		"We shouldnt recieve any diffs, because all diffs are before the timestamp")
+}
+
+
+
