@@ -349,7 +349,7 @@ func (t *TreadMarks) incorporateIntervalsIntoDatastructures(msg *TM_Message) {
 				t.twinMap[wn.pageNr] = nil
 				myWn.Diff = &diff
 			}
-			//finally invalidate the page
+			//finally invalidate the page.
 			t.SetRights(wn.pageNr*t.GetPageSize(), memory.NO_ACCESS)
 		}
 	}
