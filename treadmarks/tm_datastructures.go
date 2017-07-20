@@ -2,7 +2,6 @@ package treadmarks
 
 import (
 	"DSM-project/memory"
-	"golang.org/x/tools/go/gcimporter15/testdata"
 )
 
 type IPage interface {
