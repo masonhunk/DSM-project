@@ -50,6 +50,8 @@ type TM_Message struct {
 	Data      []byte
 }
 
+
+
 func (m TM_Message) GetFrom() byte {
 	return m.From
 }
@@ -76,12 +78,11 @@ type TreadMarks struct {
 
 func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarriers int) *TreadMarks {
 	pageArray := make(PageArray)
-	procArray := make(ProcArray, nrProcs)
-	diffPool := make(DiffPool, 0)
+	procArray := make(ProcArray)
 	tm := TreadMarks{
 		VirtualMemory:      virtualMemory,
-		TM_IDataStructures: &TM_DataStructures{new(sync.RWMutex), diffPool, procArray, pageArray},
-		vc:                 Vectorclock{make([]uint, nrProcs)},
+		TM_IDataStructures: &TM_DataStructures{new(sync.RWMutex), procArray, pageArray},
+		vc:                 *NewVectorclock(nrProcs),
 		twinMap:            make(map[int][]byte),
 		nrProcs:            nrProcs,
 		nrLocks:            nrLocks,
@@ -95,8 +96,8 @@ func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarri
 		case "READ":
 			pageNr := tm.GetPageAddr(addr) / tm.GetPageSize()
 			//if no copy, get one. Else, create twin
-			if entry := tm.GetPageEntry(pageNr); entry.CopySet == nil && entry.ProcArr == nil {
-				tm.SetPageEntry(pageNr, *NewPageArrayEntry())
+			if entry := tm.GetPageEntry(pageNr); entry.CopySet == nil && entry.WriteNoticeRecordArray == nil {
+				tm.SetPageEntry(pageNr, NewPageArrayEntry())
 				tm.sendCopyRequest(pageNr, tm.procId)
 			}
 			//TODO: get and apply diffs before continuing
@@ -104,8 +105,8 @@ func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarri
 		case "WRITE":
 			pageNr := tm.GetPageAddr(addr) / tm.GetPageSize()
 			//if no copy, get one. Else create twin
-			if entry := tm.GetPageEntry(pageNr); entry.CopySet == nil && entry.ProcArr == nil {
-				tm.SetPageEntry(pageNr, *NewPageArrayEntry())
+			if entry := tm.GetPageEntry(pageNr); entry.CopySet == nil && entry.WriteNoticeRecordArray == nil {
+				tm.SetPageEntry(pageNr, NewPageArrayEntry())
 				tm.sendCopyRequest(pageNr, tm.procId)
 			} else {
 				//create a twin
@@ -201,11 +202,11 @@ func (t *TreadMarks) updateDatastructures() {
 	for key := range t.twinMap {
 		//if entry doesn't exist yet, initialize it
 		entry := t.GetPageEntry(int(key))
-		if entry.ProcArr == nil && entry.CopySet == nil {
+		if entry.WriteNoticeRecordArray == nil && entry.CopySet == nil {
 			t.SetPageEntry(int(key),
-				PageArrayEntry{
+				&PageArrayEntry{
 					CopySet: []int{},
-					ProcArr: make(map[byte]*WriteNoticeRecord),
+					WriteNoticeRecordArray: make(map[byte][]WriteNoticeRecord),
 				})
 		}
 		//add interval record to front of linked list in procArray
@@ -238,12 +239,12 @@ func (t *TreadMarks) GenerateDiffRequests(pageNr int) []TM_Message {
 		wnr := t.TM_IDataStructures.GetWriteNoticeListHead(pageNr, proc)
 		if wnr != nil && wnr.Diff == nil {
 			intrec[int(proc)] = wnr.Interval
-			for {
-				vc[int(proc)] = wnr.Interval.Timestamp
-				wnr = wnr.NextRecord
-				if wnr == nil || wnr.Diff != nil {
+			wnrs := t.GetWritenotices(proc, pageNr)
+			for i := 0; i < len(wnrs); i++{
+				if wnrs[i].Diff == nil{
 					break
 				}
+				vc[int(proc)] = wnrs[i].Interval.Timestamp
 			}
 		}
 	}
@@ -283,9 +284,12 @@ func(t *TreadMarks) HandleDiffRequest(message TM_Message) TM_Message{
 	pairs := make([]Pair, 0)
 	for proc:= byte(0); proc < byte(t.nrProcs); proc = proc + byte(1){
 
-		for wnr := t.TM_IDataStructures.GetWriteNoticeListHead(pageNr, proc) ; wnr != nil && wnr.Interval.Timestamp.Compare(&vc) != -1; wnr = wnr.NextRecord{
+		for _, wnr := range t.GetWritenotices(proc, pageNr){
 			if wnr.Diff != nil{
 				pairs = append(pairs, Pair{wnr.Interval.Timestamp, wnr.Diff.Diffs})
+			}
+			if wnr.Interval.Timestamp.Compare(&vc) < 0{
+				break
 			}
 		}
 	}
@@ -356,14 +360,14 @@ func (t *TreadMarks) incorporateIntervalsIntoDatastructures(msg *TM_Message) {
 	t.Lock()
 	for i := len(msg.Intervals) - 1; i >= 0; i-- {
 		interval := msg.Intervals[i]
-		ir := IntervalRecord{
+		ir := &IntervalRecord{
 			Timestamp: interval.Vt,
+			WriteNotices: []*WriteNoticeRecord{},
 		}
-		t.PrependIntervalRecord(interval.Proc, &ir)
 		for _, wn := range interval.WriteNotices {
 			//prepend to write notice list and update pointers
 			var res *WriteNoticeRecord = t.PrependWriteNotice(interval.Proc, wn)
-			res.Interval = &ir
+			res.Interval = ir
 			ir.WriteNotices = append(ir.WriteNotices, res)
 			//check if I have a write notice for this page with no diff at head of list. If so, create diff.
 			if myWn := t.GetWriteNoticeListHead(wn.pageNr, t.procId); myWn != nil && myWn.Diff == nil {
@@ -376,6 +380,11 @@ func (t *TreadMarks) incorporateIntervalsIntoDatastructures(msg *TM_Message) {
 			//finally invalidate the page.
 			t.SetRights(wn.pageNr*t.GetPageSize(), memory.NO_ACCESS)
 		}
+		fmt.Println(ir)
+		if len(ir.WriteNotices) > 0{
+			t.PrependIntervalRecord(interval.Proc, ir)
+		}
+
 	}
 	t.Unlock()
 }
