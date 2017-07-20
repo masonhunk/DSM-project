@@ -24,6 +24,8 @@ type TM_IDataStructures interface {
 	MapWriteNotices(f func(wn *WriteNoticeRecord), pageNr int, procNr byte)
 	MapIntervalRecords(f func(ir *IntervalRecord), procNr byte)
 	MapProcArray(f func(p *Pair, procNr byte))
+	GetAllUnseenIntervals(ts Vectorclock) []Interval
+	GetUnseenIntervalsAtProc(ts Vectorclock, procNr byte) []Interval
 }
 
 type DiffPool []Diff
@@ -36,6 +38,66 @@ type TM_DataStructures struct {
 	pageArray PageArray
 }
 
+func (d *TM_DataStructures) GetAllUnseenIntervals(ts Vectorclock) []Interval {
+	result := []Interval{}
+	d.MapProcArray(
+		func(p *Pair, procNr byte) {
+			if *p != (Pair{}) && p.car != nil {
+				var iRecord *IntervalRecord = p.car.(*IntervalRecord)
+				//loop through the interval records for this process
+				for {
+					if iRecord == nil {
+						break
+					}
+					// if this record has older ts than the requester, break
+					if iRecord.Timestamp.Compare(&ts) == -1 {
+						break
+					}
+					i := Interval{
+						Proc: procNr,
+						Vt:   iRecord.Timestamp,
+					}
+					for _, wn := range iRecord.WriteNotices {
+						i.WriteNotices = append(i.WriteNotices, wn.WriteNotice)
+					}
+					result = append(result, i)
+
+					iRecord = iRecord.NextIr
+				}
+			}
+		})
+	return result
+}
+
+func (d *TM_DataStructures) GetUnseenIntervalsAtProc(ts Vectorclock, procNr byte) []Interval {
+	result := []Interval{}
+	p := d.procArray[procNr]
+	if p != (Pair{}) && p.car != nil {
+		var iRecord *IntervalRecord = p.car.(*IntervalRecord)
+		//loop through the interval records for this process
+		for {
+			if iRecord == nil {
+				break
+			}
+			// if this record has older ts than the requester, break
+			if iRecord.Timestamp.Compare(&ts) == -1 {
+				break
+			}
+			i := Interval{
+				Proc: procNr,
+				Vt:   iRecord.Timestamp,
+			}
+			for _, wn := range iRecord.WriteNotices {
+				i.WriteNotices = append(i.WriteNotices, wn.WriteNotice)
+			}
+			result = append(result, i)
+
+			iRecord = iRecord.NextIr
+		}
+	}
+	return result
+}
+
 func (d *TM_DataStructures) AppendIntervalRecord(procNr byte, ir *IntervalRecord) {
 	//var p Pair = d.procArray[procNr]
 	//(&p).AppendIntervalRecord(ir)
@@ -46,7 +108,11 @@ func (d *TM_DataStructures) SetPageEntry(pageNr int, p PageArrayEntry) {
 }
 
 func (d *TM_DataStructures) GetPageEntry(pageNr int) PageArrayEntry {
-	return d.pageArray[pageNr]
+	res, ok := d.pageArray[pageNr]
+	if !ok {
+		return PageArrayEntry{}
+	}
+	return res
 }
 
 func (d *TM_DataStructures) PrependEmptyWriteNotice(pageNr int, procId byte) *WriteNoticeRecord {
@@ -148,7 +214,7 @@ type Diff struct {
 }
 
 func NewPageArrayEntry() *PageArrayEntry {
-	return &PageArrayEntry{[]int{}, make(map[byte]*WriteNoticeRecord)}
+	return &PageArrayEntry{[]int{0}, make(map[byte]*WriteNoticeRecord)}
 }
 
 func (p *PageArrayEntry) PrependWriteNotice(procId byte) *WriteNoticeRecord {

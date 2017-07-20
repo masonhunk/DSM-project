@@ -17,6 +17,8 @@ type VirtualMemory interface {
 	Read(addr int) (byte, error)
 	ReadBytes(addr, length int) ([]byte, error)
 	Write(addr int, val byte) error
+	PrivilegedRead(addr, length int) []byte
+	PrivilegedWrite(addr int, data []byte) error
 	GetRights(addr int) byte
 	SetRights(addr int, access byte)
 	GetPageAddr(addr int) int
@@ -36,6 +38,17 @@ type Vmem struct {
 	mallocHistory  map[int]int //maps address to length
 	arDisabled     bool
 	faultListeners []FaultListener
+}
+
+func (m *Vmem) PrivilegedRead(addr, length int) []byte {
+	return m.Stack[addr : addr+length]
+}
+
+func (m *Vmem) PrivilegedWrite(addr int, data []byte) error {
+	for i, bt := range data {
+		m.Stack[i+addr] = bt
+	}
+	return nil
 }
 
 func (m *Vmem) AddFaultListener(l FaultListener) {

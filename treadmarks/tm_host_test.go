@@ -2,9 +2,11 @@ package treadmarks
 
 import (
 	"DSM-project/memory"
+	"DSM-project/network"
 	"github.com/stretchr/testify/assert"
 	"testing"
 	"fmt"
+	"time"
 )
 //TODO remove when done. Is only there to make the compiler shut up.
 var _ = fmt.Print
@@ -19,8 +21,8 @@ func TestUpdateDatastructures(t *testing.T) {
 	vm := memory.NewVmem(128, 8)
 	tm := NewTreadMarks(vm, 1, 1, 1)
 	tm.procId = 3
-	tm.copyMap[0] = []byte{4, 4, 4, 4, 4, 4, 4, 4}
-	tm.copyMap[1] = []byte{1, 1, 1, 1, 1, 1, 1, 1}
+	tm.twinMap[0] = []byte{4, 4, 4, 4, 4, 4, 4, 4}
+	tm.twinMap[1] = []byte{1, 1, 1, 1, 1, 1, 1, 1}
 	procArray := make(ProcArray, 4)
 	tm.TM_IDataStructures = &TM_DataStructures{procArray: procArray, pageArray: make(PageArray)}
 	tm.updateDatastructures()
@@ -109,7 +111,7 @@ func TestTreadMarks_handleLockAcquireRequest(t *testing.T) {
 		"We should only recieve intervals later than our timestamp.")
 }
 
-func TestTreadMarks_GenerateDiffRequest(t *testing.T){
+func TestTreadMarks_GenerateDiffRequest(t *testing.T) {
 	vm := memory.NewVmem(128, 8)
 	tm := NewTreadMarks(vm, 4, 1, 1)
 	tm.procId = 1
@@ -149,18 +151,18 @@ func TestTreadMarks_GenerateDiffRequest(t *testing.T){
 
 	result := tm.GenerateDiffRequests(0)
 	assert.Len(t, result, 1)
-	assert.Contains(t, result, TM_Message{From: tm.procId, To: byte(2), Type:DIFF_REQUEST, VC:*vc1, PageNr:0})
+	assert.Contains(t, result, TM_Message{From: tm.procId, To: byte(2), Type: DIFF_REQUEST, VC: *vc1, PageNr: 0})
 	result = tm.GenerateDiffRequests(1)
 	assert.Len(t, result, 1)
-	assert.Contains(t, result, TM_Message{From: tm.procId, To: byte(0), Type:DIFF_REQUEST, VC:*vc2, PageNr:1})
+	assert.Contains(t, result, TM_Message{From: tm.procId, To: byte(0), Type: DIFF_REQUEST, VC: *vc2, PageNr: 1})
 	result = tm.GenerateDiffRequests(2)
 	assert.Len(t, result, 1)
-	assert.Contains(t, result, TM_Message{From: tm.procId, To: byte(0), Type:DIFF_REQUEST, VC:*vc3, PageNr:2})
+	assert.Contains(t, result, TM_Message{From: tm.procId, To: byte(0), Type: DIFF_REQUEST, VC: *vc3, PageNr: 2})
 
 	result = tm.GenerateDiffRequests(3)
-	assert.Contains(t, result, TM_Message{From: tm.procId, To: byte(2), Type:DIFF_REQUEST, VC:*vc3, PageNr:3})
-	assert.Contains(t, result, TM_Message{From: tm.procId, To: byte(1), Type:DIFF_REQUEST, VC:*vc2, PageNr:3})
-	assert.Contains(t, result, TM_Message{From: tm.procId, To: byte(0), Type:DIFF_REQUEST, VC:*vc1, PageNr:3})
+	assert.Contains(t, result, TM_Message{From: tm.procId, To: byte(2), Type: DIFF_REQUEST, VC: *vc3, PageNr: 3})
+	assert.Contains(t, result, TM_Message{From: tm.procId, To: byte(1), Type: DIFF_REQUEST, VC: *vc2, PageNr: 3})
+	assert.Contains(t, result, TM_Message{From: tm.procId, To: byte(0), Type: DIFF_REQUEST, VC: *vc1, PageNr: 3})
 	assert.Len(t, result, 3)
 
 	//Then we make another interval record with matching write notice records.
@@ -175,14 +177,117 @@ func TestTreadMarks_GenerateDiffRequest(t *testing.T){
 	wr4_2.Interval = ir4
 	tm.TM_IDataStructures.PrependIntervalRecord(byte(1), ir4)
 	result = tm.GenerateDiffRequests(3)
-	assert.Contains(t, result, TM_Message{From: tm.procId, To: byte(2), Type:DIFF_REQUEST, VC:*vc3, PageNr:3})
+	assert.Contains(t, result, TM_Message{From: tm.procId, To: byte(2), Type: DIFF_REQUEST, VC: *vc3, PageNr: 3})
 	assert.Len(t, result, 1)
 
 	wr3_2.Diff = new(Diff)
 
 	result = tm.GenerateDiffRequests(3)
-	assert.Contains(t, result, TM_Message{From: tm.procId, To: byte(2), Type:DIFF_REQUEST, VC:*vc4, PageNr:3})
+	assert.Contains(t, result, TM_Message{From: tm.procId, To: byte(2), Type: DIFF_REQUEST, VC: *vc4, PageNr: 3})
 	assert.Len(t, result, 1)
+}
+
+func TestApplyingIntervalsToDataStructure(t *testing.T) {
+	tm := NewTreadMarks(memory.NewVmem(128, 8), 4, 1, 1)
+	tm.procId = byte(2) //this host id
+	msg := TM_Message{
+		//test non-overlapping intervals
+		//newest interval first when from same process
+		Intervals: []Interval{
+			{
+				Vt:           Vectorclock{[]uint{1, 0, 0, 0}},
+				Proc:         byte(0),
+				WriteNotices: []WriteNotice{{1}, {2}, {3}},
+			},
+			{
+				Vt:           Vectorclock{[]uint{1, 2, 0, 0}},
+				Proc:         byte(1),
+				WriteNotices: []WriteNotice{{1}, {3}, {4}},
+			},
+			{
+				Vt:           Vectorclock{[]uint{0, 1, 0, 0}},
+				Proc:         byte(1),
+				WriteNotices: []WriteNotice{{1}, {5}, {6}},
+			},
+		},
+	}
+	tm.incorporateIntervalsIntoDatastructures(&msg)
+	assert.Equal(t, Vectorclock{[]uint{1, 0, 0, 0}}, tm.GetIntervalRecordHead(0).Timestamp)
+	assert.Equal(t, Vectorclock{[]uint{1, 2, 0, 0}}, tm.GetIntervalRecordHead(1).Timestamp)
+	assert.Equal(t, Vectorclock{[]uint{0, 1, 0, 0}}, tm.GetIntervalRecordHead(1).NextIr.Timestamp)
+
+	assert.Equal(t, tm.GetIntervalRecordHead(0).WriteNotices[0], tm.GetWriteNoticeListHead(1, 0))
+	assert.Equal(t, tm.GetIntervalRecordHead(0).WriteNotices[1], tm.GetWriteNoticeListHead(2, 0))
+	assert.Equal(t, tm.GetIntervalRecordHead(0).WriteNotices[2], tm.GetWriteNoticeListHead(3, 0))
+
+	assert.Equal(t, tm.GetIntervalRecordHead(1).WriteNotices[0], tm.GetWriteNoticeListHead(1, 1))
+	assert.Equal(t, tm.GetIntervalRecordHead(1).WriteNotices[1], tm.GetWriteNoticeListHead(3, 1))
+
+	assert.Equal(t, tm.GetIntervalRecordHead(1).NextIr.WriteNotices[0], tm.GetWriteNoticeListHead(1, 1).NextRecord)
+
+}
+
+func TestShouldRequestCopyIfNoCopy(t *testing.T) {
+	tm := NewTreadMarks(memory.NewVmem(128, 8), 4, 1, 1)
+	tm.procId = byte(2)
+	cm := NewClientMock()
+	tm.IClient = cm
+	tm.Connect("")
+	tm.Read(50)
+
+	assert.Len(t, cm.messages, 1)
+	assert.Equal(t, COPY_REQUEST, cm.messages[0].Type)
+	assert.Equal(t, 50/8, cm.messages[0].PageNr)
+}
+
+func TestShouldSendCopyOnRequest(t *testing.T) {
+	tm := NewTreadMarks(memory.NewVmem(128, 8), 4, 1, 1)
+	tm.procId = byte(2)
+	f, err := tm.Startup("")
+	assert.NotNil(t, err)
+	cm := NewClientMock()
+	tm.IClient = cm
+	cm.handler = func(msg TM_Message) {
+		f(msg)
+	}
+	tm.Connect("")
+
+	cm.handler(TM_Message{Type: COPY_REQUEST, From: byte(1), To: byte(2), PageNr: 5})
+	assert.Len(t, cm.messages, 1)
+
+}
+
+type ClientMock struct {
+	messages []TM_Message
+	handler  func(msg TM_Message)
+}
+
+func (c *ClientMock) Send(message network.Message) error {
+	msg := message.(TM_Message)
+	c.messages = append(c.messages, msg)
+	go func() {
+		time.Sleep(time.Millisecond * 100)
+		*msg.Event <- "ok"
+	}()
+	return nil
+}
+
+func (c *ClientMock) GetTransciever() network.ITransciever {
+	panic("implement me")
+}
+
+func (c *ClientMock) Connect(address string) error {
+	return nil
+}
+
+func (c *ClientMock) Close() {
+}
+
+func NewClientMock() *ClientMock {
+	cMock := new(ClientMock)
+	cMock.messages = make([]TM_Message, 0)
+
+	return cMock
 }
 
 func SetupHandleDiffRequest() *TreadMarks{
