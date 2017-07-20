@@ -4,7 +4,11 @@ import (
 	"DSM-project/memory"
 	"DSM-project/network"
 	"errors"
+	"fmt"
 )
+
+//TODO remove when done. Is only there to make the compiler shut up.
+var _ = fmt.Print
 
 const (
 	LOCK_ACQUIRE_REQUEST  = "l_acq_req"
@@ -35,9 +39,9 @@ type TM_Message struct {
 	From      byte
 	To        byte
 	Type      string
-	Diffs     []Diff
+	Diffs     []Pair
 	Id        int
-	PageNr		int
+	PageNr	  int
 	VC        Vectorclock
 	Intervals []Interval
 	Event     *chan string
@@ -237,7 +241,7 @@ func (t *TreadMarks) GenerateDiffRequests(pageNr int) []TM_Message{
 		}
 	}
 	// After that we remove the ones, that is overshadowed by others.
-	for proc1,int1 := range intrec{
+	for proc,int1 := range intrec{
 		if int1 == nil{
 			continue
 		}
@@ -254,15 +258,35 @@ func (t *TreadMarks) GenerateDiffRequests(pageNr int) []TM_Message{
 		if overshadowed == false{
 			message := TM_Message{
 				From:t.procId,
-				To:byte(proc1),
+				To:byte(proc),
 				Type:DIFF_REQUEST,
-				VC:vc[proc1],
+				VC:vc[proc],
 				PageNr: pageNr,
 			}
 			messages = append(messages, message)
 		}
 	}
 	return messages
+}
+
+func(t *TreadMarks) HandleDiffRequest(message TM_Message) TM_Message{
+	//First we populate a list of pairs with all the relevant diffs.
+	vc := message.VC
+	pageNr := message.PageNr
+	pairs := make([]Pair, 0)
+	for proc:= byte(0); proc < byte(t.nrProcs); proc = proc + byte(1){
+
+		for wnr := t.TM_IDataStructures.GetWriteNoticeListHead(pageNr, proc) ; wnr != nil && wnr.Interval.Timestamp.Compare(&vc) != -1; wnr = wnr.NextRecord{
+			if wnr.Diff != nil{
+				pairs = append(pairs, Pair{wnr.Interval.Timestamp, wnr.Diff.Diffs})
+			}
+		}
+	}
+	message.To = message.From
+	message.From = t.procId
+	message.Diffs = pairs
+	message.Type = DIFF_RESPONSE
+	return message
 }
 
 func (t *TreadMarks) Shutdown() {
