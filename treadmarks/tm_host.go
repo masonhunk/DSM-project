@@ -180,32 +180,7 @@ func (t *TreadMarks) HandleLockAcquireRequest(msg *TM_Message) TM_Message {
 	//create new interval and make write notices for all twinned pages since last sync
 	t.updateDatastructures()
 	//find all the write notices to send
-	t.MapProcArray(
-		func(p *Pair, procNr byte) {
-			if *p != (Pair{}) && p.car != nil {
-				var iRecord *IntervalRecord = p.car.(*IntervalRecord)
-				//loop through the interval records for this process
-				for {
-					if iRecord == nil {
-						break
-					}
-					// if this record has older ts than the requester, break
-					if iRecord.Timestamp.Compare(&msg.VC) == -1 {
-						break
-					}
-					i := Interval{
-						Proc: procNr,
-						Vt:   iRecord.Timestamp,
-					}
-					for _, wn := range iRecord.WriteNotices {
-						i.WriteNotices = append(i.WriteNotices, wn.WriteNotice)
-					}
-					msg.Intervals = append(msg.Intervals, i)
-
-					iRecord = iRecord.NextIr
-				}
-			}
-		})
+	msg.Intervals = t.GetAllUnseenIntervals(msg.VC)
 	msg.From, msg.To = msg.To, msg.From
 	msg.Type = LOCK_ACQUIRE_RESPONSE
 	msg.VC = t.vc

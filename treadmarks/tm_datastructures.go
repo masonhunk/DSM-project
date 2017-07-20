@@ -24,6 +24,8 @@ type TM_IDataStructures interface {
 	MapWriteNotices(f func(wn *WriteNoticeRecord), pageNr int, procNr byte)
 	MapIntervalRecords(f func(ir *IntervalRecord), procNr byte)
 	MapProcArray(f func(p *Pair, procNr byte))
+	GetAllUnseenIntervals(ts Vectorclock) []Interval
+	GetUnseenIntervalsAtProc(ts Vectorclock, procNr byte) []Interval
 }
 
 type DiffPool []Diff
