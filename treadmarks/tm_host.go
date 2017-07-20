@@ -4,7 +4,6 @@ import (
 	"DSM-project/memory"
 	"DSM-project/network"
 	"errors"
-	"fmt"
 )
 
 const (
@@ -95,10 +94,11 @@ func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarri
 				tm.SetPageEntry(pageNr, *NewPageArrayEntry())
 				tm.sendCopyRequest(pageNr, tm.procId)
 			}
+			//TODO: get and apply diffs before continuing
 			tm.SetRights(addr, memory.READ_WRITE)
 		case "WRITE":
 			pageNr := tm.GetPageAddr(addr) / tm.GetPageSize()
-			//if no copy, get one. Else, create twin
+			//if no copy, get one. Else create twin
 			if entry := tm.GetPageEntry(pageNr); entry.CopySet == nil && entry.ProcArr == nil {
 				tm.SetPageEntry(pageNr, *NewPageArrayEntry())
 				tm.sendCopyRequest(pageNr, tm.procId)
@@ -106,9 +106,10 @@ func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarri
 				//create a twin
 				val := tm.PrivilegedRead(tm.GetPageAddr(addr), tm.GetPageSize())
 				tm.twinMap[pageNr] = val
-				tm.PrivilegedWrite(addr, []byte{value})
 			}
+			//TODO: get and apply diffs before continuing
 			tm.SetRights(addr, memory.READ_WRITE)
+			tm.PrivilegedWrite(addr, []byte{value})
 		}
 	})
 	return &tm
