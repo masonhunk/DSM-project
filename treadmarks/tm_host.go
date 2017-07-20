@@ -4,6 +4,7 @@ import (
 	"DSM-project/memory"
 	"DSM-project/network"
 	"errors"
+	"fmt"
 )
 
 const (
@@ -19,11 +20,13 @@ const (
 	MALLOC_REPLY          = "mal_repl"
 	FREE_REPLY            = "free_repl"
 	WELCOME_MESSAGE       = "WELC"
+	COPY_REQUEST          = "copy_req"
+	COPY_RESPONSE         = "copy_resp"
 )
 
 type ITreadMarks interface {
 	memory.VirtualMemory
-	Startup() error
+	Startup() (func(msg network.Message) error, error)
 	Shutdown(address string)
 	AcquireLock(id int)
 	ReleaseLock(id int)
@@ -40,6 +43,7 @@ type TM_Message struct {
 	VC        Vectorclock
 	Intervals []Interval
 	Event     *chan string
+	Data      []byte
 }
 
 func (m TM_Message) GetFrom() byte {
@@ -62,7 +66,7 @@ type TreadMarks struct {
 	nrBarriers           int
 	TM_IDataStructures
 	vc      Vectorclock
-	copyMap map[int][]byte //contains twins since last sync.
+	twinMap map[int][]byte //contains twins since last sync.
 	network.IClient
 }
 
@@ -74,7 +78,7 @@ func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarri
 		VirtualMemory:      virtualMemory,
 		TM_IDataStructures: &TM_DataStructures{diffPool, procArray, pageArray},
 		vc:                 Vectorclock{make([]uint, nrProcs)},
-		copyMap:            make(map[int][]byte),
+		twinMap:            make(map[int][]byte),
 		nrProcs:            nrProcs,
 		nrLocks:            nrLocks,
 		nrBarriers:         nrBarriers,
@@ -84,20 +88,33 @@ func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarri
 		//c := make(chan string)
 		//do fancy protocol stuff here
 		switch accessType {
-		case "WRITE":
-			//create a copy
+		case "READ":
+			pageNr := tm.GetPageAddr(addr) / tm.GetPageSize()
+			//if no copy, get one. Else, create twin
+			if entry := tm.GetPageEntry(pageNr); entry.CopySet == nil && entry.ProcArr == nil {
+				tm.SetPageEntry(pageNr, *NewPageArrayEntry())
+				tm.sendCopyRequest(pageNr, tm.procId)
+			}
 			tm.SetRights(addr, memory.READ_WRITE)
-			val, err := tm.ReadBytes(tm.GetPageAddr(addr), tm.GetPageSize())
-			panicOnErr(err)
-			tm.copyMap[tm.GetPageAddr(addr)/tm.GetPageSize()] = val
-			err = tm.Write(addr, value)
-			panicOnErr(err)
+		case "WRITE":
+			pageNr := tm.GetPageAddr(addr) / tm.GetPageSize()
+			//if no copy, get one. Else, create twin
+			if entry := tm.GetPageEntry(pageNr); entry.CopySet == nil && entry.ProcArr == nil {
+				tm.SetPageEntry(pageNr, *NewPageArrayEntry())
+				tm.sendCopyRequest(pageNr, tm.procId)
+			} else {
+				//create a twin
+				val := tm.PrivilegedRead(tm.GetPageAddr(addr), tm.GetPageSize())
+				tm.twinMap[pageNr] = val
+				tm.PrivilegedWrite(addr, []byte{value})
+			}
+			tm.SetRights(addr, memory.READ_WRITE)
 		}
 	})
 	return &tm
 }
 
-func (t *TreadMarks) Startup(address string) error {
+func (t *TreadMarks) Startup(address string) (func(msg network.Message) error, error) {
 	c := make(chan bool)
 
 	msgHandler := func(message network.Message) error {
@@ -118,9 +135,23 @@ func (t *TreadMarks) Startup(address string) error {
 		case BARRIER_RESPONSE:
 			*msg.Event <- "continue"
 		case DIFF_REQUEST:
-
+			//remember to create own diff and set read protection on page(s)
 		case DIFF_RESPONSE:
 
+		case COPY_REQUEST:
+			//if we have a twin, send that. Else just send the current contents of page
+			if pg, ok := t.twinMap[msg.PageNr]; ok {
+				msg.Data = pg
+			} else {
+				t.PrivilegedRead(msg.PageNr*t.GetPageSize(), t.GetPageSize())
+				msg.Data = pg
+			}
+			msg.From, msg.To = msg.To, msg.From
+			err := t.Send(msg)
+			panicOnErr(err)
+		case COPY_RESPONSE:
+			t.PrivilegedWrite(msg.PageNr*t.GetPageSize(), msg.Data)
+			*msg.Event <- "continue"
 		default:
 			return errors.New("unrecognized message type value: " + msg.Type)
 		}
@@ -129,15 +160,16 @@ func (t *TreadMarks) Startup(address string) error {
 	client := network.NewClient(msgHandler)
 	t.IClient = client
 	if err := t.Connect(address); err != nil {
-		return err
+		return msgHandler, err
 	}
 	<-c
-	return nil
+	return msgHandler, nil
 }
 
 func (t *TreadMarks) HandleLockAcquireResponse(message *TM_Message) {
 	//Here we need to add the incoming intervals to the correct write notices.
 	t.incorporateIntervalsIntoDatastructures(message)
+	t.vc = *t.vc.Merge(&message.VC)
 }
 
 func (t *TreadMarks) HandleLockAcquireRequest(msg *TM_Message) TM_Message {
@@ -184,9 +216,8 @@ func (t *TreadMarks) updateDatastructures() {
 		Timestamp:    t.vc,
 		WriteNotices: make([]*WriteNoticeRecord, 0),
 	}
-	//add interval record to front of linked list in procArray
 
-	for key := range t.copyMap {
+	for key := range t.twinMap {
 		//if entry doesn't exist yet, initialize it
 		entry := t.GetPageEntry(int(key))
 		if entry.ProcArr == nil && entry.CopySet == nil {
@@ -196,6 +227,7 @@ func (t *TreadMarks) updateDatastructures() {
 					ProcArr: make(map[byte]*WriteNoticeRecord),
 				})
 		}
+		//add interval record to front of linked list in procArray
 		wn := t.PrependWriteNotice(t.procId, WriteNotice{pageNr: int(key)})
 		wn.Interval = &interval
 		wn.WriteNotice = WriteNotice{int(key)}
@@ -211,7 +243,7 @@ func (t *TreadMarks) updateDatastructures() {
 
 func (t *TreadMarks) GenerateDiffRequests(pageNr int) []TM_Message {
 	//First we check if we have the page already or need to request a copy.
-	if t.copyMap[pageNr] == nil {
+	if t.twinMap[pageNr] == nil {
 		//TODO We dont have a copy, so we need to request a new copy of the page.
 	}
 	messages := make([]TM_Message, 0)
@@ -295,7 +327,7 @@ func (t *TreadMarks) ReleaseLock(id int) {
 	panicOnErr(err)
 }
 
-func (t *TreadMarks) barrier(id int) {
+func (t *TreadMarks) Barrier(id int) {
 	c := make(chan string)
 	msg := TM_Message{
 		Type:  BARRIER_REQUEST,
@@ -326,14 +358,28 @@ func (t *TreadMarks) incorporateIntervalsIntoDatastructures(msg *TM_Message) {
 			if myWn := t.GetWriteNoticeListHead(wn.pageNr, t.procId); myWn != nil && myWn.Diff == nil {
 				pageVal, err := t.ReadBytes(wn.pageNr*t.GetPageSize(), t.GetPageSize())
 				panicOnErr(err)
-				diff := CreateDiff(t.copyMap[wn.pageNr], pageVal)
-				t.copyMap[wn.pageNr] = nil
+				diff := CreateDiff(t.twinMap[wn.pageNr], pageVal)
+				t.twinMap[wn.pageNr] = nil
 				myWn.Diff = &diff
 			}
 			//finally invalidate the page
 			t.SetRights(wn.pageNr*t.GetPageSize(), memory.NO_ACCESS)
 		}
 	}
+}
+
+func (t *TreadMarks) sendCopyRequest(pageNr int, procNr byte) {
+	c := make(chan string)
+	msg := TM_Message{
+		Type:   COPY_REQUEST,
+		To:     procNr,
+		From:   t.procId,
+		Event:  &c,
+		PageNr: pageNr,
+	}
+	err := t.Send(msg)
+	panicOnErr(err)
+	<-c
 }
 
 func panicOnErr(err error) {

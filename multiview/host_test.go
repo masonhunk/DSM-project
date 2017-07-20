@@ -119,30 +119,30 @@ func TestHostMem_WriteAndRead(t *testing.T) {
 
 }
 
-type clientMock struct {
+type ClientMock struct {
 	messages []network.MultiviewMessage
 	handler  func(msg network.MultiviewMessage)
 }
 
-func (c *clientMock) Send(message network.Message) error {
+func (c *ClientMock) Send(message network.Message) error {
 	msg := message.(network.MultiviewMessage)
 	c.messages = append(c.messages, msg)
 	return nil
 }
 
-func (c *clientMock) GetTransciever() network.ITransciever {
+func (c *ClientMock) GetTransciever() network.ITransciever {
 	panic("implement me")
 }
 
-func (c *clientMock) Connect(address string) error {
+func (c *ClientMock) Connect(address string) error {
 	return nil
 }
 
-func (c *clientMock) Close() {
+func (c *ClientMock) Close() {
 }
 
-func NewClientMock() *clientMock {
-	cMock := new(clientMock)
+func NewClientMock() *ClientMock {
+	cMock := new(ClientMock)
 	cMock.messages = make([]network.MultiviewMessage, 0)
 
 	return cMock

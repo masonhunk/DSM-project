@@ -46,7 +46,11 @@ func (d *TM_DataStructures) SetPageEntry(pageNr int, p PageArrayEntry) {
 }
 
 func (d *TM_DataStructures) GetPageEntry(pageNr int) PageArrayEntry {
-	return d.pageArray[pageNr]
+	res, ok := d.pageArray[pageNr]
+	if !ok {
+		return PageArrayEntry{}
+	}
+	return res
 }
 
 func (d *TM_DataStructures) PrependEmptyWriteNotice(pageNr int, procId byte) *WriteNoticeRecord {
@@ -148,7 +152,7 @@ type Diff struct {
 }
 
 func NewPageArrayEntry() *PageArrayEntry {
-	return &PageArrayEntry{[]int{}, make(map[byte]*WriteNoticeRecord)}
+	return &PageArrayEntry{[]int{0}, make(map[byte]*WriteNoticeRecord)}
 }
 
 func (p *PageArrayEntry) PrependWriteNotice(procId byte) *WriteNoticeRecord {

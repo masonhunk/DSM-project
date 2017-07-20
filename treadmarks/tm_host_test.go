@@ -2,8 +2,10 @@ package treadmarks
 
 import (
 	"DSM-project/memory"
+	"DSM-project/network"
 	"github.com/stretchr/testify/assert"
 	"testing"
+	"time"
 )
 
 func TestCreateDiff(t *testing.T) {
@@ -16,8 +18,8 @@ func TestUpdateDatastructures(t *testing.T) {
 	vm := memory.NewVmem(128, 8)
 	tm := NewTreadMarks(vm, 1, 1, 1)
 	tm.procId = 3
-	tm.copyMap[0] = []byte{4, 4, 4, 4, 4, 4, 4, 4}
-	tm.copyMap[1] = []byte{1, 1, 1, 1, 1, 1, 1, 1}
+	tm.twinMap[0] = []byte{4, 4, 4, 4, 4, 4, 4, 4}
+	tm.twinMap[1] = []byte{1, 1, 1, 1, 1, 1, 1, 1}
 	procArray := make(ProcArray, 4)
 	tm.TM_IDataStructures = &TM_DataStructures{procArray: procArray, pageArray: make(PageArray)}
 	tm.updateDatastructures()
@@ -220,4 +222,67 @@ func TestApplyingIntervalsToDataStructure(t *testing.T) {
 
 	assert.Equal(t, tm.GetIntervalRecordHead(1).NextIr.WriteNotices[0], tm.GetWriteNoticeListHead(1, 1).NextRecord)
 
+}
+
+func TestShouldRequestCopyIfNoCopy(t *testing.T) {
+	tm := NewTreadMarks(memory.NewVmem(128, 8), 4, 1, 1)
+	tm.procId = byte(2)
+	cm := NewClientMock()
+	tm.IClient = cm
+	tm.Connect("")
+	tm.Read(50)
+
+	assert.Len(t, cm.messages, 1)
+	assert.Equal(t, COPY_REQUEST, cm.messages[0].Type)
+	assert.Equal(t, 50/8, cm.messages[0].PageNr)
+}
+
+func TestShouldSendCopyOnRequest(t *testing.T) {
+	tm := NewTreadMarks(memory.NewVmem(128, 8), 4, 1, 1)
+	tm.procId = byte(2)
+	f, err := tm.Startup("")
+	assert.NotNil(t, err)
+	cm := NewClientMock()
+	tm.IClient = cm
+	cm.handler = func(msg TM_Message) {
+		f(msg)
+	}
+	tm.Connect("")
+
+	cm.handler(TM_Message{Type: COPY_REQUEST, From: byte(1), To: byte(2), PageNr: 5})
+	assert.Len(t, cm.messages, 1)
+
+}
+
+type ClientMock struct {
+	messages []TM_Message
+	handler  func(msg TM_Message)
+}
+
+func (c *ClientMock) Send(message network.Message) error {
+	msg := message.(TM_Message)
+	c.messages = append(c.messages, msg)
+	go func() {
+		time.Sleep(time.Millisecond * 100)
+		*msg.Event <- "ok"
+	}()
+	return nil
+}
+
+func (c *ClientMock) GetTransciever() network.ITransciever {
+	panic("implement me")
+}
+
+func (c *ClientMock) Connect(address string) error {
+	return nil
+}
+
+func (c *ClientMock) Close() {
+}
+
+func NewClientMock() *ClientMock {
+	cMock := new(ClientMock)
+	cMock.messages = make([]TM_Message, 0)
+
+	return cMock
 }
