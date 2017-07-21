@@ -42,6 +42,7 @@ func TestUpdateDatastructures(t *testing.T) {
 
 	assert.True(t, headWNRecord1 == headIntervalRecord.WriteNotices[1])
 }
+
 /*
 func TestPreprendInterval(t *testing.T) {
 	p := Pair{nil, nil}
@@ -108,12 +109,12 @@ func TestTreadMarks_handleLockAcquireRequest(t *testing.T) {
 	assert.Equal(t, int2, response.Intervals[1])
 	assert.Equal(t, int1, response.Intervals[0])
 
-
 	msg.VC = *vc1
 	response = tm.HandleLockAcquireRequest(msg)
 	assert.Equal(t, int1, response.Intervals[0],
 		"We should only recieve intervals later than our timestamp.")
 }
+
 /*
 func TestTreadMarks_GenerateDiffRequest(t *testing.T) {
 	vm := memory.NewVmem(128, 8)
@@ -220,15 +221,12 @@ func TestApplyingIntervalsToDataStructure(t *testing.T) {
 	assert.Equal(t, Vectorclock{[]uint{1, 2, 0, 0}}, tm.GetIntervalRecordHead(1).Timestamp)
 	assert.Equal(t, Vectorclock{[]uint{0, 1, 0, 0}}, tm.GetIntervalRecord(byte(1), 1).Timestamp)
 
-
 	assert.Equal(t, tm.GetIntervalRecordHead(0).WriteNotices[0], tm.GetWriteNoticeListHead(1, 0))
 	assert.Equal(t, tm.GetIntervalRecordHead(0).WriteNotices[1], tm.GetWriteNoticeListHead(2, 0))
 	assert.Equal(t, tm.GetIntervalRecordHead(0).WriteNotices[2], tm.GetWriteNoticeListHead(3, 0))
 
 	assert.Equal(t, tm.GetIntervalRecordHead(1).WriteNotices[0], tm.GetWriteNoticeListHead(1, 1))
 	assert.Equal(t, tm.GetIntervalRecordHead(1).WriteNotices[1], tm.GetWriteNoticeListHead(3, 1))
-
-
 
 	//assert.Equal(t, *tm.GetIntervalRecord(1, 1).WriteNotices[0], tm.GetWritenotices(1, 1)[1])
 
@@ -427,6 +425,34 @@ func TestTreadMarks_HandleDiffRequest_DiffVCBeforeRequestVC_case2(t *testing.T) 
 }
 
 func TestTreadMarks_Barrier(t *testing.T) {
-	tm := SetupHandleDiffRequest()
+	tm := SetupHandleDiffRequest() //we have procId = 1, manager = 0
+	cm := NewClientMock()
+	tm.IClient = cm
 
+	//intervals from this process has same timestamp (0,3,0) as manager (0,3,0). expect no unseen intervals
+	tm.vc = *NewVectorclock(3)
+	tm.vc.SetTick(tm.procId, 2)
+	tm.Barrier(3)
+	msg := cm.messages[0]
+	testvc := *NewVectorclock(3)
+	testvc.SetTick(byte(1), 2)
+	assert.Equal(t, testvc, msg.VC)
+	assert.Equal(t, byte(1), msg.From)
+	assert.Len(t, msg.Intervals, 0)
+
+	//set latest manager timestamp to older than intervals from this process. Expect unseen intervals
+	vc := NewVectorclock(3)
+	vc.SetTick(byte(0), 2)
+	tm.GetIntervalRecordHead(byte(0)).Timestamp = *vc
+	fmt.Println(tm.GetIntervalRecordHead(byte(0)).Timestamp)
+	tm.Barrier(2)
+	fmt.Println(cm.messages)
+	msg = cm.messages[1]
+	assert.Equal(t, BARRIER_REQUEST, msg.Type)
+	assert.Equal(t, byte(0), msg.To)
+	assert.Equal(t, tm.procId, msg.From)
+	assert.Equal(t, 2, msg.Id)
+	assert.Len(t, msg.Intervals, 0)
+
+	//now
 }

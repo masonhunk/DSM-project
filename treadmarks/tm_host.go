@@ -203,7 +203,7 @@ func (t *TreadMarks) updateDatastructures() {
 		if entry.WriteNoticeRecordArray == nil && entry.CopySet == nil {
 			t.SetPageEntry(int(key),
 				&PageArrayEntry{
-					CopySet: []int{},
+					CopySet:                []int{},
 					WriteNoticeRecordArray: make(map[byte][]WriteNoticeRecord),
 				})
 		}
@@ -238,8 +238,8 @@ func (t *TreadMarks) GenerateDiffRequests(pageNr int) []TM_Message {
 		if wnr != nil && wnr.Diff == nil {
 			intrec[int(proc)] = wnr.Interval
 			wnrs := t.GetWritenotices(proc, pageNr)
-			for i := 0; i < len(wnrs); i++{
-				if wnrs[i].Diff == nil{
+			for i := 0; i < len(wnrs); i++ {
+				if wnrs[i].Diff == nil {
 					break
 				}
 				vc[int(proc)] = wnrs[i].Interval.Timestamp
@@ -282,11 +282,11 @@ func (t *TreadMarks) HandleDiffRequest(message TM_Message) TM_Message {
 	pairs := make([]Pair, 0)
 	for proc := byte(0); proc < byte(t.nrProcs); proc = proc + byte(1) {
 
-		for _, wnr := range t.GetWritenotices(proc, pageNr){
-			if wnr.Diff != nil{
+		for _, wnr := range t.GetWritenotices(proc, pageNr) {
+			if wnr.Diff != nil {
 				pairs = append(pairs, Pair{wnr.Interval.Timestamp, wnr.Diff.Diffs})
 			}
-			if wnr.Interval.Timestamp.Compare(&vc) < 0{
+			if wnr.Interval.Timestamp.Compare(&vc) < 0 {
 				break
 			}
 		}
@@ -334,14 +334,15 @@ func (t *TreadMarks) Barrier(id int) {
 	c := make(chan string)
 	//last known timestamp from manager that this host has seen
 	managerTs := t.GetIntervalRecordHead(byte(0)).Timestamp
-	/*if managerTs.Compare(NewVectorclock(t.nrProcs)) == 0 {
-	}*/
 	if &managerTs == nil {
 		managerTs = *NewVectorclock(t.nrProcs)
 	}
+	/*if managerTs.Compare(NewVectorclock(t.nrProcs)) == 0 {
+	}*/
+	fmt.Println("Manager timestamp:", managerTs)
 	msg := TM_Message{
 		Type:      BARRIER_REQUEST,
-		To:        1,
+		To:        0,
 		From:      t.procId,
 		Diffs:     nil,
 		VC:        t.vc,
@@ -359,7 +360,7 @@ func (t *TreadMarks) incorporateIntervalsIntoDatastructures(msg *TM_Message) {
 	for i := len(msg.Intervals) - 1; i >= 0; i-- {
 		interval := msg.Intervals[i]
 		ir := &IntervalRecord{
-			Timestamp: interval.Vt,
+			Timestamp:    interval.Vt,
 			WriteNotices: []*WriteNoticeRecord{},
 		}
 		for _, wn := range interval.WriteNotices {
@@ -379,7 +380,7 @@ func (t *TreadMarks) incorporateIntervalsIntoDatastructures(msg *TM_Message) {
 			t.SetRights(wn.pageNr*t.GetPageSize(), memory.NO_ACCESS)
 		}
 		fmt.Println(ir)
-		if len(ir.WriteNotices) > 0{
+		if len(ir.WriteNotices) > 0 {
 			t.PrependIntervalRecord(interval.Proc, ir)
 		}
 
