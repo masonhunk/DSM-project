@@ -2,6 +2,7 @@ package treadmarks
 
 import (
 	"DSM-project/memory"
+	"fmt"
 	"sync"
 )
 
@@ -17,9 +18,7 @@ type TM_IDataStructures interface {
 	ProcArrayInterface
 }
 
-
-
-type PageArrayInterface interface{
+type PageArrayInterface interface {
 	SetPageEntry(pageNr int, p *PageArrayEntry)
 	GetPageEntry(pageNr int) *PageArrayEntry
 	GetWritenotices(procNr byte, pageNr int) []WriteNoticeRecord
@@ -30,11 +29,11 @@ type PageArrayInterface interface{
 	GetWriteNoticeListHead(pageNr int, procNr byte) *WriteNoticeRecord
 }
 
-type PageArrayEntryInterface interface{
+type PageArrayEntryInterface interface {
 	PrependWriteNotice(procId byte) *WriteNoticeRecord
 }
 
-type ProcArrayInterface interface{
+type ProcArrayInterface interface {
 	GetIntervalRecordHead(procNr byte) *IntervalRecord
 	GetIntervalRecordTail(procNr byte) *IntervalRecord
 	PrependIntervalRecord(procNr byte, ir *IntervalRecord)
@@ -44,14 +43,11 @@ type ProcArrayInterface interface{
 	MapIntervalRecords(f func(ir *IntervalRecord), procNr byte)
 }
 
-
 type TM_DataStructures struct {
 	*sync.RWMutex
 	ProcArray
 	PageArray
 }
-
-
 
 type IntervalRecord struct {
 	Timestamp    Vectorclock
@@ -59,7 +55,7 @@ type IntervalRecord struct {
 }
 
 type WriteNoticeRecord struct {
-	id int8
+	id          int8
 	WriteNotice WriteNotice
 	Interval    *IntervalRecord
 	Diff        *Diff
@@ -78,7 +74,6 @@ type Diff struct {
 	Diffs []Pair
 }
 
-
 //Everything that concerns ProcArray
 type ProcArray map[byte][]IntervalRecord
 
@@ -92,9 +87,10 @@ func (p ProcArray) GetAllUnseenIntervals(ts Vectorclock) []Interval {
 
 func (p ProcArray) GetUnseenIntervalsAtProc(ts Vectorclock, procNr byte) []Interval {
 	result := []Interval{}
-	for _, iRecord := range p[procNr]{
+	for _, iRecord := range p[procNr] {
 		// if this record has older ts than the requester, break
-		if iRecord.Timestamp.Compare(ts) == -1 {
+		fmt.Println("comparing", iRecord.Timestamp, "to", ts, "with result", iRecord.Timestamp.Compare(&ts))
+		if iRecord.Timestamp.Compare(&ts) <= 0 {
 			break
 		}
 		i := Interval{
@@ -117,10 +113,10 @@ func (p ProcArray) GetIntervalRecordHead(procNr byte) *IntervalRecord {
 	return p.GetIntervalRecord(procNr, 0)
 }
 
-func (p ProcArray) GetIntervalRecord(procNr byte, i int) *IntervalRecord{
-	if _, ok:=p[procNr]; !ok{
+func (p ProcArray) GetIntervalRecord(procNr byte, i int) *IntervalRecord {
+	if _, ok := p[procNr]; !ok {
 		return nil
-	} else if i >=len(p[procNr]){
+	} else if i >= len(p[procNr]) {
 		return nil
 	}
 	return &p[procNr][i]
@@ -136,11 +132,9 @@ func (p ProcArray) GetIntervalRecordTail(procNr byte) *IntervalRecord {
 	return &p[procNr][len(p[procNr])-1]
 }
 
-
-
 //Everything that concerns page entries
 type PageArrayEntry struct {
-	CopySet []int
+	CopySet                []int
 	WriteNoticeRecordArray map[byte][]WriteNoticeRecord
 }
 
@@ -149,7 +143,7 @@ func NewPageArrayEntry() *PageArrayEntry {
 }
 
 func (pe *PageArrayEntry) PrependWriteNoticeOnPageArrayEntry(procId byte) *WriteNoticeRecord {
-	if pe.WriteNoticeRecordArray == nil{
+	if pe.WriteNoticeRecordArray == nil {
 		pe.WriteNoticeRecordArray = make(map[byte][]WriteNoticeRecord)
 	}
 	wnr := new(WriteNoticeRecord)
@@ -157,13 +151,8 @@ func (pe *PageArrayEntry) PrependWriteNoticeOnPageArrayEntry(procId byte) *Write
 	return &pe.WriteNoticeRecordArray[procId][0]
 }
 
-
-
-
-
 //Everything that concerns page arrays
 type PageArray map[int]*PageArrayEntry
-
 
 func (p PageArray) SetPageEntry(pageNr int, pe *PageArrayEntry) {
 	p[pageNr] = pe
@@ -176,7 +165,7 @@ func (p PageArray) GetPageEntry(pageNr int) *PageArrayEntry {
 	return p[pageNr]
 }
 
-func (p PageArray) GetWritenotices(procNr byte, pageNr int) []WriteNoticeRecord{
+func (p PageArray) GetWritenotices(procNr byte, pageNr int) []WriteNoticeRecord {
 	return p[pageNr].WriteNoticeRecordArray[procNr]
 }
 
@@ -188,7 +177,7 @@ func (p PageArray) PrependWriteNotice(procId byte, wn WriteNotice) *WriteNoticeR
 
 func (p PageArray) MapWriteNotices(f func(wn *WriteNoticeRecord), pageNr int, procNr byte) {
 	wns := p.GetPageEntry(pageNr).WriteNoticeRecordArray[procNr]
-	for i := 0; i < len(wns); i++{
+	for i := 0; i < len(wns); i++ {
 		f(&wns[i])
 	}
 }
@@ -197,14 +186,13 @@ func (p PageArray) PrependEmptyWriteNotice(pageNr int, procId byte) *WriteNotice
 	return p.GetPageEntry(pageNr).PrependWriteNoticeOnPageArrayEntry(procId)
 }
 
-
 func (p PageArray) GetCopyset(pageNr int) []int {
 	return p[pageNr].CopySet
 }
 
 func (p PageArray) GetWriteNoticeListHead(pageNr int, procNr byte) *WriteNoticeRecord {
 
-	if len(p[pageNr].WriteNoticeRecordArray[procNr]) < 1{
+	if len(p[pageNr].WriteNoticeRecordArray[procNr]) < 1 {
 		return nil
 	}
 	return &p[pageNr].WriteNoticeRecordArray[procNr][0]

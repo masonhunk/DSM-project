@@ -75,21 +75,21 @@ func TestBarrierManager(t *testing.T) {
 	done := make(chan bool, 5)
 	go func() {
 		order <- 1
-		bm.HandleBarrier(1, func(){})
+		bm.HandleBarrier(1, func() {})
 		done <- true
 	}()
 	assert.Equal(t, 1, <-order, "The first go-routine must be waiting by now.")
 	assert.Equal(t, 0, len(done), "None of the go-routines can be finished yet.")
 	go func() {
 		order <- 2
-		bm.HandleBarrier(1, func(){})
+		bm.HandleBarrier(1, func() {})
 		done <- true
 	}()
 	assert.Equal(t, 2, <-order, "The second go-routine must be waiting by now.")
 	assert.Equal(t, 0, len(done), "None of the go-routines can be finished yet.")
 	go func() {
 		order <- 3
-		bm.HandleBarrier(1, func(){})
+		bm.HandleBarrier(1, func() {})
 		done <- true
 	}()
 	assert.Equal(t, 0, len(done), "None of the go-routines can be finished yet.")
