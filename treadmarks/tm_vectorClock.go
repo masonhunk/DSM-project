@@ -37,10 +37,11 @@ func (v *Vectorclock) Increment(id byte){
 	v.value[id] = v.value[id]+1
 }
 
+//Returns true of v is before o causally.
 func (v *Vectorclock) IsBefore(o Vectorclock) bool{
 	return v.Compare(o) == -1
 }
-
+//Returns true if v is after o causally.
 func (v *Vectorclock) IsAfter(o Vectorclock) bool{
 	return v.Compare(o) == 1
 }
