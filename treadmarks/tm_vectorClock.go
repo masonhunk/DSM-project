@@ -5,7 +5,7 @@ type Vectorclock struct {
 	value []uint
 }
 
-func (v *Vectorclock) Compare(other *Vectorclock) int {
+func (v *Vectorclock) Compare(other Vectorclock) int {
 	isBefore := 0
 	isAfter := 0
 	for i := 0; i < len(v.value); i++ {
@@ -24,7 +24,7 @@ func NewVectorclock(nodes int) *Vectorclock {
 	return v
 }
 
-func (v *Vectorclock) Merge(o *Vectorclock) *Vectorclock{
+func (v *Vectorclock) Merge(o Vectorclock) *Vectorclock{
 	nv := new(Vectorclock)
 	nv.value = make([]uint, len(v.value))
 	for i := range nv.value{
@@ -35,6 +35,14 @@ func (v *Vectorclock) Merge(o *Vectorclock) *Vectorclock{
 
 func (v *Vectorclock) Increment(id byte){
 	v.value[id] = v.value[id]+1
+}
+
+func (v *Vectorclock) IsBefore(o Vectorclock) bool{
+	return v.Compare(o) == -1
+}
+
+func (v *Vectorclock) IsAfter(o Vectorclock) bool{
+	return v.Compare(o) == 1
 }
 
 func (v *Vectorclock) GetTick(id byte) uint{

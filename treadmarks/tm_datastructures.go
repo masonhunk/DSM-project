@@ -198,6 +198,9 @@ func (p PageArray) GetWriteNoticeListHead(pageNr int, procNr byte) *WriteNoticeR
 	return &p[pageNr].WriteNoticeRecordArray[procNr][0]
 }
 
+
+
+
 func CreateDiff(original, new []byte) Diff {
 	res := make([]Pair, 0)
 	for i, data := range original {
