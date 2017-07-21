@@ -176,7 +176,7 @@ func (t *TreadMarks) Startup(address string) (func(msg network.Message) error, e
 func (t *TreadMarks) HandleLockAcquireResponse(message *TM_Message) {
 	//Here we need to add the incoming intervals to the correct write notices.
 	t.incorporateIntervalsIntoDatastructures(message)
-	t.vc = *t.vc.Merge(&message.VC)
+	t.vc = *t.vc.Merge(message.VC)
 }
 
 func (t *TreadMarks) HandleLockAcquireRequest(msg *TM_Message) TM_Message {
@@ -258,7 +258,7 @@ func (t *TreadMarks) GenerateDiffRequests(pageNr int) []TM_Message {
 			if int2 == nil {
 				continue
 			}
-			if int1.Timestamp.Compare(&int2.Timestamp) < 0 {
+			if int1.Timestamp.Compare(int2.Timestamp) < 0 {
 				overshadowed = true
 				break
 			}
@@ -282,15 +282,21 @@ func(t *TreadMarks) HandleDiffRequest(message TM_Message) TM_Message{
 	vc := message.VC
 	pageNr := message.PageNr
 	pairs := make([]Pair, 0)
+	fmt.Println("Handling diff request: ", message)
 	for proc:= byte(0); proc < byte(t.nrProcs); proc = proc + byte(1){
-
+		fmt.Println("Looking for proc ", int(proc))
 		for _, wnr := range t.GetWritenotices(proc, pageNr){
-			if wnr.Diff != nil{
-				pairs = append(pairs, Pair{wnr.Interval.Timestamp, wnr.Diff.Diffs})
-			}
-			if wnr.Interval.Timestamp.Compare(&vc) < 0{
+			fmt.Println("Looking at writenotice ", wnr)
+			fmt.Println("Timestamp of writenotice is ", wnr.Interval.Timestamp)
+			if wnr.Interval.Timestamp.IsBefore(vc){
+				fmt.Println("Writenotice was older than timestamp.")
 				break
 			}
+			if wnr.Diff != nil{
+				fmt.Println("Writenotice had a diff: ", wnr.Diff)
+				pairs = append(pairs, Pair{wnr.Interval.Timestamp, wnr.Diff.Diffs})
+			}
+
 		}
 	}
 	message.To = message.From

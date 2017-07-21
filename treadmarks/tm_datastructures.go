@@ -94,7 +94,7 @@ func (p ProcArray) GetUnseenIntervalsAtProc(ts Vectorclock, procNr byte) []Inter
 	result := []Interval{}
 	for _, iRecord := range p[procNr]{
 		// if this record has older ts than the requester, break
-		if iRecord.Timestamp.Compare(&ts) == -1 {
+		if iRecord.Timestamp.Compare(ts) == -1 {
 			break
 		}
 		i := Interval{
