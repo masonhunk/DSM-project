@@ -21,7 +21,7 @@ func TestCreateDiff(t *testing.T) {
 func TestUpdateDatastructures(t *testing.T) {
 	vm := memory.NewVmem(128, 8)
 	tm := NewTreadMarks(vm, 1, 1, 1)
-	tm.procId = 3
+	tm.ProcId = 3
 	tm.twinMap[0] = []byte{4, 4, 4, 4, 4, 4, 4, 4}
 	tm.twinMap[1] = []byte{1, 1, 1, 1, 1, 1, 1, 1}
 	procArray := make(ProcArray, 4)
@@ -58,7 +58,7 @@ func TestPreprendInterval(t *testing.T) {
 func TestTreadMarks_handleLockAcquireRequest(t *testing.T) {
 	vm := memory.NewVmem(128, 8)
 	tm := NewTreadMarks(vm, 2, 1, 1)
-	tm.procId = 1
+	tm.ProcId = 1
 	vc1 := NewVectorclock(2)
 	vc2 := NewVectorclock(2)
 	vc3 := NewVectorclock(2)
@@ -119,7 +119,7 @@ func TestTreadMarks_handleLockAcquireRequest(t *testing.T) {
 func TestTreadMarks_GenerateDiffRequest(t *testing.T) {
 	vm := memory.NewVmem(128, 8)
 	tm := NewTreadMarks(vm, 4, 1, 1)
-	tm.procId = 1
+	tm.ProcId = 1
 	vc1 := NewVectorclock(4)
 	vc2 := NewVectorclock(4)
 	vc3 := NewVectorclock(4)
@@ -156,18 +156,18 @@ func TestTreadMarks_GenerateDiffRequest(t *testing.T) {
 
 	result := tm.GenerateDiffRequests(0)
 	assert.Len(t, result, 1)
-	assert.Contains(t, result, TM_Message{From: tm.procId, To: byte(2), Type: DIFF_REQUEST, VC: *vc1, PageNr: 0})
+	assert.Contains(t, result, TM_Message{From: tm.ProcId, To: byte(2), Type: DIFF_REQUEST, VC: *vc1, PageNr: 0})
 	result = tm.GenerateDiffRequests(1)
 	assert.Len(t, result, 1)
-	assert.Contains(t, result, TM_Message{From: tm.procId, To: byte(0), Type: DIFF_REQUEST, VC: *vc2, PageNr: 1})
+	assert.Contains(t, result, TM_Message{From: tm.ProcId, To: byte(0), Type: DIFF_REQUEST, VC: *vc2, PageNr: 1})
 	result = tm.GenerateDiffRequests(2)
 	assert.Len(t, result, 1)
-	assert.Contains(t, result, TM_Message{From: tm.procId, To: byte(0), Type: DIFF_REQUEST, VC: *vc3, PageNr: 2})
+	assert.Contains(t, result, TM_Message{From: tm.ProcId, To: byte(0), Type: DIFF_REQUEST, VC: *vc3, PageNr: 2})
 
 	result = tm.GenerateDiffRequests(3)
-	assert.Contains(t, result, TM_Message{From: tm.procId, To: byte(2), Type: DIFF_REQUEST, VC: *vc3, PageNr: 3})
-	assert.Contains(t, result, TM_Message{From: tm.procId, To: byte(1), Type: DIFF_REQUEST, VC: *vc2, PageNr: 3})
-	assert.Contains(t, result, TM_Message{From: tm.procId, To: byte(0), Type: DIFF_REQUEST, VC: *vc1, PageNr: 3})
+	assert.Contains(t, result, TM_Message{From: tm.ProcId, To: byte(2), Type: DIFF_REQUEST, VC: *vc3, PageNr: 3})
+	assert.Contains(t, result, TM_Message{From: tm.ProcId, To: byte(1), Type: DIFF_REQUEST, VC: *vc2, PageNr: 3})
+	assert.Contains(t, result, TM_Message{From: tm.ProcId, To: byte(0), Type: DIFF_REQUEST, VC: *vc1, PageNr: 3})
 	assert.Len(t, result, 3)
 
 	//Then we make another interval record with matching write notice records.
@@ -182,19 +182,19 @@ func TestTreadMarks_GenerateDiffRequest(t *testing.T) {
 	wr4_2.Interval = ir4
 	tm.TM_IDataStructures.PrependIntervalRecord(byte(1), ir4)
 	result = tm.GenerateDiffRequests(3)
-	assert.Contains(t, result, TM_Message{From: tm.procId, To: byte(2), Type: DIFF_REQUEST, VC: *vc3, PageNr: 3})
+	assert.Contains(t, result, TM_Message{From: tm.ProcId, To: byte(2), Type: DIFF_REQUEST, VC: *vc3, PageNr: 3})
 	assert.Len(t, result, 1)
 
 	wr3_2.Diff = new(Diff)
 
 	result = tm.GenerateDiffRequests(3)
-	assert.Contains(t, result, TM_Message{From: tm.procId, To: byte(2), Type: DIFF_REQUEST, VC: *vc4, PageNr: 3})
+	assert.Contains(t, result, TM_Message{From: tm.ProcId, To: byte(2), Type: DIFF_REQUEST, VC: *vc4, PageNr: 3})
 	assert.Len(t, result, 1)
 }
 */
 func TestApplyingIntervalsToDataStructure(t *testing.T) {
 	tm := NewTreadMarks(memory.NewVmem(128, 8), 4, 1, 1)
-	tm.procId = byte(2) //this host id
+	tm.ProcId = byte(2) //this host id
 	msg := TM_Message{
 		//test non-overlapping intervals
 		//newest interval first when from same process
@@ -234,7 +234,7 @@ func TestApplyingIntervalsToDataStructure(t *testing.T) {
 
 func TestShouldRequestCopyIfNoCopy(t *testing.T) {
 	tm := NewTreadMarks(memory.NewVmem(128, 8), 4, 1, 1)
-	tm.procId = byte(2)
+	tm.ProcId = byte(2)
 	cm := NewClientMock()
 	tm.IClient = cm
 	tm.Connect("")
@@ -247,7 +247,7 @@ func TestShouldRequestCopyIfNoCopy(t *testing.T) {
 
 func TestShouldSendCopyOnRequest(t *testing.T) {
 	tm := NewTreadMarks(memory.NewVmem(128, 8), 4, 1, 1)
-	tm.procId = byte(2)
+	tm.ProcId = byte(2)
 	f, err := tm.Startup("")
 	assert.NotNil(t, err)
 	cm := NewClientMock()
@@ -298,7 +298,7 @@ func NewClientMock() *ClientMock {
 func SetupHandleDiffRequest() *TreadMarks {
 	vm := memory.NewVmem(128, 8)
 	tm := NewTreadMarks(vm, 2, 1, 1)
-	tm.procId = 1
+	tm.ProcId = 1
 
 	//Setup
 	//First we make three vectorclocks.
@@ -425,13 +425,13 @@ func TestTreadMarks_HandleDiffRequest_DiffVCBeforeRequestVC_case2(t *testing.T) 
 }
 
 func TestTreadMarks_Barrier(t *testing.T) {
-	tm := SetupHandleDiffRequest() //we have procId = 1, manager = 0
+	tm := SetupHandleDiffRequest() //we have ProcId = 1, manager = 0
 	cm := NewClientMock()
 	tm.IClient = cm
 
 	//intervals from this process has same timestamp (0,3,0) as manager (0,3,0). expect no unseen intervals
 	tm.vc = *NewVectorclock(3)
-	tm.vc.SetTick(tm.procId, 2)
+	tm.vc.SetTick(tm.ProcId, 2)
 	tm.Barrier(3)
 	msg := cm.messages[0]
 	testvc := *NewVectorclock(3)
@@ -444,15 +444,13 @@ func TestTreadMarks_Barrier(t *testing.T) {
 	vc := NewVectorclock(3)
 	vc.SetTick(byte(0), 2)
 	tm.GetIntervalRecordHead(byte(0)).Timestamp = *vc
-	fmt.Println(tm.GetIntervalRecordHead(byte(0)).Timestamp)
 	tm.Barrier(2)
 	fmt.Println(cm.messages)
 	msg = cm.messages[1]
 	assert.Equal(t, BARRIER_REQUEST, msg.Type)
 	assert.Equal(t, byte(0), msg.To)
-	assert.Equal(t, tm.procId, msg.From)
+	assert.Equal(t, tm.ProcId, msg.From)
 	assert.Equal(t, 2, msg.Id)
-	assert.Len(t, msg.Intervals, 0)
-
-	//now
+	assert.Len(t, msg.Intervals, 1)
+	assert.Len(t, msg.Intervals[0].WriteNotices, len(tm.GetIntervalRecordHead(byte(1)).WriteNotices))
 }

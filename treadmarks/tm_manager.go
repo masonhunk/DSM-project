@@ -3,10 +3,13 @@ package treadmarks
 import (
 	"DSM-project/network"
 	"errors"
+	"fmt"
 	"net"
 	"strconv"
 	"sync"
 )
+
+var _ = fmt.Print //TODO: remove when done
 
 //Interfaces
 type LockManager interface {
@@ -169,16 +172,21 @@ func (m *tm_Manager) handleLockReleaseRequest(message *TM_Message) error {
 }
 
 func (m *tm_Manager) handleBarrierRequest(message *TM_Message) *TM_Message {
+	var msg TM_Message = *message
 	id := message.Id
 	m.HandleBarrier(id, func() {
-		m.tm.incorporateIntervalsIntoDatastructures(message)
+		if m.tm != nil {
+			m.tm.incorporateIntervalsIntoDatastructures(message)
+		}
 	})
 	//barrier over
+
 	if m.tm != nil {
-		message.Intervals = m.tm.GetAllUnseenIntervals(message.VC)
+		msg.Intervals = m.tm.GetAllUnseenIntervals(msg.VC)
 
 	}
-	message.From, message.To = message.To, message.From
-	message.Type = BARRIER_RESPONSE
-	return message
+
+	msg.From, msg.To = msg.To, msg.From
+	msg.Type = BARRIER_RESPONSE
+	return &msg
 }

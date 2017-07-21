@@ -65,7 +65,7 @@ func (m TM_Message) GetType() string {
 type TreadMarks struct {
 	memory.VirtualMemory //embeds this interface type
 	nrProcs              int
-	procId               byte
+	ProcId               byte
 	nrLocks              int
 	nrBarriers           int
 	TM_IDataStructures
@@ -96,7 +96,7 @@ func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarri
 			//if no copy, get one. Else, create twin
 			if entry := tm.GetPageEntry(pageNr); entry.CopySet == nil && entry.WriteNoticeRecordArray == nil {
 				tm.SetPageEntry(pageNr, NewPageArrayEntry())
-				tm.sendCopyRequest(pageNr, tm.procId)
+				tm.sendCopyRequest(pageNr, tm.ProcId)
 			}
 			//TODO: get and apply diffs before continuing
 			tm.SetRights(addr, memory.READ_WRITE)
@@ -105,7 +105,7 @@ func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarri
 			//if no copy, get one. Else create twin
 			if entry := tm.GetPageEntry(pageNr); entry.CopySet == nil && entry.WriteNoticeRecordArray == nil {
 				tm.SetPageEntry(pageNr, NewPageArrayEntry())
-				tm.sendCopyRequest(pageNr, tm.procId)
+				tm.sendCopyRequest(pageNr, tm.ProcId)
 			} else {
 				//create a twin
 				val := tm.PrivilegedRead(tm.GetPageAddr(addr), tm.GetPageSize())
@@ -130,7 +130,7 @@ func (t *TreadMarks) Startup(address string) (func(msg network.Message) error, e
 		}
 		switch msg.GetType() {
 		case WELCOME_MESSAGE:
-			t.procId = msg.To
+			t.ProcId = msg.To
 			c <- true
 		case LOCK_ACQUIRE_REQUEST:
 			t.HandleLockAcquireRequest(&msg)
@@ -180,7 +180,7 @@ func (t *TreadMarks) HandleLockAcquireResponse(message *TM_Message) {
 func (t *TreadMarks) HandleLockAcquireRequest(msg *TM_Message) TM_Message {
 	//send write notices back and stuff
 	//start by incrementing vc
-	t.vc.Increment(t.procId)
+	t.vc.Increment(t.ProcId)
 	//create new interval and make write notices for all twinned pages since last sync
 	t.updateDatastructures()
 	//find all the write notices to send
@@ -208,7 +208,7 @@ func (t *TreadMarks) updateDatastructures() {
 				})
 		}
 		//add interval record to front of linked list in procArray
-		wn := t.PrependWriteNotice(t.procId, WriteNotice{pageNr: int(key)})
+		wn := t.PrependWriteNotice(t.ProcId, WriteNotice{pageNr: int(key)})
 		wn.Interval = &interval
 		wn.WriteNotice = WriteNotice{int(key)}
 		interval.WriteNotices = append(interval.WriteNotices, wn)
@@ -217,7 +217,7 @@ func (t *TreadMarks) updateDatastructures() {
 
 	//We only actually add the interval if we have any writenotices
 	if len(interval.WriteNotices) > 0 {
-		t.PrependIntervalRecord(t.procId, &interval)
+		t.PrependIntervalRecord(t.ProcId, &interval)
 	}
 }
 
@@ -263,7 +263,7 @@ func (t *TreadMarks) GenerateDiffRequests(pageNr int) []TM_Message {
 		}
 		if overshadowed == false {
 			message := TM_Message{
-				From:   t.procId,
+				From:   t.ProcId,
 				To:     byte(proc),
 				Type:   DIFF_REQUEST,
 				VC:     vc[proc],
@@ -292,7 +292,7 @@ func (t *TreadMarks) HandleDiffRequest(message TM_Message) TM_Message {
 		}
 	}
 	message.To = message.From
-	message.From = t.procId
+	message.From = t.ProcId
 	message.Diffs = pairs
 	message.Type = DIFF_RESPONSE
 	return message
@@ -307,7 +307,7 @@ func (t *TreadMarks) AcquireLock(id int) {
 	msg := TM_Message{
 		Type:  LOCK_ACQUIRE_REQUEST,
 		To:    1,
-		From:  t.procId,
+		From:  t.ProcId,
 		Diffs: nil,
 		Id:    id,
 		VC:    t.vc,
@@ -322,7 +322,7 @@ func (t *TreadMarks) ReleaseLock(id int) {
 	msg := TM_Message{
 		Type:  LOCK_RELEASE,
 		To:    1,
-		From:  t.procId,
+		From:  t.ProcId,
 		Diffs: nil,
 		Id:    id,
 	}
@@ -339,16 +339,15 @@ func (t *TreadMarks) Barrier(id int) {
 	}
 	/*if managerTs.Compare(NewVectorclock(t.nrProcs)) == 0 {
 	}*/
-	fmt.Println("Manager timestamp:", managerTs)
 	msg := TM_Message{
 		Type:      BARRIER_REQUEST,
 		To:        0,
-		From:      t.procId,
+		From:      t.ProcId,
 		Diffs:     nil,
 		VC:        t.vc,
 		Id:        id,
 		Event:     &c,
-		Intervals: t.GetUnseenIntervalsAtProc(managerTs, t.procId),
+		Intervals: t.GetUnseenIntervalsAtProc(managerTs, t.ProcId),
 	}
 	err := t.Send(msg)
 	panicOnErr(err)
@@ -369,7 +368,7 @@ func (t *TreadMarks) incorporateIntervalsIntoDatastructures(msg *TM_Message) {
 			res.Interval = ir
 			ir.WriteNotices = append(ir.WriteNotices, res)
 			//check if I have a write notice for this page with no diff at head of list. If so, create diff.
-			if myWn := t.GetWriteNoticeListHead(wn.pageNr, t.procId); myWn != nil && myWn.Diff == nil {
+			if myWn := t.GetWriteNoticeListHead(wn.pageNr, t.ProcId); myWn != nil && myWn.Diff == nil {
 				pageVal, err := t.ReadBytes(wn.pageNr*t.GetPageSize(), t.GetPageSize())
 				panicOnErr(err)
 				diff := CreateDiff(t.twinMap[wn.pageNr], pageVal)
@@ -379,10 +378,7 @@ func (t *TreadMarks) incorporateIntervalsIntoDatastructures(msg *TM_Message) {
 			//finally invalidate the page.
 			t.SetRights(wn.pageNr*t.GetPageSize(), memory.NO_ACCESS)
 		}
-		fmt.Println(ir)
-		if len(ir.WriteNotices) > 0 {
-			t.PrependIntervalRecord(interval.Proc, ir)
-		}
+		t.PrependIntervalRecord(interval.Proc, ir)
 
 	}
 	t.Unlock()
@@ -393,7 +389,7 @@ func (t *TreadMarks) sendCopyRequest(pageNr int, procNr byte) {
 	msg := TM_Message{
 		Type:   COPY_REQUEST,
 		To:     procNr,
-		From:   t.procId,
+		From:   t.ProcId,
 		Event:  &c,
 		PageNr: pageNr,
 	}

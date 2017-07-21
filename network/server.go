@@ -1,20 +1,20 @@
 package network
 
 import (
-	"net"
 	"log"
+	"net"
 )
 
-type Server struct{
-	port string
+type Server struct {
+	port    string
 	Clients map[byte]*Transciever
-	nonce byte
-	ep Endpoint
+	nonce   byte
+	ep      Endpoint
 	handler func(Message) error
 }
 
-func NewServer(handler func(Message) error, port string) (Server, error){
-	s := Server{port, make(map[byte]*Transciever), byte(1), Endpoint{}, handler}
+func NewServer(handler func(Message) error, port string) (Server, error) {
+	s := Server{port, make(map[byte]*Transciever), byte(0), Endpoint{}, handler}
 	var err error
 	s.ep, err = NewEndpoint(port, s.handleConnection)
 	if err != nil {
@@ -24,10 +24,8 @@ func NewServer(handler func(Message) error, port string) (Server, error){
 	return s, nil
 }
 
-
-
 func (s *Server) StopServer() {
-	for _,v := range s.Clients{
+	for _, v := range s.Clients {
 		v.Close()
 	}
 	s.ep.Close()
@@ -36,24 +34,23 @@ func (s *Server) StopServer() {
 func (s *Server) Send(message Message) {
 	t := s.Clients[message.GetTo()]
 	if message.GetFrom() == 1 {
-		log.Println(" --> Manager sending ", message)
+		//log.Println(" --> Manager sending ", message)
 	} else {
-		log.Println(" --> Client sending ", message)
+		//log.Println(" --> Client sending ", message)
 	}
 	t.Send(message)
 }
 
 func (s *Server) handleMessage(message Message) error {
-	if message.GetTo() != byte(0) {
+	if message.GetTo() != byte(255) {
 		s.Send(message)
 	}
 	return s.handler(message)
 }
 
-
-func (s *Server)handleConnection(conn net.Conn) {
+func (s *Server) handleConnection(conn net.Conn) {
 	t := NewTransciever(conn, s.handleMessage)
-	t.Send(SimpleMessage{From: 0, To: s.nonce, Type: "WELC"})
+	t.Send(SimpleMessage{From: 255, To: s.nonce, Type: "WELC"})
 	s.Clients[s.nonce] = t
-	s.nonce = s.nonce + byte(1)
+	s.nonce += byte(1)
 }

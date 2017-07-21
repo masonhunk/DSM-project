@@ -15,8 +15,8 @@ const (
 	WRITE_REQUEST      = "WR"
 	READ_REPLY         = "RRPL"
 	WRITE_REPLY        = "WRPL"
-	INVALIDATE_REPLY   = "INV"
-	INVALIDATE_REQUEST = "INVQ"
+	INVALIDATE_REPLY   = "INV_REPL"
+	INVALIDATE_REQUEST = "INV_REQ"
 	MALLOC_REQUEST     = "MR"
 	FREE_REQUEST       = "FR"
 	MALLOC_REPLY       = "MRPL"
@@ -158,7 +158,7 @@ func (m *Multiview) Malloc(sizeInBytes int) (int, error) {
 	msg := network.MultiviewMessage{
 		Type:          MALLOC_REQUEST,
 		From:          m.id,
-		To:            byte(1),
+		To:            byte(0),
 		EventId:       m.sequenceNumber,
 		Minipage_size: sizeInBytes, //<- contains the size for the allocation!
 	}
@@ -179,7 +179,7 @@ func (m *Multiview) Free(pointer, length int) error {
 	msg := network.MultiviewMessage{
 		Type:          FREE_REQUEST,
 		From:          m.id,
-		To:            byte(1),
+		To:            byte(0),
 		EventId:       m.sequenceNumber,
 		Fault_addr:    pointer,
 		Minipage_size: length, //<- length here
@@ -211,7 +211,7 @@ func (m *Multiview) onFault(addr int, faultType byte, accessType string, value b
 	msg := network.MultiviewMessage{
 		Type:       str,
 		From:       m.id,
-		To:         byte(1),
+		To:         byte(0),
 		EventId:    m.sequenceNumber,
 		Fault_addr: addr,
 	}
@@ -223,7 +223,7 @@ func (m *Multiview) onFault(addr int, faultType byte, accessType string, value b
 		//send ack
 		msg := network.MultiviewMessage{
 			From:       m.id,
-			To:         byte(1),
+			To:         byte(0),
 			Fault_addr: addr,
 		}
 		if faultType == 0 {
@@ -287,7 +287,7 @@ func (m *Multiview) messageHandler(msg network.MultiviewMessage, c chan bool) er
 	case INVALIDATE_REQUEST:
 		m.mem.accessMap[m.mem.getVPageNr(msg.Fault_addr)] = memory.NO_ACCESS
 		msg.Type = INVALIDATE_REPLY
-		msg.To = 1
+		msg.To = byte(0)
 		m.conn.Send(msg)
 	case MALLOC_REPLY:
 		if msg.Err != nil {

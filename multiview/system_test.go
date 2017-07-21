@@ -1,15 +1,15 @@
 package multiview
 
 import (
-	"testing"
 	"github.com/stretchr/testify/assert"
-	"time"
 	"io/ioutil"
 	"log"
+	"testing"
+	"time"
 )
 
 func TestInitialize(t *testing.T) {
-	log.SetOutput(ioutil.Discard)
+	//log.SetOutput(ioutil.Discard)
 	mw := NewMultiView()
 	mw.Initialize(4096, 128)
 	ptr, err := mw.Malloc(1000)
@@ -33,7 +33,7 @@ func TestMalloc(t *testing.T) {
 	assert.Nil(t, err)
 	ptr3, err3 := mw.Malloc(100)
 	assert.Nil(t, err3)
-	assert.Equal(t,ptr, ptr3)
+	assert.Equal(t, ptr, ptr3)
 	mw.Shutdown()
 }
 
@@ -58,10 +58,10 @@ func TestMultipleHosts(t *testing.T) {
 	assert.Equal(t, byte(90), res)
 	mw3.Write(ptr+1, byte(91))
 
-	res1, _ := mw4.Read(ptr+1)
-	res2, _ := mw2.Read(ptr+1)
-	res3, _:= mw5.Read(ptr+1)
-	res4, _ := mw1.Read(ptr+1)
+	res1, _ := mw4.Read(ptr + 1)
+	res2, _ := mw2.Read(ptr + 1)
+	res3, _ := mw5.Read(ptr + 1)
+	res4, _ := mw1.Read(ptr + 1)
 
 	assert.Equal(t, byte(91), res1)
 	assert.Equal(t, byte(91), res2)

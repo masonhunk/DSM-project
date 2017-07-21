@@ -206,7 +206,7 @@ func (m *Manager) HandleAlloc(message network.MultiviewMessage) {
 
 	//Send reply to alloc requester
 	message.To = message.From
-	message.From = 1
+	message.From = 0
 	message.Fault_addr = startpg*m.vm.GetPageSize() + m.mpt[startpg].offset
 	message.Type = MALLOC_REPLY
 
