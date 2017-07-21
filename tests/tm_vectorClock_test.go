@@ -2,8 +2,8 @@ package tests
 
 import (
 	"DSM-project/treadmarks"
-	"testing"
 	"github.com/stretchr/testify/assert"
+	"testing"
 )
 
 func TestVectorclockIncrement(t *testing.T) {
@@ -16,14 +16,14 @@ func TestVectorclockIncrement(t *testing.T) {
 func TestVectorclockCompare(t *testing.T) {
 	vc1 := treadmarks.NewVectorclock(4)
 	vc2 := treadmarks.NewVectorclock(4)
-	assert.Equal(t,0,  vc1.Compare(*vc2))
+	assert.Equal(t, 0, vc1.Compare(*vc2))
 	vc1.Increment(1)
 	assert.Equal(t, 1, vc1.Compare(*vc2))
 	vc2.Increment(2)
 	assert.Equal(t, 0, vc1.Compare(*vc2))
 }
 
-func TestVectorMerge(t *testing.T){
+func TestVectorMerge(t *testing.T) {
 	vc1 := treadmarks.NewVectorclock(4)
 	vc2 := treadmarks.NewVectorclock(4)
 	vc3 := treadmarks.NewVectorclock(4)
@@ -63,4 +63,13 @@ func TestVectorAfter(t *testing.T) {
 	assert.True(t, vc3.IsAfter(*vc1))
 	assert.False(t, vc2.IsAfter(*vc3))
 	assert.False(t, vc1.IsAfter(*vc1))
+}
+
+func TestVectorEqual(t *testing.T) {
+	vc1 := treadmarks.NewVectorclock(3)
+	vc2 := treadmarks.NewVectorclock(3)
+	vc3 := treadmarks.NewVectorclock(3)
+	vc3.SetTick(byte(0), 4)
+	assert.True(t, vc1.Equals(*vc2))
+	assert.False(t, vc1.Equals(*vc3))
 }

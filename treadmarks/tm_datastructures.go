@@ -89,8 +89,8 @@ func (p ProcArray) GetUnseenIntervalsAtProc(ts Vectorclock, procNr byte) []Inter
 	result := []Interval{}
 	for _, iRecord := range p[procNr] {
 		// if this record has older ts than the requester, break
-		fmt.Println("comparing", iRecord.Timestamp, "to", ts, "with result", iRecord.Timestamp.Compare(&ts))
-		if iRecord.Timestamp.Compare(&ts) <= 0 {
+		fmt.Println("comparing", iRecord.Timestamp, "to", ts, "with result", iRecord.Timestamp.Compare(ts))
+		if iRecord.Timestamp.Compare(ts) <= 0 {
 			break
 		}
 		i := Interval{
@@ -197,9 +197,6 @@ func (p PageArray) GetWriteNoticeListHead(pageNr int, procNr byte) *WriteNoticeR
 	}
 	return &p[pageNr].WriteNoticeRecordArray[procNr][0]
 }
-
-
-
 
 func CreateDiff(original, new []byte) Diff {
 	res := make([]Pair, 0)

@@ -286,7 +286,7 @@ func (t *TreadMarks) HandleDiffRequest(message TM_Message) TM_Message {
 			if wnr.Diff != nil {
 				pairs = append(pairs, Pair{wnr.Interval.Timestamp, wnr.Diff.Diffs})
 			}
-			if wnr.Interval.Timestamp.Compare(&vc) < 0 {
+			if wnr.Interval.Timestamp.Compare(vc) < 0 {
 				break
 			}
 		}
