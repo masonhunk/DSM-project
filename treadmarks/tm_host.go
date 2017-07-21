@@ -315,13 +315,12 @@ func (t *TreadMarks) HandleDiffRequest(message TM_Message) TM_Message {
 	pageNr := message.PageNr
 	pairs := make([]Pair, 0)
 	for proc := byte(0); proc < byte(t.nrProcs); proc = proc + byte(1) {
-
 		for _, wnr := range t.GetWritenotices(proc, pageNr) {
-			if wnr.Diff != nil {
-				pairs = append(pairs, Pair{wnr.Interval.Timestamp, wnr.Diff.Diffs})
-			}
 			if wnr.Interval.Timestamp.Compare(vc) < 0 {
 				break
+			}
+			if wnr.Diff != nil {
+				pairs = append(pairs, Pair{wnr.Interval.Timestamp, wnr.Diff.Diffs})
 			}
 		}
 	}
