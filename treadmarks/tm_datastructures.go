@@ -29,7 +29,10 @@ type PageArrayInterface interface {
 }
 
 type PageArrayEntryInterface interface {
-	PrependWriteNotice(procId byte) *WriteNoticeRecord
+	PrependWriteNoticeOnPageArrayEntry(procId byte) *WriteNoticeRecord
+	GetCopyset() []int
+	hasCopy() bool
+	setHasCopy(bool bool)
 }
 
 type ProcArrayInterface interface {
@@ -134,10 +137,23 @@ func (p ProcArray) GetIntervalRecordTail(procNr byte) *IntervalRecord {
 type PageArrayEntry struct {
 	CopySet                []int
 	WriteNoticeRecordArray map[byte][]WriteNoticeRecord
+	hascopy                bool
+}
+
+func (pe *PageArrayEntry) setHasCopy(bool bool) {
+	pe.hascopy = bool
+}
+
+func (pe *PageArrayEntry) GetCopyset() []int {
+	return pe.CopySet
+}
+
+func (pe *PageArrayEntry) hasCopy() bool {
+	return pe.hascopy
 }
 
 func NewPageArrayEntry() *PageArrayEntry {
-	return &PageArrayEntry{[]int{0}, make(map[byte][]WriteNoticeRecord)}
+	return &PageArrayEntry{[]int{0}, make(map[byte][]WriteNoticeRecord), false}
 }
 
 func (pe *PageArrayEntry) PrependWriteNoticeOnPageArrayEntry(procId byte) *WriteNoticeRecord {

@@ -3,9 +3,12 @@ package treadmarks
 import (
 	"DSM-project/memory"
 	"DSM-project/network"
+	"encoding/gob"
 	"errors"
 	"fmt"
+	"log"
 	"sync"
+	"time"
 )
 
 //TODO remove when done. Is only there to make the compiler shut up.
@@ -30,8 +33,9 @@ const (
 
 type ITreadMarks interface {
 	memory.VirtualMemory
-	Startup() (func(msg network.Message) error, error)
-	Shutdown(address string)
+	Startup() error
+	Join(address string) error
+	Shutdown()
 	AcquireLock(id int)
 	ReleaseLock(id int)
 	Barrier(id int)
@@ -72,9 +76,14 @@ type TreadMarks struct {
 	vc      Vectorclock
 	twinMap map[int][]byte //contains twins since last sync.
 	network.IClient
+	server  network.Server
+	manager tm_Manager
 }
 
 func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarriers int) *TreadMarks {
+	gob.Register(TM_Message{})
+	gob.Register(network.SimpleMessage{})
+
 	pageArray := make(PageArray)
 	procArray := make(ProcArray)
 	tm := TreadMarks{
@@ -119,15 +128,22 @@ func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarri
 	return &tm
 }
 
-func (t *TreadMarks) Startup(address string) (func(msg network.Message) error, error) {
+func (t *TreadMarks) Join(address string) error {
 	c := make(chan bool)
 
 	msgHandler := func(message network.Message) error {
-		//handle incoming messages
-		msg, ok := message.(TM_Message)
-		if !ok {
+		//switch between types. If simple message, convert to tm_Message. If neither, return error
+		var msg TM_Message
+		if mes, ok := message.(network.SimpleMessage); ok {
+			msg.To = mes.GetTo()
+			msg.Type = mes.GetType()
+		} else if _, ok := message.(TM_Message); !ok {
+			log.Println("received invalid message struct type at host", t.ProcId)
 			return errors.New("invalid message struct type")
+		} else {
+			msg = message.(TM_Message)
 		}
+		//handle incoming messages
 		switch msg.GetType() {
 		case WELCOME_MESSAGE:
 			t.ProcId = msg.To
@@ -165,10 +181,28 @@ func (t *TreadMarks) Startup(address string) (func(msg network.Message) error, e
 	client := network.NewClient(msgHandler)
 	t.IClient = client
 	if err := t.Connect(address); err != nil {
-		return msgHandler, err
+		return err
 	}
 	<-c
-	return msgHandler, nil
+	log.Println("host successfully joined system with id:", t.ProcId)
+	return nil
+}
+
+func (t *TreadMarks) Startup() error {
+	var err error
+	t.server, err = network.NewServer(func(message network.Message) error { return nil }, "2000")
+	if err != nil {
+		return err
+	}
+	log.Println("sucessfully started server")
+	time.Sleep(time.Millisecond * 100)
+
+	c := network.NewClient(func(message network.Message) error { return nil })
+	c.Connect("localhost:2000")
+	bman := NewBarrierManagerImp(t.nrProcs)
+	lman := NewLockManagerImp()
+	t.manager = *NewTest_TM_Manager(c.GetTransciever(), bman, lman, t.nrProcs, t)
+	return t.Join("localhost:2000")
 }
 
 func (t *TreadMarks) HandleLockAcquireResponse(message *TM_Message) {

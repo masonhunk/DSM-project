@@ -248,15 +248,22 @@ func TestShouldRequestCopyIfNoCopy(t *testing.T) {
 func TestShouldSendCopyOnRequest(t *testing.T) {
 	tm := NewTreadMarks(memory.NewVmem(128, 8), 4, 1, 1)
 	tm.ProcId = byte(2)
-	f, err := tm.Startup("")
-	assert.NotNil(t, err)
+	tm.Startup()
 	cm := NewClientMock()
 	tm.IClient = cm
 	cm.handler = func(msg TM_Message) {
-		f(msg)
+		if pg, ok := tm.twinMap[msg.PageNr]; ok {
+			msg.Data = pg
+		} else {
+			tm.PrivilegedRead(msg.PageNr*tm.GetPageSize(), tm.GetPageSize())
+			msg.Data = pg
+		}
+		msg.From, msg.To = msg.To, msg.From
+		err := tm.Send(msg)
+		panicOnErr(err)
+
 	}
 	tm.Connect("")
-
 	cm.handler(TM_Message{Type: COPY_REQUEST, From: byte(1), To: byte(2), PageNr: 5})
 	assert.Len(t, cm.messages, 1)
 
