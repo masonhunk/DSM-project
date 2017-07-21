@@ -65,8 +65,8 @@ func TestTreadMarks_handleLockAcquireRequest(t *testing.T) {
 	vc1.Increment(byte(0))
 	//First we make one interval record with matching write notice records
 	ir1 := &IntervalRecord{Timestamp: *vc1, WriteNotices: make([]*WriteNoticeRecord, 0)}
-	wr1_1 := tm.PrependWriteNotice(byte(0), WriteNotice{pageNr: 0})
-	wr1_2 := tm.PrependWriteNotice(byte(0), WriteNotice{pageNr: 3})
+	wr1_1 := tm.PrependWriteNotice(byte(0), WriteNotice{PageNr: 0})
+	wr1_2 := tm.PrependWriteNotice(byte(0), WriteNotice{PageNr: 3})
 	ir1.WriteNotices = []*WriteNoticeRecord{wr1_1, wr1_2}
 	wr1_1.Interval = ir1
 	wr1_2.Interval = ir1
@@ -76,8 +76,8 @@ func TestTreadMarks_handleLockAcquireRequest(t *testing.T) {
 	vc2.Increment(byte(0))
 	vc2.Increment(byte(0))
 	ir2 := &IntervalRecord{Timestamp: *vc2, WriteNotices: make([]*WriteNoticeRecord, 0)}
-	wr2_1 := tm.PrependWriteNotice(byte(0), WriteNotice{pageNr: 2})
-	wr2_2 := tm.PrependWriteNotice(byte(0), WriteNotice{pageNr: 3})
+	wr2_1 := tm.PrependWriteNotice(byte(0), WriteNotice{PageNr: 2})
+	wr2_2 := tm.PrependWriteNotice(byte(0), WriteNotice{PageNr: 3})
 	ir2.WriteNotices = []*WriteNoticeRecord{wr2_1, wr2_2}
 	wr2_1.Interval = ir2
 	wr2_2.Interval = ir2
@@ -318,10 +318,10 @@ func SetupHandleDiffRequest() *TreadMarks {
 	ir1 := &IntervalRecord{Timestamp: *vc, WriteNotices: make([]*WriteNoticeRecord, 0)}
 
 	//Then the writenoticerecords
-	wr1 := tm.PrependWriteNotice(byte(0), WriteNotice{pageNr: 0})
-	wr2 := tm.PrependWriteNotice(byte(0), WriteNotice{pageNr: 1})
-	wr3 := tm.PrependWriteNotice(byte(1), WriteNotice{pageNr: 0})
-	wr4 := tm.PrependWriteNotice(byte(1), WriteNotice{pageNr: 1})
+	wr1 := tm.PrependWriteNotice(byte(0), WriteNotice{PageNr: 0})
+	wr2 := tm.PrependWriteNotice(byte(0), WriteNotice{PageNr: 1})
+	wr3 := tm.PrependWriteNotice(byte(1), WriteNotice{PageNr: 0})
+	wr4 := tm.PrependWriteNotice(byte(1), WriteNotice{PageNr: 1})
 	//We add the writenoticerecords to the interval record.
 	ir0.WriteNotices = []*WriteNoticeRecord{wr1, wr2}
 	ir1.WriteNotices = []*WriteNoticeRecord{wr3, wr4}

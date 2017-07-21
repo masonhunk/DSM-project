@@ -132,6 +132,8 @@ func (t *TreadMarks) Join(address string) error {
 	c := make(chan bool)
 
 	msgHandler := func(message network.Message) error {
+		log.Println("host", t.ProcId, "recieved message : ", message)
+
 		//switch between types. If simple message, convert to tm_Message. If neither, return error
 		var msg TM_Message
 		if mes, ok := message.(network.SimpleMessage); ok {
@@ -197,7 +199,13 @@ func (t *TreadMarks) Startup() error {
 	log.Println("sucessfully started server")
 	time.Sleep(time.Millisecond * 100)
 
-	c := network.NewClient(func(message network.Message) error { return nil })
+	c := network.NewClient(func(message network.Message) error {
+		log.Println("manager received message:", message)
+		return nil
+	})
+	c.GetTransciever().(network.LoggingTransciever).SetLogFuncOnSend(func() {
+		log.Println()
+	})
 	c.Connect("localhost:2000")
 	bman := NewBarrierManagerImp(t.nrProcs)
 	lman := NewLockManagerImp()
@@ -242,7 +250,7 @@ func (t *TreadMarks) updateDatastructures() {
 				})
 		}
 		//add interval record to front of linked list in procArray
-		wn := t.PrependWriteNotice(t.ProcId, WriteNotice{pageNr: int(key)})
+		wn := t.PrependWriteNotice(t.ProcId, WriteNotice{PageNr: int(key)})
 		wn.Interval = &interval
 		wn.WriteNotice = WriteNotice{int(key)}
 		interval.WriteNotices = append(interval.WriteNotices, wn)
@@ -333,6 +341,11 @@ func (t *TreadMarks) HandleDiffRequest(message TM_Message) TM_Message {
 
 func (t *TreadMarks) Shutdown() {
 	t.Close()
+	if t.manager != (tm_Manager{}) {
+		t.manager.Close()
+		t.server.StopServer()
+	}
+
 }
 
 func (t *TreadMarks) AcquireLock(id int) {
@@ -366,10 +379,13 @@ func (t *TreadMarks) ReleaseLock(id int) {
 func (t *TreadMarks) Barrier(id int) {
 	c := make(chan string)
 	//last known timestamp from manager that this host has seen
-	managerTs := t.GetIntervalRecordHead(byte(0)).Timestamp
-	if &managerTs == nil {
+	var managerTs Vectorclock
+	if t.GetIntervalRecord(byte(0), 0) == nil {
 		managerTs = *NewVectorclock(t.nrProcs)
+	} else {
+		managerTs = t.GetIntervalRecordHead(byte(0)).Timestamp
 	}
+
 	/*if managerTs.Compare(NewVectorclock(t.nrProcs)) == 0 {
 	}*/
 	msg := TM_Message{
@@ -401,15 +417,15 @@ func (t *TreadMarks) incorporateIntervalsIntoDatastructures(msg *TM_Message) {
 			res.Interval = ir
 			ir.WriteNotices = append(ir.WriteNotices, res)
 			//check if I have a write notice for this page with no diff at head of list. If so, create diff.
-			if myWn := t.GetWriteNoticeListHead(wn.pageNr, t.ProcId); myWn != nil && myWn.Diff == nil {
-				pageVal, err := t.ReadBytes(wn.pageNr*t.GetPageSize(), t.GetPageSize())
+			if myWn := t.GetWriteNoticeListHead(wn.PageNr, t.ProcId); myWn != nil && myWn.Diff == nil {
+				pageVal, err := t.ReadBytes(wn.PageNr*t.GetPageSize(), t.GetPageSize())
 				panicOnErr(err)
-				diff := CreateDiff(t.twinMap[wn.pageNr], pageVal)
-				t.twinMap[wn.pageNr] = nil
+				diff := CreateDiff(t.twinMap[wn.PageNr], pageVal)
+				t.twinMap[wn.PageNr] = nil
 				myWn.Diff = &diff
 			}
 			//finally invalidate the page.
-			t.SetRights(wn.pageNr*t.GetPageSize(), memory.NO_ACCESS)
+			t.SetRights(wn.PageNr*t.GetPageSize(), memory.NO_ACCESS)
 		}
 		t.PrependIntervalRecord(interval.Proc, ir)
 

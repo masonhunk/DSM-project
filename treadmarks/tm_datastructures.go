@@ -70,7 +70,7 @@ type Interval struct {
 }
 
 type WriteNotice struct {
-	pageNr int
+	PageNr int
 }
 type Diff struct {
 	Diffs []Pair
@@ -184,7 +184,7 @@ func (p PageArray) GetWritenotices(procNr byte, pageNr int) []WriteNoticeRecord 
 }
 
 func (p PageArray) PrependWriteNotice(procId byte, wn WriteNotice) *WriteNoticeRecord {
-	wnr := p.GetPageEntry(wn.pageNr).PrependWriteNoticeOnPageArrayEntry(procId)
+	wnr := p.GetPageEntry(wn.PageNr).PrependWriteNoticeOnPageArrayEntry(procId)
 	wnr.WriteNotice = wn
 	return wnr
 }
@@ -223,7 +223,7 @@ func CreateDiff(original, new []byte) Diff {
 }
 
 type Pair struct {
-	car, cdr interface{}
+	Car, Cdr interface{}
 }
 
 type Page struct {

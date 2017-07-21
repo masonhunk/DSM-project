@@ -1,16 +1,16 @@
 package treadmarks
 
 type Vectorclock struct {
-	value []uint
+	Value []uint
 }
 
 func (v *Vectorclock) Compare(other Vectorclock) int {
 	isBefore := 0
 	isAfter := 0
-	for i := 0; i < len(v.value); i++ {
-		if v.value[i] < other.value[i] {
+	for i := 0; i < len(v.Value); i++ {
+		if v.Value[i] < other.Value[i] {
 			isBefore = -1
-		} else if v.value[i] > other.value[i] {
+		} else if v.Value[i] > other.Value[i] {
 			isAfter = 1
 		}
 	}
@@ -19,21 +19,21 @@ func (v *Vectorclock) Compare(other Vectorclock) int {
 
 func NewVectorclock(nodes int) *Vectorclock {
 	v := new(Vectorclock)
-	v.value = make([]uint, nodes)
+	v.Value = make([]uint, nodes)
 	return v
 }
 
 func (v *Vectorclock) Merge(o Vectorclock) *Vectorclock {
 	nv := new(Vectorclock)
-	nv.value = make([]uint, len(v.value))
-	for i := range nv.value {
-		nv.value[i] = Max(v.value[i], o.value[i])
+	nv.Value = make([]uint, len(v.Value))
+	for i := range nv.Value {
+		nv.Value[i] = Max(v.Value[i], o.Value[i])
 	}
 	return nv
 }
 
 func (v *Vectorclock) Increment(id byte) {
-	v.value[id] = v.value[id] + 1
+	v.Value[id] = v.Value[id] + 1
 }
 
 //Returns true of v is before o causally.
@@ -47,18 +47,18 @@ func (v *Vectorclock) IsAfter(o Vectorclock) bool {
 }
 
 func (v *Vectorclock) GetTick(id byte) uint {
-	return v.value[id]
+	return v.Value[id]
 }
 
 func (v *Vectorclock) SetTick(id byte, tick uint) {
-	v.value[id] = tick
+	v.Value[id] = tick
 }
 
 //Returns true if every entry in v is equal to the matching entry in o
 func (v *Vectorclock) Equals(o Vectorclock) bool {
-	if len(v.value) == len(o.value) {
-		for i := range v.value {
-			if v.value[i] != o.value[i] {
+	if len(v.Value) == len(o.Value) {
+		for i := range v.Value {
+			if v.Value[i] != o.Value[i] {
 				return false
 			}
 		}

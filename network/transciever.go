@@ -1,11 +1,11 @@
 package network
 
 import (
-	"io"
-	"net"
 	"bufio"
 	"encoding/gob"
+	"io"
 	"log"
+	"net"
 )
 
 type ITransciever interface {
@@ -13,17 +13,37 @@ type ITransciever interface {
 	Send(Message) error
 }
 
-type Transciever struct{
-	done chan bool
-	conn net.Conn
-	rw *bufio.ReadWriter
-	*gob.Encoder
-	*gob.Decoder
-
+type LoggingTransciever interface {
+	ITransciever
+	ShouldLog(b bool)
+	SetLogFuncOnSend(f func())
+	SetLogFuncOnReceive(f func())
 }
 
+type Transciever struct {
+	done chan bool
+	conn net.Conn
+	rw   *bufio.ReadWriter
+	*gob.Encoder
+	*gob.Decoder
+	shouldLog        bool
+	logFuncOnSend    func()
+	logFuncOnReceive func()
+}
 
-func NewTransciever(conn net.Conn, handler func(Message) error) *Transciever{
+func (t *Transciever) ShouldLog(b bool) {
+	t.shouldLog = b
+}
+
+func (t *Transciever) SetLogFuncOnSend(f func()) {
+	t.logFuncOnSend = f
+}
+
+func (t *Transciever) SetLogFuncOnReceive(f func()) {
+	t.logFuncOnReceive = f
+}
+
+func NewTransciever(conn net.Conn, handler func(Message) error) *Transciever {
 	rw := bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn))
 	t := new(Transciever)
 	t.conn = conn
@@ -45,45 +65,49 @@ func NewTransciever(conn net.Conn, handler func(Message) error) *Transciever{
 				done <- true
 				return
 			}
-			log.Println("Transciever recieved message : ", message)
+			if t.shouldLog {
+				t.logFuncOnReceive()
+			}
 			go handler(message.(Message))
 		}
 	}()
-	<- done
+	<-done
 	t.done = done
 	return t
 }
 
-func (t *Transciever) Close(){
+func (t *Transciever) Close() {
 	t.conn.Close()
-	<- t.done
+	<-t.done
 }
 
 func (t *Transciever) Send(message Message) error {
-	if message.GetFrom() == 0{
-		log.Print("--> server sending ")
-		log.Printf("%+v\n",message)
-	}
 	err := t.Encode(&message)
 	t.rw.Flush()
 	if err != nil {
 		log.Println("Transciever experienced an error: ", err)
 	}
-	return err
+	if message.GetFrom() == 0 && t.shouldLog {
+		log.Print("--> manager sending ")
+		log.Printf("%+v\n", message)
+	} else if t.shouldLog {
+		t.logFuncOnSend()
+	}
+	return nil
 }
 
 // A transciever mock
 
-type MultiviewTranscieverMock struct{
+type MultiviewTranscieverMock struct {
 	Messages []MultiviewMessage
 }
 
-func NewMultiviewTranscieverMock() *MultiviewTranscieverMock{
+func NewMultiviewTranscieverMock() *MultiviewTranscieverMock {
 	t := new(MultiviewTranscieverMock)
 	return t
 }
 
-func (t *MultiviewTranscieverMock) Close(){}
+func (t *MultiviewTranscieverMock) Close() {}
 
 func (t *MultiviewTranscieverMock) Send(message Message) error {
 
