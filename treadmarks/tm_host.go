@@ -81,7 +81,7 @@ func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarri
 	tm := TreadMarks{
 		VirtualMemory:      virtualMemory,
 		TM_IDataStructures: &TM_DataStructures{new(sync.RWMutex), diffPool, procArray, pageArray},
-		vc:                 Vectorclock{make([]uint, nrProcs)},
+		vc:                 *NewVectorclock(nrProcs),
 		twinMap:            make(map[int][]byte),
 		nrProcs:            nrProcs,
 		nrLocks:            nrLocks,
@@ -248,8 +248,8 @@ func (t *TreadMarks) GenerateDiffRequests(pageNr int) []TM_Message {
 		}
 	}
 	// After that we remove the ones, that is overshadowed by others.
-	for proc,int1 := range intrec {
-		if int1 == nil{
+	for proc, int1 := range intrec {
+		if int1 == nil {
 			continue
 		}
 		overshadowed := false
@@ -264,10 +264,10 @@ func (t *TreadMarks) GenerateDiffRequests(pageNr int) []TM_Message {
 		}
 		if overshadowed == false {
 			message := TM_Message{
-				From:t.procId,
-				To:byte(proc),
-				Type:DIFF_REQUEST,
-				VC:vc[proc],
+				From:   t.procId,
+				To:     byte(proc),
+				Type:   DIFF_REQUEST,
+				VC:     vc[proc],
 				PageNr: pageNr,
 			}
 			messages = append(messages, message)
@@ -276,15 +276,15 @@ func (t *TreadMarks) GenerateDiffRequests(pageNr int) []TM_Message {
 	return messages
 }
 
-func(t *TreadMarks) HandleDiffRequest(message TM_Message) TM_Message{
+func (t *TreadMarks) HandleDiffRequest(message TM_Message) TM_Message {
 	//First we populate a list of pairs with all the relevant diffs.
 	vc := message.VC
 	pageNr := message.PageNr
 	pairs := make([]Pair, 0)
-	for proc:= byte(0); proc < byte(t.nrProcs); proc = proc + byte(1){
+	for proc := byte(0); proc < byte(t.nrProcs); proc = proc + byte(1) {
 
-		for wnr := t.TM_IDataStructures.GetWriteNoticeListHead(pageNr, proc) ; wnr != nil && wnr.Interval.Timestamp.Compare(&vc) != -1; wnr = wnr.NextRecord{
-			if wnr.Diff != nil{
+		for wnr := t.TM_IDataStructures.GetWriteNoticeListHead(pageNr, proc); wnr != nil && wnr.Interval.Timestamp.Compare(&vc) != -1; wnr = wnr.NextRecord {
+			if wnr.Diff != nil {
 				pairs = append(pairs, Pair{wnr.Interval.Timestamp, wnr.Diff.Diffs})
 			}
 		}
