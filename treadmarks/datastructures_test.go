@@ -3,36 +3,35 @@ package treadmarks
 import (
 	"github.com/stretchr/testify/assert"
 	"testing"
+	"fmt"
 )
 
 func TestPageArray(t *testing.T) {
 	//vm := memory.NewVmem(1024, 64)
 	pageArray := make(PageArray)
-	wn1 := WriteNoticeRecord{Diff: nil, Interval: nil, NextRecord: nil, PrevRecord: nil}
-	wn2 := WriteNoticeRecord{Diff: nil, Interval: nil, NextRecord: nil, PrevRecord: &wn1}
-	wn1.NextRecord = &wn2
-	pageArray[1] = PageArrayEntry{
+	wn1 := WriteNoticeRecord{Diff: nil, Interval: nil}
+	wn2 := WriteNoticeRecord{Diff: nil, Interval: nil}
+	pageArray[1] = &PageArrayEntry{
 		CopySet: []int{1, 2},
-		ProcArr: make(map[byte]*WriteNoticeRecord),
+		WriteNoticeRecordArray: make(map[byte][]WriteNoticeRecord),
 	}
-	pageArray[1].ProcArr[0] = &wn1
-	assert.Equal(t, wn1, *pageArray[1].ProcArr[0])
-	assert.Nil(t, pageArray[1].ProcArr[0].PrevRecord)
-	assert.Equal(t, wn2, *pageArray[1].ProcArr[0].NextRecord)
-	assert.Nil(t, pageArray[1].ProcArr[0].NextRecord.NextRecord)
+	pageArray[1].WriteNoticeRecordArray[0] = []WriteNoticeRecord{wn1, wn2}
+	assert.Equal(t, wn1, pageArray[1].WriteNoticeRecordArray[0][0])
+	assert.Equal(t, wn2, pageArray[1].WriteNoticeRecordArray[0][1])
 
 }
 
 func TestPageArrayEntry_AddWriteNotice(t *testing.T) {
 	pe := NewPageArrayEntry()
-	wn1 := pe.PrependWriteNotice(byte(0))
-	assert.True(t, wn1 == pe.ProcArr[0])
-	wn2 := pe.PrependWriteNotice(byte(0))
-	assert.True(t, wn2 == pe.ProcArr[0])
-	assert.True(t, wn1 == pe.ProcArr[0].NextRecord)
-	assert.True(t, wn2 == pe.ProcArr[0].NextRecord.PrevRecord)
+	wn1 := pe.PrependWriteNoticeOnPageArrayEntry(byte(0))
+	wn1.id = 1
+	assert.True(t, wn1 == &pe.WriteNoticeRecordArray[0][0])
+	wn2 := pe.PrependWriteNoticeOnPageArrayEntry(byte(0))
+	wn2.id = 2
+	assert.True(t, wn2 == &pe.WriteNoticeRecordArray[0][0])
+	assert.Equal(t, *wn1, pe.WriteNoticeRecordArray[0][1])
 }
-
+/*
 func TestPair_AppendIntervalRecord(t *testing.T) {
 	pair := new(Pair)
 	v1 := NewVectorclock(2)
@@ -73,4 +72,25 @@ func TestPair_PrependIntervalRecord(t *testing.T) {
 	cdr := pair.cdr.(*IntervalRecord)
 	assert.Equal(t, uint(2), car.Timestamp.GetTick(byte(0)))
 	assert.Equal(t, uint(1), cdr.Timestamp.GetTick(byte(1)))
+}
+*/
+
+func TestPageArrayEntry(t *testing.T) {
+	s := []int{}
+	for i := 0; i <= 8; i++{
+		s = append(s, i)
+	}
+	n := &s[4]
+	fmt.Println(*n)
+	*n = 6
+	fmt.Println(s[4])
+	fmt.Println(*n)
+	s[4] = 2
+	fmt.Println(s[4])
+	fmt.Println(*n)
+	for i := 9; i <= 10000; i++{
+		s = append([]int{i}, s...)
+	}
+	fmt.Println(*n)
+
 }
