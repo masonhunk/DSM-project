@@ -82,7 +82,7 @@ type TreadMarks struct {
 	eventchanMap      map[byte]chan string
 	eventNumber       byte
 	lastVCFromManager Vectorclock
-	waitgroupMap map[byte]*sync.WaitGroup
+	waitgroupMap      map[byte]*sync.WaitGroup
 }
 
 func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarriers int) *TreadMarks {
@@ -119,8 +119,8 @@ func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarri
 			val := tm.PrivilegedRead(tm.GetPageAddr(addr), tm.GetPageSize())
 			tm.twinMap[pageNr] = val
 			tm.PrivilegedWrite(addr, []byte{value})
-			tm.SetRights(addr, memory.READ_WRITE)
 		}
+		tm.SetRights(addr, memory.READ_WRITE)
 	})
 	return &tm
 }
@@ -153,6 +153,8 @@ func (t *TreadMarks) Join(address string) error {
 			t.eventchanMap[msg.Event] <- "continue"
 		case BARRIER_RESPONSE:
 			t.lastVCFromManager = msg.VC
+			t.vc = msg.VC
+			t.incorporateIntervalsIntoDatastructures(&msg)
 			t.eventchanMap[msg.Event] <- "continue"
 		case DIFF_REQUEST:
 			//remember to create own diff and set read protection on page(s)
@@ -167,6 +169,7 @@ func (t *TreadMarks) Join(address string) error {
 				t.PrivilegedRead(msg.PageNr*t.GetPageSize(), t.GetPageSize())
 				msg.Data = pg
 			}
+			msg.Type = COPY_RESPONSE
 			msg.From, msg.To = msg.To, msg.From
 			err := t.Send(msg)
 			panicOnErr(err)
@@ -174,7 +177,7 @@ func (t *TreadMarks) Join(address string) error {
 			t.PrivilegedWrite(msg.PageNr*t.GetPageSize(), msg.Data)
 			t.eventchanMap[msg.Event] <- "continue"
 		default:
-			return errors.New("unrecognized message type value: " + msg.Type)
+			return errors.New("unrecognized message type value at host: " + msg.Type)
 		}
 		return nil
 	}
@@ -453,6 +456,9 @@ func (t *TreadMarks) incorporateIntervalsIntoDatastructures(msg *TM_Message) {
 		}
 		for _, wn := range interval.WriteNotices {
 			//add sender to copyset of this page
+			if t.GetPageEntry(wn.PageNr) == nil {
+				log.Println("nil!")
+			}
 			t.SetCopyset(wn.PageNr, []int{int(msg.From)})
 			//prepend to write notice list and update pointers
 			var res *WriteNoticeRecord = t.PrependWriteNotice(interval.Proc, wn)

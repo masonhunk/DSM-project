@@ -2,7 +2,6 @@ package treadmarks
 
 import (
 	"DSM-project/memory"
-	"fmt"
 	"sync"
 )
 
@@ -116,7 +115,6 @@ func (p ProcArray) GetAllUnseenIntervals(ts Vectorclock) []Interval {
 
 func (p ProcArray) GetUnseenIntervalsAtProc(ts Vectorclock, procNr byte) []Interval {
 	result := []Interval{}
-	fmt.Println(procNr, p)
 	if len(p[int(procNr)]) == 0 {
 		return result
 	}
@@ -196,7 +194,7 @@ func (pe *PageArrayEntry) HasCopy() bool {
 }
 
 func NewPageArrayEntry(nrProcs int) *PageArrayEntry {
-	wnra := make([][]*WriteNoticeRecord, nrProcs)
+	wnra := make([][]*WriteNoticeRecord, nrProcs+1)
 	for i := range wnra {
 		wnra[i] = make([]*WriteNoticeRecord, 0)
 	}

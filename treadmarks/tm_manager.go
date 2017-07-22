@@ -120,7 +120,7 @@ func NewTM_Manager(conn net.Conn, bm BarrierManager, lm LockManager, tm *TreadMa
 	m.ITransciever = network.NewTransciever(conn, func(message network.Message) error {
 		return m.HandleMessage(message)
 	})
-	m.vc = *NewVectorclock(tm.nrProcs)
+	m.vc = *NewVectorclock(tm.nrProcs + 1)
 	m.nodes = tm.nrProcs
 	m.myId = byte(0)
 	m.tm = tm
@@ -150,8 +150,15 @@ func (m *tm_Manager) HandleMessage(message network.Message) error {
 		panic("Implement me!")
 	case FREE_REQUEST:
 		panic("Implement me!")
+	case COPY_REQUEST:
+		response.From = m.myId
+		response.To = msg.From
+		response.Type = COPY_RESPONSE
+		response.PageNr = msg.PageNr
+		response.Event = msg.Event
+		response.Data = m.tm.PrivilegedRead(msg.PageNr*m.tm.GetPageSize(), m.tm.GetPageSize())
 	default:
-		panic("I saw a message I was not allowed to see!")
+		panic("Saw an unknown message type in manager:" + message.GetType())
 	}
 
 	if response.Type != "" {
@@ -197,6 +204,7 @@ func (m *tm_Manager) handleBarrierRequest(message *TM_Message) *TM_Message {
 	m.vc.SetTick(byte(0), currTick+1)
 	msg.From, msg.To = msg.To, msg.From
 	msg.VC = m.vc
+	msg.Event = message.Event
 	msg.Type = BARRIER_RESPONSE
 	return &msg
 }
