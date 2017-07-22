@@ -360,7 +360,6 @@ func (t *TreadMarks) HandleDiffRequest(message TM_Message) TM_Message {
 }
 
 func (t *TreadMarks) HandleDiffResponse(message TM_Message) {
-	fmt.Println("We got a diff response.")
 	pairs := message.Diffs
 	i := 0
 	j := 0
@@ -368,20 +367,17 @@ func (t *TreadMarks) HandleDiffResponse(message TM_Message) {
 		if j >= t.nrProcs {
 			break
 		}
-		fmt.Println("Working on pair number ", i, " and proc number ", j)
 		wnl := t.GetWritenoticeList(byte(j), message.PageNr)
 		for k, wn := range wnl {
 			if i >= len(pairs) {
 				message.Group.Done()
 				return
 			} else if wn.Interval.Timestamp.Equals(pairs[i].Car.(Vectorclock)) {
-				fmt.Println("We had a match")
 				diff := new(Diff)
 				diff.Diffs = pairs[i].Cdr.(Diff).Diffs
 				wnl[k].Diff = diff
 				i++
 			} else if wn.Interval.Timestamp.IsBefore(pairs[i].Car.(Vectorclock)) {
-				fmt.Println("We need to break, because timestamp was old")
 				break
 			}
 		}
