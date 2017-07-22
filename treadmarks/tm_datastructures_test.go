@@ -9,13 +9,13 @@ import (
 func TestPageArray(t *testing.T) {
 	//vm := memory.NewVmem(1024, 64)
 	pageArray := NewPageArray(5)
-	wn1 := WriteNoticeRecord{Diff: nil, Interval: nil}
-	wn2 := WriteNoticeRecord{Diff: nil, Interval: nil}
+	wn1 := &WriteNoticeRecord{Diff: nil, Interval: nil}
+	wn2 := &WriteNoticeRecord{Diff: nil, Interval: nil}
 	pe := NewPageArrayEntry(5)
 	pe.copySet = []int{1, 2}
 	pageArray.SetPageEntry(1, pe)
 
-	pe.writeNoticeRecordArray[0] = []WriteNoticeRecord{wn1, wn2}
+	pe.writeNoticeRecordArray[0] = []*WriteNoticeRecord{wn1, wn2}
 
 	assert.Equal(t, wn1, pageArray.GetWritenoticeList(0, 1)[0])
 	assert.Equal(t, wn2, pageArray.GetWritenoticeList(0, 1)[1])

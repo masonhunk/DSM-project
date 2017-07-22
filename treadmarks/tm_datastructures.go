@@ -20,7 +20,7 @@ type TM_IDataStructures interface {
 type PageArrayInterface interface {
 	SetPageEntry(pageNr int, p *PageArrayEntry)
 	GetPageEntry(pageNr int) *PageArrayEntry
-	GetWritenoticeList(procNr byte, pageNr int) []WriteNoticeRecord
+	GetWritenoticeList(procNr byte, pageNr int) []*WriteNoticeRecord
 	PrependWriteNotice(procId byte, wn WriteNotice) *WriteNoticeRecord
 	MapWriteNotices(f func(wn *WriteNoticeRecord), pageNr int, procNr byte)
 	PrependEmptyWriteNotice(pageNr int, procId byte) *WriteNoticeRecord
@@ -32,7 +32,7 @@ type PageArrayEntryInterface interface {
 	GetCopyset() []int
 	HasCopy() bool
 	SetHasCopy(bool bool)
-	GetWritenoticeList(procId byte) []WriteNoticeRecord
+	GetWritenoticeList(procId byte) []*WriteNoticeRecord
 	GetWriteNotice(procId byte, pageNr int) *WriteNoticeRecord
 	PrependWriteNotice(procId byte, wn WriteNotice) *WriteNoticeRecord
 }
@@ -60,7 +60,7 @@ type PageArray struct {
 
 type PageArrayEntry struct {
 	copySet                []int
-	writeNoticeRecordArray [][]WriteNoticeRecord
+	writeNoticeRecordArray [][]*WriteNoticeRecord
 	hascopy                bool
 }
 
@@ -161,17 +161,19 @@ func (wn *WriteNoticeRecord) SetDiff(diff *Diff) {
 	wn.Diff = diff
 }
 
-func (pe *PageArrayEntry) GetWritenoticeList(procId byte) []WriteNoticeRecord {
+func (pe *PageArrayEntry) GetWritenoticeList(procId byte) []*WriteNoticeRecord {
 	return pe.writeNoticeRecordArray[procId]
 }
 
 func (pe *PageArrayEntry) GetWriteNotice(procId byte, index int) *WriteNoticeRecord {
-	return &pe.writeNoticeRecordArray[procId][len(pe.writeNoticeRecordArray[procId])-index-1]
+	return pe.writeNoticeRecordArray[procId][index]
 }
 
 func (pe *PageArrayEntry) PrependWriteNotice(procId byte, wn WriteNotice) *WriteNoticeRecord {
-	pe.writeNoticeRecordArray[procId] = append(pe.writeNoticeRecordArray[procId], WriteNoticeRecord{WriteNotice: wn})
-	return &pe.writeNoticeRecordArray[procId][len(pe.writeNoticeRecordArray[procId])-1]
+	wnr := new(WriteNoticeRecord)
+	wnr.WriteNotice = wn
+	pe.writeNoticeRecordArray[procId] = append([]*WriteNoticeRecord{wnr}, pe.writeNoticeRecordArray[procId]...)
+	return wnr
 }
 
 func (pe *PageArrayEntry) SetHasCopy(bool bool) {
@@ -187,9 +189,9 @@ func (pe *PageArrayEntry) HasCopy() bool {
 }
 
 func NewPageArrayEntry(nrProcs int) *PageArrayEntry {
-	wnra := make([][]WriteNoticeRecord, nrProcs)
+	wnra := make([][]*WriteNoticeRecord, nrProcs)
 	for i := range wnra {
-		wnra[i] = make([]WriteNoticeRecord, 0)
+		wnra[i] = make([]*WriteNoticeRecord, 0)
 	}
 	return &PageArrayEntry{[]int{0}, wnra, false}
 }
@@ -203,7 +205,7 @@ func NewPageArray(nrProc int) *PageArray {
 	return p
 }
 
-func (p *PageArray) GetWritenoticeList(procNr byte, pageNr int) []WriteNoticeRecord {
+func (p *PageArray) GetWritenoticeList(procNr byte, pageNr int) []*WriteNoticeRecord {
 	return p.array[pageNr].GetWritenoticeList(procNr)
 }
 
@@ -226,7 +228,7 @@ func (p *PageArray) PrependWriteNotice(procId byte, wn WriteNotice) *WriteNotice
 func (p *PageArray) MapWriteNotices(f func(wn *WriteNoticeRecord), pageNr int, procNr byte) {
 	wns := p.GetWritenoticeList(procNr, pageNr)
 	for i := 0; i < len(wns); i++ {
-		f(&wns[i])
+		f(wns[i])
 	}
 }
 

@@ -54,7 +54,7 @@ func TestPreprendInterval(t *testing.T) {
 	assert.True(t, p.car == a)
 }
 */
-func TestTreadMarks_handleLockAcquireRequest(t *testing.T) {
+/*func TestTreadMarks_handleLockAcquireRequest(t *testing.T) {
 	vm := memory.NewVmem(128, 8)
 	tm := NewTreadMarks(vm, 2, 1, 1)
 	tm.ProcId = 1
@@ -112,7 +112,7 @@ func TestTreadMarks_handleLockAcquireRequest(t *testing.T) {
 	response = tm.HandleLockAcquireRequest(msg)
 	assert.Equal(t, int1, response.Intervals[0],
 		"We should only recieve intervals later than our timestamp.")
-}
+}*/
 
 func TestTreadMarks_GenerateDiffRequest(t *testing.T) {
 	vm := memory.NewVmem(128, 8)
@@ -304,7 +304,7 @@ func NewClientMock() *ClientMock {
 
 func SetupHandleDiffRequest() *TreadMarks {
 	vm := memory.NewVmem(128, 8)
-	tm := NewTreadMarks(vm, 2, 1, 1)
+	tm := NewTreadMarks(vm, 3, 1, 1)
 	tm.ProcId = 1
 
 	//Setup
@@ -322,6 +322,7 @@ func SetupHandleDiffRequest() *TreadMarks {
 	wr2 := tm.PrependWriteNotice(byte(0), WriteNotice{PageNr: 1})
 	wr3 := tm.PrependWriteNotice(byte(1), WriteNotice{PageNr: 0})
 	wr4 := tm.PrependWriteNotice(byte(1), WriteNotice{PageNr: 1})
+
 	//We add the writenoticerecords to the interval record.
 	ir0.WriteNotices = []*WriteNoticeRecord{wr1, wr2}
 	ir1.WriteNotices = []*WriteNoticeRecord{wr3, wr4}
@@ -339,7 +340,33 @@ func SetupHandleDiffRequest() *TreadMarks {
 	//In the end we add the two interval records.
 	tm.PrependIntervalRecord(byte(0), ir0)
 	tm.PrependIntervalRecord(byte(1), ir1)
+
 	return tm
+}
+
+func continueHandlediffRequestTest(tm *TreadMarks) {
+	vc1 := NewVectorclock(3)
+	vc1.SetTick(byte(2), 3)
+	vc2 := NewVectorclock(3)
+	vc2.SetTick(byte(2), 4)
+
+	ir2 := &IntervalRecord{Timestamp: *vc1, WriteNotices: make([]*WriteNoticeRecord, 0)}
+	ir3 := &IntervalRecord{Timestamp: *vc2, WriteNotices: make([]*WriteNoticeRecord, 0)}
+
+	wr5 := tm.PrependWriteNotice(byte(2), WriteNotice{PageNr: 0})
+	wr6 := tm.PrependWriteNotice(byte(2), WriteNotice{PageNr: 0})
+
+	ir2.WriteNotices = []*WriteNoticeRecord{wr5}
+	ir3.WriteNotices = []*WriteNoticeRecord{wr6}
+
+	wr5.Interval = ir2
+	wr6.Interval = ir3
+
+	wr5.Diff = &Diff{[]Pair{{byte(5), byte(5)}}}
+	wr6.Diff = &Diff{[]Pair{{byte(6), byte(6)}}}
+
+	tm.PrependIntervalRecord(byte(2), ir2)
+	tm.PrependIntervalRecord(byte(2), ir3)
 }
 
 func TestTreadMarks_HandleDiffRequest_DiffsAfterRequestVC(t *testing.T) {
@@ -431,6 +458,21 @@ func TestTreadMarks_HandleDiffRequest_DiffVCBeforeRequestVC_case2(t *testing.T) 
 		"We shouldnt recieve any diffs, because all diffs are before the timestamp")
 }
 
+func TestTreadMarks_HandleDiffRequest_OrderTest(t *testing.T) {
+	tm := SetupHandleDiffRequest()
+	continueHandlediffRequestTest(tm)
+
+	testVC := NewVectorclock(3)
+	request := TM_Message{From: byte(0), To: byte(1), Type: DIFF_REQUEST, VC: *testVC, PageNr: 0}
+	diffs := tm.HandleDiffRequest(request)
+	expected := []Pair{
+		{Vectorclock{[]uint{0, 3, 0}}, []Pair{{byte(0), byte(1)}}},
+		{Vectorclock{[]uint{0, 0, 4}}, []Pair{{byte(6), byte(6)}}},
+		{Vectorclock{[]uint{0, 0, 3}}, []Pair{{byte(5), byte(5)}}},
+	}
+	assert.Equal(t, expected, diffs.Diffs)
+}
+
 /*func TestTreadMarks_Barrier(t *testing.T) {
 	tm := SetupHandleDiffRequest() //we have ProcId = 1, manager = 0
 	cm := NewClientMock()
@@ -482,10 +524,10 @@ func SetupHandleDiffResponse() *TreadMarks {
 	//Then the writenoticerecords
 	wr1 := tm.PrependWriteNotice(byte(0), WriteNotice{PageNr: 0})
 
-	wr2 := tm.PrependWriteNotice(byte(0), WriteNotice{PageNr: 1})
-	wr3 := tm.PrependWriteNotice(byte(0), WriteNotice{PageNr: 0})
+	wr2 := tm.PrependWriteNotice(byte(0), WriteNotice{PageNr: 0})
+	wr3 := tm.PrependWriteNotice(byte(1), WriteNotice{PageNr: 0})
 
-	wr4 := tm.PrependWriteNotice(byte(0), WriteNotice{PageNr: 1})
+	wr4 := tm.PrependWriteNotice(byte(1), WriteNotice{PageNr: 0})
 	//We add the writenoticerecords to the interval record.
 	ir0.WriteNotices = []*WriteNoticeRecord{wr1, wr2}
 	ir1.WriteNotices = []*WriteNoticeRecord{wr3, wr4}
@@ -502,7 +544,7 @@ func SetupHandleDiffResponse() *TreadMarks {
 	return tm
 }
 
-func TestTreadMarks_HandleDiffResponse(t *testing.T) {
+func TestTreadMarks_HandleDiffResponse_TestSingleDiff(t *testing.T) {
 	tm := SetupHandleDiffResponse()
 	testVC := NewVectorclock(3)
 	testVC.SetTick(byte(1), 3)
@@ -510,17 +552,61 @@ func TestTreadMarks_HandleDiffResponse(t *testing.T) {
 	group := new(sync.WaitGroup)
 	group.Add(1)
 
-	fmt.Println(tm.GetWritenoticeList(0, 0))
-
 	diffs := []Pair{
 		{tm.GetWritenoticeList(0, 0)[0].Interval.Timestamp, Diff{[]Pair{{1, 2}}}},
 	}
-	response := TM_Message{From: byte(0), To: byte(1), Type: DIFF_RESPONSE, VC: *testVC, PageNr: 0, Diffs: diffs, Group: group}
-	fmt.Println(tm.GetWritenoticeList(0, 0)[0].Diff)
-	fmt.Println(tm.GetWritenoticeList(0, 0)[1].Diff)
-	tm.HandleDiffResponse(response)
-	fmt.Println(tm.GetWritenoticeList(0, 0)[0].Diff)
-	fmt.Println(tm.GetWritenoticeList(0, 0)[1].Diff)
-	group.Wait()
 
+	assert.Nil(t, tm.GetWritenoticeList(0, 0)[0].Diff)
+	assert.Nil(t, tm.GetWritenoticeList(0, 0)[1].Diff)
+
+	response := TM_Message{From: byte(0), To: byte(1), Type: DIFF_RESPONSE, VC: *testVC, PageNr: 0, Diffs: diffs, Group: group}
+	tm.HandleDiffResponse(response)
+	assert.Equal(t, tm.GetWritenoticeList(0, 0)[0].Diff.Diffs[0], Pair{1, 2})
+	assert.Nil(t, tm.GetWritenoticeList(0, 0)[1].Diff)
+}
+
+func TestTreadMarks_HandleDiffResponse_TestMultipleDiff(t *testing.T) {
+	tm := SetupHandleDiffResponse()
+	testVC := NewVectorclock(3)
+	testVC.SetTick(byte(1), 3)
+
+	group := new(sync.WaitGroup)
+	group.Add(1)
+
+	diffs := []Pair{
+		{tm.GetWritenoticeList(0, 0)[0].Interval.Timestamp, Diff{[]Pair{{1, 2}}}},
+		{tm.GetWritenoticeList(0, 0)[1].Interval.Timestamp, Diff{[]Pair{{3, 4}}}},
+	}
+
+	assert.Nil(t, tm.GetWritenoticeList(0, 0)[0].Diff)
+	assert.Nil(t, tm.GetWritenoticeList(0, 0)[1].Diff)
+
+	response := TM_Message{From: byte(0), To: byte(1), Type: DIFF_RESPONSE, VC: *testVC, PageNr: 0, Diffs: diffs, Group: group}
+	tm.HandleDiffResponse(response)
+	assert.Equal(t, tm.GetWritenoticeList(0, 0)[0].Diff.Diffs[0], Pair{1, 2})
+	assert.Equal(t, tm.GetWritenoticeList(0, 0)[1].Diff.Diffs[0], Pair{3, 4})
+}
+
+func TestTreadMarks_HandleDiffResponse_TestSingleDiffMultipleProcs(t *testing.T) {
+	tm := SetupHandleDiffResponse()
+	testVC := NewVectorclock(3)
+	testVC.SetTick(byte(1), 3)
+
+	group := new(sync.WaitGroup)
+	group.Add(1)
+
+	fmt.Println(tm.GetWritenoticeList(1, 0))
+
+	diffs := []Pair{
+		{tm.GetWritenoticeList(0, 0)[0].Interval.Timestamp, Diff{[]Pair{{1, 2}}}},
+		{tm.GetWritenoticeList(1, 0)[0].Interval.Timestamp, Diff{[]Pair{{3, 4}}}},
+	}
+
+	assert.Nil(t, tm.GetWritenoticeList(0, 0)[0].Diff)
+	assert.Nil(t, tm.GetWritenoticeList(1, 0)[0].Diff)
+
+	response := TM_Message{From: byte(0), To: byte(1), Type: DIFF_RESPONSE, VC: *testVC, PageNr: 0, Diffs: diffs, Group: group}
+	tm.HandleDiffResponse(response)
+	assert.Equal(t, tm.GetWritenoticeList(0, 0)[0].Diff.Diffs[0], Pair{1, 2})
+	assert.Equal(t, tm.GetWritenoticeList(1, 0)[0].Diff.Diffs[0], Pair{3, 4})
 }
