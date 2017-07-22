@@ -154,17 +154,21 @@ func (p ProcArray) GetIntervalRecordTail(procNr byte) *IntervalRecord {
 
 //Everything that concerns page entries
 
+func (wn *WriteNoticeRecord) SetDiff(diff *Diff) {
+	wn.Diff = diff
+}
+
 func (pe *PageArrayEntry) GetWritenoticeList(procId byte) []WriteNoticeRecord {
 	return pe.writeNoticeRecordArray[procId]
 }
 
 func (pe *PageArrayEntry) GetWriteNotice(procId byte, index int) *WriteNoticeRecord {
-	return &pe.writeNoticeRecordArray[procId][index]
+	return &pe.writeNoticeRecordArray[procId][len(pe.writeNoticeRecordArray[procId])-index-1]
 }
 
 func (pe *PageArrayEntry) PrependWriteNotice(procId byte, wn WriteNotice) *WriteNoticeRecord {
-	pe.writeNoticeRecordArray[procId] = append([]WriteNoticeRecord{{WriteNotice: wn}}, pe.writeNoticeRecordArray[procId]...)
-	return &pe.writeNoticeRecordArray[procId][0]
+	pe.writeNoticeRecordArray[procId] = append(pe.writeNoticeRecordArray[procId], WriteNoticeRecord{WriteNotice: wn})
+	return &pe.writeNoticeRecordArray[procId][len(pe.writeNoticeRecordArray[procId])-1]
 }
 
 func (pe *PageArrayEntry) SetHasCopy(bool bool) {
@@ -213,7 +217,6 @@ func (p *PageArray) GetPageEntry(pageNr int) *PageArrayEntry {
 
 func (p *PageArray) PrependWriteNotice(procId byte, wn WriteNotice) *WriteNoticeRecord {
 	wnr := p.GetPageEntry(wn.PageNr).PrependWriteNotice(procId, wn)
-	wnr.WriteNotice = wn
 	return wnr
 }
 

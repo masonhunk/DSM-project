@@ -52,6 +52,7 @@ type TM_Message struct {
 	Intervals []Interval
 	Event     *chan string
 	Data      []byte
+	Group     *sync.WaitGroup
 }
 
 func (m TM_Message) GetFrom() byte {
@@ -258,58 +259,67 @@ func (t *TreadMarks) updateDatastructures() {
 	}
 }
 
-func (t *TreadMarks) GenerateDiffRequests(pageNr int) []TM_Message {
+func (t *TreadMarks) GenerateDiffRequests(pageNr int, group *sync.WaitGroup) []TM_Message {
 	//First we check if we have the page already or need to request a copy.
 	if t.GetPageEntry(pageNr).hascopy == false {
-		t.sendCopyRequest(pageNr, byte(t.GetCopyset(pageNr)[0]))
+		//t.sendCopyRequest(pageNr, byte(t.GetCopyset(pageNr)[0]))
 	}
-	messages := make([]TM_Message, 0)
-	vc := make([]Vectorclock, t.nrProcs)
 	//First we find the start timestamps
-
-	// First we figure out what processes we actually need to send messages to.
-	// To do this, we first find the largest interval for each process, where there is a write notice without
-	// a diff.
-	// During this, we also find the lowest timestamp for this process, where we are missing diffs.
-	intrec := make([]*IntervalRecord, t.nrProcs)
-	for proc := byte(0); proc < byte(t.nrProcs); proc = proc + byte(1) {
-		wnr := t.TM_IDataStructures.GetWriteNoticeListHead(pageNr, proc)
-		if wnr != nil && wnr.Diff == nil {
-			intrec[int(proc)] = wnr.Interval
-			wnrs := t.GetWritenoticeList(proc, pageNr)
-			for i := 0; i < len(wnrs); i++ {
-				if wnrs[i].Diff == nil {
-					break
-				}
-				vc[int(proc)] = wnrs[i].Interval.Timestamp
-			}
-		}
-	}
-	// After that we remove the ones, that is overshadowed by others.
-	for proc, int1 := range intrec {
-		if int1 == nil {
+	ProcStartTS := make([]Vectorclock, t.nrProcs)
+	ProcEndTS := make([]Vectorclock, t.nrProcs)
+	for i := 0; i < t.nrProcs; i++ {
+		wnrl := t.GetWritenoticeList(byte(i), pageNr)
+		if len(wnrl) < 1 {
 			continue
 		}
-		overshadowed := false
-		for _, int2 := range intrec {
-			if int2 == nil {
-				continue
-			}
-			if int1.Timestamp.Compare(int2.Timestamp) < 0 {
-				overshadowed = true
+		ProcStartTS[i] = wnrl[0].Interval.Timestamp
+		for _, wnr := range wnrl {
+			if wnr.Diff != nil {
 				break
 			}
+			ProcEndTS[i] = wnr.Interval.Timestamp
 		}
-		if overshadowed == false {
-			message := TM_Message{
-				From:   t.ProcId,
-				To:     byte(proc),
-				Type:   DIFF_REQUEST,
-				VC:     vc[proc],
-				PageNr: pageNr,
+	}
+
+	//Then we "merge" the different intervals
+	for i := 0; i < t.nrProcs; i++ {
+		if ProcStartTS[i].Value == nil {
+			continue
+		}
+		for j := i; j < t.nrProcs; j++ {
+			if ProcStartTS[j].Value == nil {
+				continue
 			}
-			messages = append(messages, message)
+			if ProcStartTS[i].IsAfter(ProcStartTS[j]) {
+				if ProcEndTS[i].Value == nil || ProcEndTS[i].IsAfter(ProcEndTS[j]) {
+					ProcEndTS[i] = ProcEndTS[j]
+				}
+				ProcEndTS[j] = Vectorclock{}
+			} else if ProcStartTS[j].IsAfter(ProcStartTS[i]) {
+				if ProcEndTS[j].Value == nil || ProcEndTS[j].IsAfter(ProcEndTS[i]) {
+					ProcEndTS[j] = ProcEndTS[i]
+				}
+				ProcEndTS[i] = Vectorclock{}
+			}
 		}
+
+	}
+
+	//Then we build the messages
+	messages := make([]TM_Message, 0)
+	for i := 0; i < t.nrProcs; i++ {
+		if ProcStartTS[i].Value == nil || ProcEndTS[i].Value == nil {
+			continue
+		}
+		message := TM_Message{
+			From:   t.ProcId,
+			To:     byte(i),
+			Type:   DIFF_REQUEST,
+			VC:     ProcEndTS[i],
+			PageNr: pageNr,
+			Group:  group,
+		}
+		messages = append(messages, message)
 	}
 	return messages
 }
@@ -334,6 +344,35 @@ func (t *TreadMarks) HandleDiffRequest(message TM_Message) TM_Message {
 	message.Diffs = pairs
 	message.Type = DIFF_RESPONSE
 	return message
+}
+
+func (t *TreadMarks) HandleDiffResponse(message TM_Message) {
+	fmt.Println("We got a diff response.")
+	pairs := message.Diffs
+	i := 0
+	j := 0
+	for {
+		if i >= len(pairs) || j >= t.nrProcs {
+			break
+		}
+		fmt.Println("Working on pair number ", i, " and proc number ", j)
+		wnl := t.GetWritenoticeList(byte(j), message.PageNr)
+		for k, wn := range wnl {
+			if wn.Interval.Timestamp.Equals(pairs[i].Car.(Vectorclock)) {
+				fmt.Println("We had a match")
+				diff := new(Diff)
+				diff.Diffs = pairs[i].Cdr.(Diff).Diffs
+				wnl[k].Diff = diff
+				i++
+				break
+			} else if wn.Interval.Timestamp.IsBefore(pairs[i].Car.(Vectorclock)) {
+				fmt.Println("We need to break, because timestamp was old")
+				break
+			}
+		}
+		j++
+	}
+	message.Group.Done()
 }
 
 func (t *TreadMarks) Shutdown() {
