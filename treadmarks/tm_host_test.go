@@ -154,18 +154,18 @@ func TestTreadMarks_GenerateDiffRequest(t *testing.T) {
 
 	result := tm.GenerateDiffRequests(0, nil)
 	assert.Len(t, result, 1)
-	assert.Contains(t, result, TM_Message{From: tm.ProcId, To: byte(2), Type: DIFF_REQUEST, VC: *vc1, PageNr: 0})
+	assert.Contains(t, result, TM_Message{From: tm.ProcId, To: byte(2), Type: DIFF_REQUEST, VC: *vc1, PageNr: 0, Event: tm.eventNumber})
 	result = tm.GenerateDiffRequests(1, nil)
 	assert.Len(t, result, 1)
-	assert.Contains(t, result, TM_Message{From: tm.ProcId, To: byte(0), Type: DIFF_REQUEST, VC: *vc2, PageNr: 1})
+	assert.Contains(t, result, TM_Message{From: tm.ProcId, To: byte(0), Type: DIFF_REQUEST, VC: *vc2, PageNr: 1, Event: tm.eventNumber})
 	result = tm.GenerateDiffRequests(2, nil)
 	assert.Len(t, result, 1)
-	assert.Contains(t, result, TM_Message{From: tm.ProcId, To: byte(0), Type: DIFF_REQUEST, VC: *vc3, PageNr: 2})
+	assert.Contains(t, result, TM_Message{From: tm.ProcId, To: byte(0), Type: DIFF_REQUEST, VC: *vc3, PageNr: 2, Event: tm.eventNumber})
 
 	result = tm.GenerateDiffRequests(3, nil)
-	assert.Contains(t, result, TM_Message{From: tm.ProcId, To: byte(2), Type: DIFF_REQUEST, VC: *vc3, PageNr: 3})
-	assert.Contains(t, result, TM_Message{From: tm.ProcId, To: byte(1), Type: DIFF_REQUEST, VC: *vc2, PageNr: 3})
-	assert.Contains(t, result, TM_Message{From: tm.ProcId, To: byte(0), Type: DIFF_REQUEST, VC: *vc1, PageNr: 3})
+	assert.Contains(t, result, TM_Message{From: tm.ProcId, To: byte(2), Type: DIFF_REQUEST, VC: *vc3, PageNr: 3, Event: tm.eventNumber})
+	assert.Contains(t, result, TM_Message{From: tm.ProcId, To: byte(1), Type: DIFF_REQUEST, VC: *vc2, PageNr: 3, Event: tm.eventNumber})
+	assert.Contains(t, result, TM_Message{From: tm.ProcId, To: byte(0), Type: DIFF_REQUEST, VC: *vc1, PageNr: 3, Event: tm.eventNumber})
 	assert.Len(t, result, 3)
 
 	//Then we make another interval record with matching write notice records.
@@ -180,13 +180,13 @@ func TestTreadMarks_GenerateDiffRequest(t *testing.T) {
 	wr4_2.Interval = ir4
 	tm.TM_IDataStructures.PrependIntervalRecord(byte(1), ir4)
 	result = tm.GenerateDiffRequests(3, nil)
-	assert.Contains(t, result, TM_Message{From: tm.ProcId, To: byte(2), Type: DIFF_REQUEST, VC: *vc3, PageNr: 3})
+	assert.Contains(t, result, TM_Message{From: tm.ProcId, To: byte(2), Type: DIFF_REQUEST, VC: *vc3, PageNr: 3, Event: tm.eventNumber})
 	assert.Len(t, result, 1)
 
 	tm.GetPageEntry(3).GetWriteNotice(2, 0).SetDiff(new(Diff))
 
 	result = tm.GenerateDiffRequests(3, nil)
-	assert.Contains(t, result, TM_Message{From: tm.ProcId, To: byte(2), Type: DIFF_REQUEST, VC: *vc1, PageNr: 3})
+	assert.Contains(t, result, TM_Message{From: tm.ProcId, To: byte(2), Type: DIFF_REQUEST, VC: *vc1, PageNr: 3, Event: tm.eventNumber})
 	assert.Len(t, result, 1)
 }
 
@@ -552,6 +552,8 @@ func TestTreadMarks_HandleDiffResponse_TestSingleDiff(t *testing.T) {
 	group := new(sync.WaitGroup)
 	group.Add(1)
 
+	tm.waitgroupMap[tm.eventNumber] = group
+
 	diffs := []Pair{
 		{tm.GetWritenoticeList(0, 0)[0].Interval.Timestamp, Diff{[]Pair{{1, 2}}}},
 	}
@@ -559,8 +561,9 @@ func TestTreadMarks_HandleDiffResponse_TestSingleDiff(t *testing.T) {
 	assert.Nil(t, tm.GetWritenoticeList(0, 0)[0].Diff)
 	assert.Nil(t, tm.GetWritenoticeList(0, 0)[1].Diff)
 
-	response := TM_Message{From: byte(0), To: byte(1), Type: DIFF_RESPONSE, VC: *testVC, PageNr: 0, Diffs: diffs, Group: group}
+	response := TM_Message{From: byte(0), To: byte(1), Type: DIFF_RESPONSE, VC: *testVC, PageNr: 0, Diffs: diffs, Event: tm.eventNumber}
 	tm.HandleDiffResponse(response)
+	group.Wait()
 	assert.Equal(t, tm.GetWritenoticeList(0, 0)[0].Diff.Diffs[0], Pair{1, 2})
 	assert.Nil(t, tm.GetWritenoticeList(0, 0)[1].Diff)
 }
@@ -573,6 +576,8 @@ func TestTreadMarks_HandleDiffResponse_TestMultipleDiff(t *testing.T) {
 	group := new(sync.WaitGroup)
 	group.Add(1)
 
+	tm.waitgroupMap[tm.eventNumber] = group
+
 	diffs := []Pair{
 		{tm.GetWritenoticeList(0, 0)[0].Interval.Timestamp, Diff{[]Pair{{1, 2}}}},
 		{tm.GetWritenoticeList(0, 0)[1].Interval.Timestamp, Diff{[]Pair{{3, 4}}}},
@@ -581,8 +586,9 @@ func TestTreadMarks_HandleDiffResponse_TestMultipleDiff(t *testing.T) {
 	assert.Nil(t, tm.GetWritenoticeList(0, 0)[0].Diff)
 	assert.Nil(t, tm.GetWritenoticeList(0, 0)[1].Diff)
 
-	response := TM_Message{From: byte(0), To: byte(1), Type: DIFF_RESPONSE, VC: *testVC, PageNr: 0, Diffs: diffs, Group: group}
+	response := TM_Message{From: byte(0), To: byte(1), Type: DIFF_RESPONSE, VC: *testVC, PageNr: 0, Diffs: diffs, Event: tm.eventNumber}
 	tm.HandleDiffResponse(response)
+	group.Wait()
 	assert.Equal(t, tm.GetWritenoticeList(0, 0)[0].Diff.Diffs[0], Pair{1, 2})
 	assert.Equal(t, tm.GetWritenoticeList(0, 0)[1].Diff.Diffs[0], Pair{3, 4})
 }
@@ -595,7 +601,7 @@ func TestTreadMarks_HandleDiffResponse_TestSingleDiffMultipleProcs(t *testing.T)
 	group := new(sync.WaitGroup)
 	group.Add(1)
 
-	fmt.Println(tm.GetWritenoticeList(1, 0))
+	tm.waitgroupMap[tm.eventNumber] = group
 
 	diffs := []Pair{
 		{tm.GetWritenoticeList(0, 0)[0].Interval.Timestamp, Diff{[]Pair{{1, 2}}}},
@@ -605,8 +611,9 @@ func TestTreadMarks_HandleDiffResponse_TestSingleDiffMultipleProcs(t *testing.T)
 	assert.Nil(t, tm.GetWritenoticeList(0, 0)[0].Diff)
 	assert.Nil(t, tm.GetWritenoticeList(1, 0)[0].Diff)
 
-	response := TM_Message{From: byte(0), To: byte(1), Type: DIFF_RESPONSE, VC: *testVC, PageNr: 0, Diffs: diffs, Group: group}
+	response := TM_Message{From: byte(0), To: byte(1), Type: DIFF_RESPONSE, VC: *testVC, PageNr: 0, Diffs: diffs, Event: tm.eventNumber}
 	tm.HandleDiffResponse(response)
+	group.Wait()
 	assert.Equal(t, tm.GetWritenoticeList(0, 0)[0].Diff.Diffs[0], Pair{1, 2})
 	assert.Equal(t, tm.GetWritenoticeList(1, 0)[0].Diff.Diffs[0], Pair{3, 4})
 }

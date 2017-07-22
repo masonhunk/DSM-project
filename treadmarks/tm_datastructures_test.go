@@ -1,7 +1,6 @@
 package treadmarks
 
 import (
-	"fmt"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
@@ -32,6 +31,191 @@ func TestPageArrayEntry_AddWriteNotice(t *testing.T) {
 	assert.Equal(t, wn1, pe.GetWriteNotice(0, 1))
 }
 
+func TestPageArrayEntry_DiffOrderChannel_TwoSameProc(t *testing.T) {
+	pe := NewPageArrayEntry(3)
+
+	//First we make three vectorclocks.
+	vc1 := NewVectorclock(3)
+	vc1.SetTick(byte(0), 1)
+	vc2 := NewVectorclock(3)
+	vc2.SetTick(byte(0), 2)
+
+	//Then we make the interval record
+	ir0 := &IntervalRecord{Timestamp: *vc1, WriteNotices: make([]*WriteNoticeRecord, 0)}
+	ir1 := &IntervalRecord{Timestamp: *vc2, WriteNotices: make([]*WriteNoticeRecord, 0)}
+
+	Diff1 := &Diff{[]Pair{{byte(1), byte(1)}}}
+	Diff2 := &Diff{[]Pair{{byte(2), byte(2)}}}
+
+	wr1 := &WriteNoticeRecord{
+		Id:          1,
+		WriteNotice: WriteNotice{1},
+		Interval:    ir0,
+		Diff:        Diff1,
+	}
+	wr2 := &WriteNoticeRecord{
+		Id:          1,
+		WriteNotice: WriteNotice{1},
+		Interval:    ir1,
+		Diff:        Diff2,
+	}
+
+	pe.writeNoticeRecordArray[0] = []*WriteNoticeRecord{wr2, wr1}
+
+	channel := pe.OrderedDiffChannel()
+	assert.Equal(t, Diff1, <-channel)
+	assert.Equal(t, Diff2, <-channel)
+}
+
+func TestPageArrayEntry_DiffOrderChannel_TwoDifferentProc(t *testing.T) {
+	pe := NewPageArrayEntry(3)
+
+	//First we make three vectorclocks.
+	vc1 := NewVectorclock(3)
+	vc1.SetTick(byte(0), 1)
+	vc2 := NewVectorclock(3)
+	vc2.SetTick(byte(0), 2)
+
+	//Then we make the interval record
+	ir0 := &IntervalRecord{Timestamp: *vc1, WriteNotices: make([]*WriteNoticeRecord, 0)}
+	ir1 := &IntervalRecord{Timestamp: *vc2, WriteNotices: make([]*WriteNoticeRecord, 0)}
+
+	Diff1 := &Diff{[]Pair{{byte(1), byte(1)}}}
+	Diff2 := &Diff{[]Pair{{byte(2), byte(2)}}}
+
+	wr1 := &WriteNoticeRecord{
+		Id:          1,
+		WriteNotice: WriteNotice{1},
+		Interval:    ir0,
+		Diff:        Diff1,
+	}
+	wr2 := &WriteNoticeRecord{
+		Id:          1,
+		WriteNotice: WriteNotice{1},
+		Interval:    ir1,
+		Diff:        Diff2,
+	}
+
+	pe.writeNoticeRecordArray[0] = []*WriteNoticeRecord{wr1}
+	pe.writeNoticeRecordArray[1] = []*WriteNoticeRecord{wr2}
+
+	channel := pe.OrderedDiffChannel()
+	assert.Equal(t, Diff1, <-channel)
+	assert.Equal(t, Diff2, <-channel)
+}
+
+func TestPageArrayEntry_DiffOrderChannel_TwoDifferentProcReverse(t *testing.T) {
+	pe := NewPageArrayEntry(3)
+
+	//First we make three vectorclocks.
+	vc1 := NewVectorclock(3)
+	vc1.SetTick(byte(0), 1)
+	vc2 := NewVectorclock(3)
+	vc2.SetTick(byte(0), 2)
+
+	//Then we make the interval record
+	ir0 := &IntervalRecord{Timestamp: *vc1, WriteNotices: make([]*WriteNoticeRecord, 0)}
+	ir1 := &IntervalRecord{Timestamp: *vc2, WriteNotices: make([]*WriteNoticeRecord, 0)}
+
+	Diff1 := &Diff{[]Pair{{byte(1), byte(1)}}}
+	Diff2 := &Diff{[]Pair{{byte(2), byte(2)}}}
+
+	wr1 := &WriteNoticeRecord{
+		Id:          1,
+		WriteNotice: WriteNotice{1},
+		Interval:    ir0,
+		Diff:        Diff1,
+	}
+	wr2 := &WriteNoticeRecord{
+		Id:          1,
+		WriteNotice: WriteNotice{1},
+		Interval:    ir1,
+		Diff:        Diff2,
+	}
+
+	pe.writeNoticeRecordArray[1] = []*WriteNoticeRecord{wr1}
+	pe.writeNoticeRecordArray[0] = []*WriteNoticeRecord{wr2}
+
+	channel := pe.OrderedDiffChannel()
+	assert.Equal(t, Diff1, <-channel)
+	assert.Equal(t, Diff2, <-channel)
+}
+
+func TestPageArrayEntry_DiffOrderChannel_TwoDifferentProcConcurrent(t *testing.T) {
+	pe := NewPageArrayEntry(3)
+
+	//First we make three vectorclocks.
+	vc1 := NewVectorclock(3)
+	vc1.SetTick(byte(0), 1)
+	vc2 := NewVectorclock(3)
+	vc2.SetTick(byte(1), 2)
+
+	//Then we make the interval record
+	ir0 := &IntervalRecord{Timestamp: *vc1, WriteNotices: make([]*WriteNoticeRecord, 0)}
+	ir1 := &IntervalRecord{Timestamp: *vc2, WriteNotices: make([]*WriteNoticeRecord, 0)}
+
+	Diff1 := &Diff{[]Pair{{byte(1), byte(1)}}}
+	Diff2 := &Diff{[]Pair{{byte(2), byte(2)}}}
+
+	wr1 := &WriteNoticeRecord{
+		Id:          1,
+		WriteNotice: WriteNotice{1},
+		Interval:    ir0,
+		Diff:        Diff1,
+	}
+	wr2 := &WriteNoticeRecord{
+		Id:          1,
+		WriteNotice: WriteNotice{1},
+		Interval:    ir1,
+		Diff:        Diff2,
+	}
+
+	pe.writeNoticeRecordArray[0] = []*WriteNoticeRecord{wr1}
+	pe.writeNoticeRecordArray[1] = []*WriteNoticeRecord{wr2}
+
+	channel := pe.OrderedDiffChannel()
+	assert.Equal(t, Diff1, <-channel)
+	assert.Equal(t, Diff2, <-channel)
+}
+
+func TestPageArrayEntry_DiffOrderChannel_TwoDifferentProcReverseConcurrent(t *testing.T) {
+	pe := NewPageArrayEntry(3)
+
+	//First we make three vectorclocks.
+	vc1 := NewVectorclock(3)
+	vc1.SetTick(byte(0), 1)
+	vc2 := NewVectorclock(3)
+	vc2.SetTick(byte(1), 2)
+
+	//Then we make the interval record
+	ir0 := &IntervalRecord{Timestamp: *vc1, WriteNotices: make([]*WriteNoticeRecord, 0)}
+	ir1 := &IntervalRecord{Timestamp: *vc2, WriteNotices: make([]*WriteNoticeRecord, 0)}
+
+	Diff1 := &Diff{[]Pair{{byte(1), byte(1)}}}
+	Diff2 := &Diff{[]Pair{{byte(2), byte(2)}}}
+
+	wr1 := &WriteNoticeRecord{
+		Id:          1,
+		WriteNotice: WriteNotice{1},
+		Interval:    ir0,
+		Diff:        Diff1,
+	}
+	wr2 := &WriteNoticeRecord{
+		Id:          1,
+		WriteNotice: WriteNotice{1},
+		Interval:    ir1,
+		Diff:        Diff2,
+	}
+
+	pe.writeNoticeRecordArray[0] = []*WriteNoticeRecord{wr2}
+	pe.writeNoticeRecordArray[1] = []*WriteNoticeRecord{wr1}
+
+	channel := pe.OrderedDiffChannel()
+	assert.Equal(t, Diff2, <-channel)
+	assert.Equal(t, Diff1, <-channel)
+}
+
+/*
 // This was just a proof of concept, to make sure pointers to writenoticerecords wouldnt break when
 // the slice is extended.
 func TestPageArrayEntry(t *testing.T) {
@@ -52,3 +236,4 @@ func TestPageArrayEntry(t *testing.T) {
 	}
 	fmt.Println(*n)
 }
+*/

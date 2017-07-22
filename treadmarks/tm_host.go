@@ -99,6 +99,7 @@ func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarri
 		nrLocks:            nrLocks,
 		nrBarriers:         nrBarriers,
 		eventchanMap:       make(map[byte]chan string),
+		waitgroupMap:       make(map[byte]*sync.WaitGroup),
 		eventNumber:        byte(0),
 	}
 
@@ -373,7 +374,6 @@ func (t *TreadMarks) HandleDiffResponse(message TM_Message) {
 		for k, wn := range wnl {
 			if i >= len(pairs) {
 				t.waitgroupMap[message.Event].Done()
-				t.waitgroupMap[message.Event] = nil
 				return
 			} else if wn.Interval.Timestamp.Equals(pairs[i].Car.(Vectorclock)) {
 				diff := new(Diff)

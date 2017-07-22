@@ -2,6 +2,7 @@ package treadmarks
 
 import (
 	"DSM-project/memory"
+	"fmt"
 	"sync"
 )
 
@@ -35,6 +36,7 @@ type PageArrayEntryInterface interface {
 	GetWritenoticeList(procId byte) []*WriteNoticeRecord
 	GetWriteNotice(procId byte, pageNr int) *WriteNoticeRecord
 	PrependWriteNotice(procId byte, wn WriteNotice) *WriteNoticeRecord
+	ApplyDifs()
 }
 
 type ProcArrayInterface interface {
@@ -62,6 +64,7 @@ type PageArrayEntry struct {
 	copySet                []int
 	writeNoticeRecordArray [][]*WriteNoticeRecord
 	hascopy                bool
+	*sync.RWMutex
 }
 
 type IntervalRecord struct {
@@ -176,6 +179,56 @@ func (pe *PageArrayEntry) PrependWriteNotice(procId byte, wn WriteNotice) *Write
 	return wnr
 }
 
+func (pe *PageArrayEntry) OrderedDiffChannel() chan *Diff {
+	channel := make(chan *Diff)
+
+	go func() {
+		pe.Lock()
+		wnra := pe.writeNoticeRecordArray
+		procNr := len(wnra)
+		index := make([]int, procNr)
+		done := 0
+		for i, wnr := range wnra {
+			index[i] = len(wnr) - 1
+		}
+		fmt.Println("Starting run with indexes: ", index)
+		for {
+			smallest := true
+			for i := 0; i < procNr; i++ {
+				fmt.Println("Checking if proc ", i, " is the smallest...")
+				if index[i] < 0 {
+					done++
+					continue
+				}
+				ts1 := wnra[i][index[i]].Interval.Timestamp
+				for j := 0; j < procNr; j++ {
+					fmt.Println("Comparing with proc ", j)
+					if index[j] < 0 {
+						fmt.Println("Proc ", j, " had a negative index.")
+						continue
+					}
+					ts2 := wnra[j][index[j]].Interval.Timestamp
+					if ts2.IsBefore(ts1) {
+						fmt.Println("Proc ", j, " had a writenotice before this, so we should use that first.")
+						smallest = false
+						break
+					}
+				}
+				if smallest {
+					fmt.Println("Proc ", i, " was the smallest and is pushed.")
+					channel <- wnra[i][index[i]].Diff
+					index[i] = index[i] - 1
+				}
+			}
+			if done == procNr {
+				break
+			}
+		}
+		pe.Unlock()
+	}()
+	return channel
+}
+
 func (pe *PageArrayEntry) SetHasCopy(bool bool) {
 	pe.hascopy = bool
 }
@@ -193,7 +246,7 @@ func NewPageArrayEntry(nrProcs int) *PageArrayEntry {
 	for i := range wnra {
 		wnra[i] = make([]*WriteNoticeRecord, 0)
 	}
-	return &PageArrayEntry{[]int{0}, wnra, false}
+	return &PageArrayEntry{[]int{0}, wnra, false, new(sync.RWMutex)}
 }
 
 //Everything that concerns page arrays
@@ -246,6 +299,8 @@ func (p *PageArray) GetWriteNoticeListHead(pageNr int, procNr byte) *WriteNotice
 	}
 	return p.GetPageEntry(pageNr).GetWriteNotice(procNr, 0)
 }
+
+//Things regarding diffs
 
 func CreateDiff(original, new []byte) Diff {
 	res := make([]Pair, 0)
