@@ -24,8 +24,8 @@ func TestUpdateDatastructures(t *testing.T) {
 	tm.ProcId = 3
 	tm.twinMap[0] = []byte{4, 4, 4, 4, 4, 4, 4, 4}
 	tm.twinMap[1] = []byte{1, 1, 1, 1, 1, 1, 1, 1}
-	procArray := make(ProcArray, 4)
-	tm.TM_IDataStructures = &TM_DataStructures{ProcArray: procArray, PageArray: make(PageArray)}
+	procArray := MakeProcArray(5)
+	tm.TM_IDataStructures = &TM_DataStructures{ProcArray: procArray, PageArray: *NewPageArray(5)}
 	tm.updateDatastructures()
 	headWNRecord := tm.GetWriteNoticeListHead(0, 3)
 	//headWNRecord := tm.pageArray[0].ProcArr[3]

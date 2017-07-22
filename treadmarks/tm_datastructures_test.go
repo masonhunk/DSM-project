@@ -8,28 +8,28 @@ import (
 
 func TestPageArray(t *testing.T) {
 	//vm := memory.NewVmem(1024, 64)
-	pageArray := make(PageArray)
+	pageArray := NewPageArray(5)
 	wn1 := WriteNoticeRecord{Diff: nil, Interval: nil}
 	wn2 := WriteNoticeRecord{Diff: nil, Interval: nil}
-	pageArray[1] = &PageArrayEntry{
-		CopySet:                []int{1, 2},
-		WriteNoticeRecordArray: make(map[byte][]WriteNoticeRecord),
-	}
-	pageArray[1].WriteNoticeRecordArray[0] = []WriteNoticeRecord{wn1, wn2}
-	assert.Equal(t, wn1, pageArray[1].WriteNoticeRecordArray[0][0])
-	assert.Equal(t, wn2, pageArray[1].WriteNoticeRecordArray[0][1])
+	pe := NewPageArrayEntry(5)
+	pe.copySet = []int{1, 2}
+	pageArray.SetPageEntry(1, pe)
 
+	pe.writeNoticeRecordArray[0] = []WriteNoticeRecord{wn1, wn2}
+
+	assert.Equal(t, wn1, pageArray.GetWritenoticeList(0, 1)[0])
+	assert.Equal(t, wn2, pageArray.GetWritenoticeList(0, 1)[1])
 }
 
 func TestPageArrayEntry_AddWriteNotice(t *testing.T) {
-	pe := NewPageArrayEntry()
-	wn1 := pe.PrependWriteNoticeOnPageArrayEntry(byte(0))
-	wn1.id = 1
-	assert.True(t, wn1 == &pe.WriteNoticeRecordArray[0][0])
-	wn2 := pe.PrependWriteNoticeOnPageArrayEntry(byte(0))
-	wn2.id = 2
-	assert.True(t, wn2 == &pe.WriteNoticeRecordArray[0][0])
-	assert.Equal(t, *wn1, pe.WriteNoticeRecordArray[0][1])
+	pe := NewPageArrayEntry(1)
+	wn1 := pe.PrependWriteNotice(byte(0), WriteNotice{})
+	wn1.Id = 1
+	assert.True(t, wn1 == pe.GetWriteNotice(0, 0))
+	wn2 := pe.PrependWriteNotice(byte(0), WriteNotice{})
+	wn2.Id = 2
+	assert.True(t, wn2 == pe.GetWriteNotice(0, 0))
+	assert.Equal(t, wn1, pe.GetWriteNotice(0, 1))
 }
 
 // This was just a proof of concept, to make sure pointers to writenoticerecords wouldnt break when
