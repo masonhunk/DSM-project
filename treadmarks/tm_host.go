@@ -106,22 +106,27 @@ func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarri
 	}
 
 	tm.VirtualMemory.AddFaultListener(func(addr int, faultType byte, accessType string, value byte) {
-		pageNr := tm.GetPageAddr(addr) / tm.GetPageSize()
+		//do fancy protocol stuff here
 		//if no copy, get one.
+		pageNr := tm.GetPageAddr(addr) / tm.GetPageSize()
 		if entry := tm.GetPageEntry(pageNr); !entry.HasCopy() {
 			copyset := tm.GetCopyset(pageNr)
 			tm.sendCopyRequest(pageNr, byte(copyset[len(tm.GetCopyset(pageNr))-1])) //blocks until copy has been received
 			entry.SetHasCopy(true)
 		}
-		//TODO: get and apply diffs before continuing, if any
+		//get and apply diffs before continuing
+		tm.RequestAndApplyDiffs(pageNr)
 
-		if accessType == "WRITE" {
+		switch accessType {
+		case "READ":
+			tm.SetRights(addr, memory.READ_ONLY)
+		case "WRITE":
 			//create a twin
 			val := tm.PrivilegedRead(tm.GetPageAddr(addr), tm.GetPageSize())
 			tm.twinMap[pageNr] = val
 			tm.PrivilegedWrite(addr, []byte{value})
+			tm.SetRights(addr, memory.READ_WRITE)
 		}
-		tm.SetRights(addr, memory.READ_WRITE)
 	})
 	return &tm
 }
@@ -158,10 +163,9 @@ func (t *TreadMarks) Join(address string) error {
 			t.incorporateIntervalsIntoDatastructures(&msg)
 			t.eventchanMap[msg.Event] <- "continue"
 		case DIFF_REQUEST:
-			//remember to create own diff and set read protection on page(s)
-			t.SetRights(msg.PageNr*t.GetPageSize(), memory.READ_ONLY)
+			t.HandleDiffRequest(msg)
 		case DIFF_RESPONSE:
-			//apply diffs
+			t.HandleDiffResponse(msg)
 		case COPY_REQUEST:
 			//if we have a twin, send that. Else just send the current contents of page
 			if pg, ok := t.twinMap[msg.PageNr]; ok {
@@ -270,6 +274,20 @@ func (t *TreadMarks) updateDatastructures() {
 	}
 }
 
+func (t *TreadMarks) RequestAndApplyDiffs(pageNr int) {
+	group := new(sync.WaitGroup)
+	messages := t.GenerateDiffRequests(pageNr, group)
+	for _, msg := range messages {
+		t.Send(msg)
+	}
+	group.Wait()
+	pe := t.GetPageEntry(pageNr)
+	channel := pe.OrderedDiffChannel()
+	for diff := range channel {
+		t.ApplyDiff(pageNr, diff)
+	}
+}
+
 func (t *TreadMarks) GenerateDiffRequests(pageNr int, group *sync.WaitGroup) []TM_Message {
 	//First we check if we have the page already or need to request a copy.
 	if t.GetPageEntry(pageNr).hascopy == false {
@@ -341,6 +359,17 @@ func (t *TreadMarks) HandleDiffRequest(message TM_Message) TM_Message {
 	//First we populate a list of pairs with all the relevant diffs.
 	vc := message.VC
 	pageNr := message.PageNr
+	mwnl := t.GetWritenoticeList(t.ProcId, pageNr)
+	if len(mwnl) > 0 {
+		if mwnl[0].Diff == nil {
+			pageVal, err := t.ReadBytes(pageNr*t.GetPageSize(), t.GetPageSize())
+			panicOnErr(err)
+			diff := CreateDiff(t.twinMap[pageNr], pageVal)
+			mwnl[0].Diff = &diff
+			t.twinMap[pageNr] = nil
+			t.SetRights(pageNr*t.GetPageSize(), memory.READ_ONLY)
+		}
+	}
 	pairs := make([]Pair, 0)
 	for proc := byte(0); proc < byte(t.nrProcs); proc = proc + byte(1) {
 		for _, wnr := range t.GetWritenoticeList(proc, pageNr) {

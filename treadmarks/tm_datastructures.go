@@ -224,6 +224,7 @@ func (pe *PageArrayEntry) OrderedDiffChannel() chan *Diff {
 				break
 			}
 		}
+		close(channel)
 		pe.Unlock()
 	}()
 	return channel
