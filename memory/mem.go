@@ -136,7 +136,7 @@ func (m *Vmem) Read(addr int) (byte, error) {
 		for _, l := range m.faultListeners {
 			l(addr, 0, "READ", 0)
 		}
-		return 127, errors.New("access denied")
+		return m.Stack[addr], errors.New("access denied")
 	case READ_ONLY:
 		return m.Stack[addr], nil
 	case READ_WRITE:
@@ -159,7 +159,7 @@ func (m *Vmem) ReadBytes(addr, length int) ([]byte, error) {
 			for _, l := range m.faultListeners {
 				l(addr, 0, "READ", 0)
 			}
-			return nil, errors.New("access denied at location: " + strconv.Itoa(i))
+			return m.Stack[start : end+1], errors.New("access denied at location: " + strconv.Itoa(i))
 		case READ_WRITE, READ_ONLY:
 			continue
 		default:

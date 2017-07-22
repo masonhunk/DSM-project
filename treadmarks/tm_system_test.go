@@ -49,9 +49,9 @@ func TestTreadMarksInitialisation(t *testing.T) {
 }
 
 func TestBarrier(t *testing.T) {
-	managerHost := setupTreadMarksStruct(4)
-	host2 := setupTreadMarksStruct(4)
-	host3 := setupTreadMarksStruct(4)
+	managerHost := setupTreadMarksStruct(3)
+	host2 := setupTreadMarksStruct(3)
+	host3 := setupTreadMarksStruct(3)
 	managerHost.Startup()
 	host2.Join("localhost:2000")
 	host3.Join("localhost:2000")
@@ -108,9 +108,9 @@ func TestBarrier(t *testing.T) {
 }
 
 func TestLocks(t *testing.T) {
-	managerHost := setupTreadMarksStruct(4)
-	host2 := setupTreadMarksStruct(4)
-	host3 := setupTreadMarksStruct(4)
+	managerHost := setupTreadMarksStruct(3)
+	host2 := setupTreadMarksStruct(3)
+	host3 := setupTreadMarksStruct(3)
 	managerHost.Startup()
 	host2.Join("localhost:2000")
 	host3.Join("localhost:2000")
@@ -133,4 +133,13 @@ func TestLocks(t *testing.T) {
 	<-started
 	assert.Equal(t, "released", <-finished)
 	assert.Equal(t, "acquired", <-finished)
+}
+
+func TestShouldGetCopyIfNoCopy(t *testing.T) {
+	managerHost := setupTreadMarksStruct(2)
+	host2 := setupTreadMarksStruct(2)
+	managerHost.Startup()
+	host2.Join("localhost:2000")
+	res, _ := host2.Read(13) //in page 1
+	assert.Equal(t, byte(0), res)
 }

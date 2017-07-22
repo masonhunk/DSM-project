@@ -80,7 +80,7 @@ func (bm *BarrierManagerImp) HandleBarrier(id int, f func()) *sync.WaitGroup {
 	barrier, ok := bm.barriers[id]
 	if ok == false {
 		barrier = new(sync.WaitGroup)
-		barrier.Add(bm.nodes - 1)
+		barrier.Add(bm.nodes)
 		bm.barriers[id] = barrier
 	}
 	bm.Unlock()
@@ -91,6 +91,7 @@ func (bm *BarrierManagerImp) HandleBarrier(id int, f func()) *sync.WaitGroup {
 }
 
 type tm_Manager struct {
+	vc   Vectorclock
 	myId byte
 	BarrierManager
 	LockManager
@@ -119,6 +120,7 @@ func NewTM_Manager(conn net.Conn, bm BarrierManager, lm LockManager, tm *TreadMa
 	m.ITransciever = network.NewTransciever(conn, func(message network.Message) error {
 		return m.HandleMessage(message)
 	})
+	m.vc = *NewVectorclock(tm.nrProcs)
 	m.nodes = tm.nrProcs
 	m.myId = byte(0)
 	m.tm = tm
@@ -178,9 +180,12 @@ func (m *tm_Manager) handleLockReleaseRequest(message *TM_Message) error {
 func (m *tm_Manager) handleBarrierRequest(message *TM_Message) *TM_Message {
 	var msg TM_Message = *message
 	id := message.Id
+	var currTick uint
 	m.HandleBarrier(id, func() {
 		if m.tm != nil {
 			m.tm.incorporateIntervalsIntoDatastructures(message)
+			m.vc = *m.vc.Merge(message.VC)
+			currTick = m.vc.GetTick(byte(0))
 		}
 	})
 	//barrier over
@@ -189,8 +194,9 @@ func (m *tm_Manager) handleBarrierRequest(message *TM_Message) *TM_Message {
 		msg.Intervals = m.tm.GetAllUnseenIntervals(msg.VC)
 
 	}
-
+	m.vc.SetTick(byte(0), currTick+1)
 	msg.From, msg.To = msg.To, msg.From
+	msg.VC = m.vc
 	msg.Type = BARRIER_RESPONSE
 	return &msg
 }

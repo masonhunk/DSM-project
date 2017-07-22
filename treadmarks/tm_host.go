@@ -78,10 +78,11 @@ type TreadMarks struct {
 	vc      Vectorclock
 	twinMap map[int][]byte //contains twins since last sync.
 	network.IClient
-	server       network.Server
-	manager      tm_Manager
-	eventchanMap map[byte]chan string
-	eventNumber  byte
+	server            network.Server
+	manager           tm_Manager
+	eventchanMap      map[byte]chan string
+	eventNumber       byte
+	lastVCFromManager Vectorclock
 }
 
 func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarriers int) *TreadMarks {
@@ -89,45 +90,36 @@ func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarri
 	gob.Register(network.SimpleMessage{})
 
 	pageArray := *NewPageArray(nrProcs)
-	procArray := MakeProcArray(nrProcs)
+	procArray := MakeProcArray(nrProcs + 1)
 	tm := TreadMarks{
 		VirtualMemory:      virtualMemory,
 		TM_IDataStructures: &TM_DataStructures{new(sync.RWMutex), procArray, pageArray},
-		vc:                 *NewVectorclock(nrProcs),
+		vc:                 *NewVectorclock(nrProcs + 1),
 		twinMap:            make(map[int][]byte),
 		nrProcs:            nrProcs,
 		nrLocks:            nrLocks,
 		nrBarriers:         nrBarriers,
 		eventchanMap:       make(map[byte]chan string),
 		eventNumber:        byte(0),
+		lastVCFromManager:  *NewVectorclock(nrProcs),
 	}
 
 	tm.VirtualMemory.AddFaultListener(func(addr int, faultType byte, accessType string, value byte) {
-		//c := make(chan string)
-		//do fancy protocol stuff here
-		switch accessType {
-		case "READ":
-			pageNr := tm.GetPageAddr(addr) / tm.GetPageSize()
-			//if no copy, get one. Else, create twin
-			if entry := tm.GetPageEntry(pageNr); !entry.hascopy {
-				tm.sendCopyRequest(pageNr, byte(tm.GetCopyset(pageNr)[0]))
-			}
-			//TODO: get and apply diffs before continuing
-			tm.SetRights(addr, memory.READ_WRITE)
-		case "WRITE":
-			pageNr := tm.GetPageAddr(addr) / tm.GetPageSize()
-			//if no copy, get one. Else create twin
-			if entry := tm.GetPageEntry(pageNr); entry.GetCopyset() == nil && entry.GetWritenoticeList(tm.ProcId) == nil {
-				tm.SetPageEntry(pageNr, NewPageArrayEntry(tm.nrProcs))
-				tm.sendCopyRequest(pageNr, tm.ProcId)
-			} else {
-				//create a twin
-				val := tm.PrivilegedRead(tm.GetPageAddr(addr), tm.GetPageSize())
-				tm.twinMap[pageNr] = val
-			}
-			//TODO: get and apply diffs before continuing
-			tm.SetRights(addr, memory.READ_WRITE)
+		pageNr := tm.GetPageAddr(addr) / tm.GetPageSize()
+		//if no copy, get one.
+		if entry := tm.GetPageEntry(pageNr); !entry.HasCopy() {
+			copyset := tm.GetCopyset(pageNr)
+			tm.sendCopyRequest(pageNr, byte(copyset[len(tm.GetCopyset(pageNr))-1])) //blocks until copy has been received
+			entry.SetHasCopy(true)
+		}
+		//TODO: get and apply diffs before continuing, if any
+
+		if accessType == "WRITE" {
+			//create a twin
+			val := tm.PrivilegedRead(tm.GetPageAddr(addr), tm.GetPageSize())
+			tm.twinMap[pageNr] = val
 			tm.PrivilegedWrite(addr, []byte{value})
+			tm.SetRights(addr, memory.READ_WRITE)
 		}
 	})
 	return &tm
@@ -160,11 +152,13 @@ func (t *TreadMarks) Join(address string) error {
 			t.HandleLockAcquireResponse(&msg)
 			t.eventchanMap[msg.Event] <- "continue"
 		case BARRIER_RESPONSE:
+			t.lastVCFromManager = msg.VC
 			t.eventchanMap[msg.Event] <- "continue"
 		case DIFF_REQUEST:
 			//remember to create own diff and set read protection on page(s)
+			t.SetRights(msg.PageNr*t.GetPageSize(), memory.READ_ONLY)
 		case DIFF_RESPONSE:
-
+			//apply diffs
 		case COPY_REQUEST:
 			//if we have a twin, send that. Else just send the current contents of page
 			if pg, ok := t.twinMap[msg.PageNr]; ok {
@@ -388,7 +382,7 @@ func (t *TreadMarks) HandleDiffResponse(message TM_Message) {
 
 func (t *TreadMarks) Shutdown() {
 	t.Close()
-	if t.manager != (tm_Manager{}) {
+	if t.ProcId == byte(1) {
 		t.manager.Close()
 		t.server.StopServer()
 	}
@@ -429,16 +423,7 @@ func (t *TreadMarks) ReleaseLock(id int) {
 func (t *TreadMarks) Barrier(id int) {
 	c := make(chan string)
 	t.eventchanMap[t.eventNumber] = c
-	//last known timestamp from manager that this host has seen
-	var managerTs Vectorclock
-	if t.GetIntervalRecord(byte(0), 0) == nil {
-		managerTs = *NewVectorclock(t.nrProcs)
-	} else {
-		managerTs = t.GetIntervalRecordHead(byte(0)).Timestamp
-	}
 
-	/*if managerTs.Compare(NewVectorclock(t.nrProcs)) == 0 {
-	}*/
 	msg := TM_Message{
 		Type:      BARRIER_REQUEST,
 		To:        0,
@@ -447,7 +432,7 @@ func (t *TreadMarks) Barrier(id int) {
 		VC:        t.vc,
 		Id:        id,
 		Event:     t.eventNumber,
-		Intervals: t.GetUnseenIntervalsAtProc(managerTs, t.ProcId),
+		Intervals: t.GetUnseenIntervalsAtProc(t.lastVCFromManager, t.ProcId),
 	}
 	err := t.Send(msg)
 	panicOnErr(err)
@@ -465,6 +450,8 @@ func (t *TreadMarks) incorporateIntervalsIntoDatastructures(msg *TM_Message) {
 			WriteNotices: []*WriteNoticeRecord{},
 		}
 		for _, wn := range interval.WriteNotices {
+			//add sender to copyset of this page
+			t.SetCopyset(wn.PageNr, []int{int(msg.From)})
 			//prepend to write notice list and update pointers
 			var res *WriteNoticeRecord = t.PrependWriteNotice(interval.Proc, wn)
 			res.Interval = ir
@@ -477,7 +464,7 @@ func (t *TreadMarks) incorporateIntervalsIntoDatastructures(msg *TM_Message) {
 				t.twinMap[wn.PageNr] = nil
 				myWn.Diff = &diff
 			}
-			//finally invalidate the page.
+			//finally invalidate the page
 			t.SetRights(wn.PageNr*t.GetPageSize(), memory.NO_ACCESS)
 		}
 		t.PrependIntervalRecord(interval.Proc, ir)

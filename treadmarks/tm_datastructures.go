@@ -2,6 +2,7 @@ package treadmarks
 
 import (
 	"DSM-project/memory"
+	"fmt"
 	"sync"
 )
 
@@ -25,6 +26,7 @@ type PageArrayInterface interface {
 	MapWriteNotices(f func(wn *WriteNoticeRecord), pageNr int, procNr byte)
 	PrependEmptyWriteNotice(pageNr int, procId byte) *WriteNoticeRecord
 	GetCopyset(pageNr int) []int
+	SetCopyset(pageNr int, copyset []int)
 	GetWriteNoticeListHead(pageNr int, procNr byte) *WriteNoticeRecord
 }
 
@@ -56,6 +58,10 @@ type TM_DataStructures struct {
 type PageArray struct {
 	array  map[int]*PageArrayEntry
 	nrProc int
+}
+
+func (p *PageArray) SetCopyset(pageNr int, copyset []int) {
+	p.array[pageNr].copySet = copyset
 }
 
 type PageArrayEntry struct {
@@ -110,6 +116,7 @@ func (p ProcArray) GetAllUnseenIntervals(ts Vectorclock) []Interval {
 
 func (p ProcArray) GetUnseenIntervalsAtProc(ts Vectorclock, procNr byte) []Interval {
 	result := []Interval{}
+	fmt.Println(procNr, p)
 	if len(p[int(procNr)]) == 0 {
 		return result
 	}
