@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"log"
 	"testing"
+	"time"
 )
 
 var _ = fmt.Print
@@ -48,10 +49,9 @@ func TestTreadMarksInitialisation(t *testing.T) {
 }
 
 func TestBarrier(t *testing.T) {
-
-	managerHost := setupTreadMarksStruct(3)
-	host2 := setupTreadMarksStruct(3)
-	host3 := setupTreadMarksStruct(3)
+	managerHost := setupTreadMarksStruct(4)
+	host2 := setupTreadMarksStruct(4)
+	host3 := setupTreadMarksStruct(4)
 	managerHost.Startup()
 	host2.Join("localhost:2000")
 	host3.Join("localhost:2000")
@@ -99,8 +99,38 @@ func TestBarrier(t *testing.T) {
 	<-done
 	<-done
 
+	//add tests of validity of data structures
+
 	host2.Shutdown()
 	host3.Shutdown()
 	managerHost.Shutdown()
 
+}
+
+func TestLocks(t *testing.T) {
+	managerHost := setupTreadMarksStruct(4)
+	host2 := setupTreadMarksStruct(4)
+	host3 := setupTreadMarksStruct(4)
+	managerHost.Startup()
+	host2.Join("localhost:2000")
+	host3.Join("localhost:2000")
+	started := make(chan string)
+	finished := make(chan string)
+
+	go func() {
+		started <- "ok"
+		host2.AcquireLock(1)
+		time.Sleep(500 * time.Millisecond)
+		host2.ReleaseLock(1)
+		finished <- "released"
+	}()
+	go func() {
+		started <- "ok"
+		host3.AcquireLock(1)
+		finished <- "acquired"
+	}()
+	<-started
+	<-started
+	assert.Equal(t, "released", <-finished)
+	assert.Equal(t, "acquired", <-finished)
 }

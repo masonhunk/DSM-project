@@ -70,7 +70,7 @@ func TestLockManagerOrder(t *testing.T) {
 
 func TestBarrierManager(t *testing.T) {
 	var bm BarrierManager
-	bm = NewBarrierManagerImp(3)
+	bm = NewBarrierManagerImp(4)
 	order := make(chan int)
 	done := make(chan bool, 5)
 	go func() {
@@ -139,7 +139,7 @@ func TestManagerHandleBarrierMessage(t *testing.T) {
 	tr := NewTranscieverMock(messages)
 	bm := NewBarrierManagerImp(2)
 	lm := NewLockManagerImp()
-	m := NewTest_TM_Manager(tr, bm, lm, 4, nil)
+	m := NewTest_TM_Manager(tr, bm, lm, 3, nil)
 	started := make(chan bool)
 	done := make(chan bool, 2)
 	go func() {
