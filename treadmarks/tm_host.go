@@ -109,7 +109,7 @@ func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarri
 			pageNr := tm.GetPageAddr(addr) / tm.GetPageSize()
 			//if no copy, get one. Else, create twin
 			if entry := tm.GetPageEntry(pageNr); !entry.hascopy {
-				tm.sendCopyRequest(pageNr, tm.ProcId)
+				tm.sendCopyRequest(pageNr, byte(tm.GetCopyset(pageNr)[0]))
 			}
 			//TODO: get and apply diffs before continuing
 			tm.SetRights(addr, memory.READ_WRITE)
@@ -273,11 +273,13 @@ func (t *TreadMarks) updateDatastructures() {
 
 func (t *TreadMarks) GenerateDiffRequests(pageNr int) []TM_Message {
 	//First we check if we have the page already or need to request a copy.
-	if t.twinMap[pageNr] == nil {
-		//TODO We dont have a copy, so we need to request a new copy of the page.
+	if t.GetPageEntry(pageNr).hascopy == false {
+		t.sendCopyRequest(pageNr, byte(t.GetCopyset(pageNr)[0]))
 	}
 	messages := make([]TM_Message, 0)
 	vc := make([]Vectorclock, t.nrProcs)
+	//First we find the start timestamps
+
 	// First we figure out what processes we actually need to send messages to.
 	// To do this, we first find the largest interval for each process, where there is a write notice without
 	// a diff.
