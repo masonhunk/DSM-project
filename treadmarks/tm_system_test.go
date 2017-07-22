@@ -19,13 +19,6 @@ func setupTreadMarksStruct(nrProcs int) *TreadMarks {
 }
 
 func TestTreadMarksInitialisation(t *testing.T) {
-	/*managerHost, hosts := InitialiseTMSystem(4)
-	fmt.Println(hosts[0])
-	fmt.Println(managerHost)
-	assert.NotNil(t, managerHost)
-	assert.NotContains(t, hosts, nil)
-	assert.Equal(t, byte(1), managerHost.ProcId)
-	assert.Equal(t, byte(2), hosts[1].ProcId)*/
 
 	managerHost := setupTreadMarksStruct(3)
 	host2 := setupTreadMarksStruct(3)

@@ -68,7 +68,7 @@ func TestLockManagerOrder(t *testing.T) {
 	assert.Equal(t, byte(1), id2, "The second go-routine should see 1 as the previous owner.")
 }
 
-func TestBarrierManager(t *testing.T) {
+/*func TestBarrierManager1(t *testing.T) {
 	var bm BarrierManager
 	bm = NewBarrierManagerImp(4)
 	order := make(chan int)
@@ -98,7 +98,7 @@ func TestBarrierManager(t *testing.T) {
 	assert.Equal(t, true, <-done, "All the goroutines should be finished by now.")
 	assert.Equal(t, true, <-done, "All the goroutines should be finished by now.")
 }
-
+*/
 func TestManagerHandleLockAcquireNotExistMessage(t *testing.T) {
 	messages := make([]TM_Message, 0)
 	tr := NewTranscieverMock(messages)
@@ -162,6 +162,7 @@ func TestManagerHandleBarrierMessage(t *testing.T) {
 }
 
 func TestBarrierManagerShouldInsertIntervals(t *testing.T) {
+	fmt.Println("in TestBarrierManagerShouldInsertIntervals")
 	messages := make([]TM_Message, 0)
 	tr := NewTranscieverMock(messages)
 	bm := NewBarrierManagerImp(1)
