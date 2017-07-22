@@ -36,6 +36,7 @@ type PageArrayEntryInterface interface {
 	GetWritenoticeList(procId byte) []*WriteNoticeRecord
 	GetWriteNotice(procId byte, pageNr int) *WriteNoticeRecord
 	PrependWriteNotice(procId byte, wn WriteNotice) *WriteNoticeRecord
+	ApplyDifs()
 }
 
 type ProcArrayInterface interface {
@@ -67,6 +68,7 @@ type PageArrayEntry struct {
 	copySet                []int
 	writeNoticeRecordArray [][]*WriteNoticeRecord
 	hascopy                bool
+	*sync.RWMutex
 }
 
 type IntervalRecord struct {
@@ -181,6 +183,52 @@ func (pe *PageArrayEntry) PrependWriteNotice(procId byte, wn WriteNotice) *Write
 	return wnr
 }
 
+func (pe *PageArrayEntry) OrderedDiffChannel() chan *Diff {
+	channel := make(chan *Diff)
+
+	go func() {
+		pe.Lock()
+		wnra := pe.writeNoticeRecordArray
+		procNr := len(wnra)
+		index := make([]int, procNr)
+		done := 0
+		for i, wnr := range wnra {
+			index[i] = len(wnr) - 1
+			done = done + index[i]
+		}
+		for {
+
+			for i := 0; i < procNr; i++ {
+				smallest := true
+				if index[i] < 0 {
+					done--
+					continue
+				}
+				ts1 := wnra[i][index[i]].Interval.Timestamp
+				for j := 0; j < procNr; j++ {
+					if index[j] < 0 {
+						continue
+					}
+					ts2 := wnra[j][index[j]].Interval.Timestamp
+					if ts2.IsBefore(ts1) {
+						smallest = false
+						break
+					}
+				}
+				if smallest {
+					channel <- wnra[i][index[i]].Diff
+					index[i] = index[i] - 1
+				}
+			}
+			if done == procNr {
+				break
+			}
+		}
+		pe.Unlock()
+	}()
+	return channel
+}
+
 func (pe *PageArrayEntry) SetHasCopy(bool bool) {
 	pe.hascopy = bool
 }
@@ -198,7 +246,7 @@ func NewPageArrayEntry(nrProcs int) *PageArrayEntry {
 	for i := range wnra {
 		wnra[i] = make([]*WriteNoticeRecord, 0)
 	}
-	return &PageArrayEntry{[]int{0}, wnra, false}
+	return &PageArrayEntry{[]int{0}, wnra, false, new(sync.RWMutex)}
 }
 
 //Everything that concerns page arrays
@@ -251,6 +299,8 @@ func (p *PageArray) GetWriteNoticeListHead(pageNr int, procNr byte) *WriteNotice
 	}
 	return p.GetPageEntry(pageNr).GetWriteNotice(procNr, 0)
 }
+
+//Things regarding diffs
 
 func CreateDiff(original, new []byte) Diff {
 	res := make([]Pair, 0)

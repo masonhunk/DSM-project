@@ -100,6 +100,7 @@ func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarri
 		nrLocks:            nrLocks,
 		nrBarriers:         nrBarriers,
 		eventchanMap:       make(map[byte]chan string),
+		waitgroupMap:       make(map[byte]*sync.WaitGroup),
 		eventNumber:        byte(0),
 		lastVCFromManager:  *NewVectorclock(nrProcs),
 	}
@@ -370,7 +371,6 @@ func (t *TreadMarks) HandleDiffResponse(message TM_Message) {
 		for k, wn := range wnl {
 			if i >= len(pairs) {
 				t.waitgroupMap[message.Event].Done()
-				t.waitgroupMap[message.Event] = nil
 				return
 			} else if wn.Interval.Timestamp.Equals(pairs[i].Car.(Vectorclock)) {
 				diff := new(Diff)
@@ -497,6 +497,15 @@ func (t *TreadMarks) sendCopyRequest(pageNr int, procNr byte) {
 	<-c
 	t.eventchanMap[t.eventNumber] = nil
 	t.eventNumber++
+}
+
+func (t *TreadMarks) ApplyDiff(pageNr int, diffList *Diff) {
+	addr := pageNr * t.GetPageSize()
+	data := t.PrivilegedRead(addr, t.GetPageSize())
+	for _, diff := range diffList.Diffs {
+		data[diff.Car.(int)] = diff.Cdr.(byte)
+	}
+	t.PrivilegedWrite(addr, data)
 }
 
 func panicOnErr(err error) {
