@@ -80,7 +80,7 @@ func (bm *BarrierManagerImp) HandleBarrier(id int, f func()) *sync.WaitGroup {
 	barrier, ok := bm.barriers[id]
 	if ok == false {
 		barrier = new(sync.WaitGroup)
-		barrier.Add(bm.nodes)
+		barrier.Add(bm.nodes - 1)
 		bm.barriers[id] = barrier
 	}
 	bm.Unlock()
@@ -129,7 +129,11 @@ func NewTM_Manager(conn net.Conn, bm BarrierManager, lm LockManager, tm *TreadMa
 func (m *tm_Manager) HandleMessage(message network.Message) error {
 	msg, ok := message.(TM_Message)
 	if ok == false {
-		panic("Message could not be converted.")
+		if _, ok := message.(network.SimpleMessage); !ok {
+			panic("Message could not be converted.")
+		} else {
+			return nil
+		}
 	}
 	response := new(TM_Message)
 	var err error

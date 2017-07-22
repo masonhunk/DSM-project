@@ -13,11 +13,11 @@ type ITransciever interface {
 	Send(Message) error
 }
 
-type LoggingTransciever interface {
+type LoggableTransciever interface {
 	ITransciever
 	ShouldLog(b bool)
-	SetLogFuncOnSend(f func())
-	SetLogFuncOnReceive(f func())
+	SetLogFuncOnSend(f func(message Message))
+	SetLogFuncOnReceive(f func(message Message))
 }
 
 type Transciever struct {
@@ -27,19 +27,19 @@ type Transciever struct {
 	*gob.Encoder
 	*gob.Decoder
 	shouldLog        bool
-	logFuncOnSend    func()
-	logFuncOnReceive func()
+	logFuncOnSend    func(message Message)
+	logFuncOnReceive func(message Message)
 }
 
 func (t *Transciever) ShouldLog(b bool) {
 	t.shouldLog = b
 }
 
-func (t *Transciever) SetLogFuncOnSend(f func()) {
+func (t *Transciever) SetLogFuncOnSend(f func(message Message)) {
 	t.logFuncOnSend = f
 }
 
-func (t *Transciever) SetLogFuncOnReceive(f func()) {
+func (t *Transciever) SetLogFuncOnReceive(f func(message Message)) {
 	t.logFuncOnReceive = f
 }
 
@@ -66,7 +66,7 @@ func NewTransciever(conn net.Conn, handler func(Message) error) *Transciever {
 				return
 			}
 			if t.shouldLog {
-				t.logFuncOnReceive()
+				t.logFuncOnReceive(message.(Message))
 			}
 			go handler(message.(Message))
 		}
@@ -87,11 +87,8 @@ func (t *Transciever) Send(message Message) error {
 	if err != nil {
 		log.Println("Transciever experienced an error: ", err)
 	}
-	if message.GetFrom() == 0 && t.shouldLog {
-		log.Print("--> manager sending ")
-		log.Printf("%+v\n", message)
-	} else if t.shouldLog {
-		t.logFuncOnSend()
+	if t.shouldLog {
+		t.logFuncOnSend(message.(Message))
 	}
 	return nil
 }

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"sync"
 	"time"
 )
@@ -50,7 +51,7 @@ type TM_Message struct {
 	PageNr    int
 	VC        Vectorclock
 	Intervals []Interval
-	Event     *chan string
+	Event     byte
 	Data      []byte
 	Group     *sync.WaitGroup
 }
@@ -68,8 +69,8 @@ func (m TM_Message) GetType() string {
 }
 
 type TreadMarks struct {
-	memory.VirtualMemory //embeds this interface type
-	nrProcs              int
+	memory.VirtualMemory     //embeds this interface type
+	nrProcs              int //including the manager process
 	ProcId               byte
 	nrLocks              int
 	nrBarriers           int
@@ -77,8 +78,10 @@ type TreadMarks struct {
 	vc      Vectorclock
 	twinMap map[int][]byte //contains twins since last sync.
 	network.IClient
-	server  network.Server
-	manager tm_Manager
+	server       network.Server
+	manager      tm_Manager
+	eventchanMap map[byte]chan string
+	eventNumber  byte
 }
 
 func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarriers int) *TreadMarks {
@@ -95,6 +98,8 @@ func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarri
 		nrProcs:            nrProcs,
 		nrLocks:            nrLocks,
 		nrBarriers:         nrBarriers,
+		eventchanMap:       make(map[byte]chan string),
+		eventNumber:        byte(0),
 	}
 
 	tm.VirtualMemory.AddFaultListener(func(addr int, faultType byte, accessType string, value byte) {
@@ -132,7 +137,6 @@ func (t *TreadMarks) Join(address string) error {
 	c := make(chan bool)
 
 	msgHandler := func(message network.Message) error {
-		log.Println("host", t.ProcId, "recieved message : ", message)
 
 		//switch between types. If simple message, convert to tm_Message. If neither, return error
 		var msg TM_Message
@@ -154,9 +158,9 @@ func (t *TreadMarks) Join(address string) error {
 			t.HandleLockAcquireRequest(&msg)
 		case LOCK_ACQUIRE_RESPONSE:
 			t.HandleLockAcquireResponse(&msg)
-			*msg.Event <- "continue"
+			t.eventchanMap[msg.Event] <- "continue"
 		case BARRIER_RESPONSE:
-			*msg.Event <- "continue"
+			t.eventchanMap[msg.Event] <- "continue"
 		case DIFF_REQUEST:
 			//remember to create own diff and set read protection on page(s)
 		case DIFF_RESPONSE:
@@ -174,7 +178,7 @@ func (t *TreadMarks) Join(address string) error {
 			panicOnErr(err)
 		case COPY_RESPONSE:
 			t.PrivilegedWrite(msg.PageNr*t.GetPageSize(), msg.Data)
-			*msg.Event <- "continue"
+			t.eventchanMap[msg.Event] <- "continue"
 		default:
 			return errors.New("unrecognized message type value: " + msg.Type)
 		}
@@ -186,6 +190,14 @@ func (t *TreadMarks) Join(address string) error {
 		return err
 	}
 	<-c
+	client.GetTransciever().(network.LoggableTransciever).SetLogFuncOnSend(func(message network.Message) {
+		log.Println("host", t.ProcId, " sending message:", message)
+	})
+	client.GetTransciever().(network.LoggableTransciever).SetLogFuncOnReceive(func(message network.Message) {
+		log.Println("host", t.ProcId, " received message:", message)
+	})
+	client.GetTransciever().(network.LoggableTransciever).ShouldLog(true)
+
 	log.Println("host successfully joined system with id:", t.ProcId)
 	return nil
 }
@@ -199,17 +211,17 @@ func (t *TreadMarks) Startup() error {
 	log.Println("sucessfully started server")
 	time.Sleep(time.Millisecond * 100)
 
-	c := network.NewClient(func(message network.Message) error {
-		log.Println("manager received message:", message)
-		return nil
-	})
-	c.GetTransciever().(network.LoggingTransciever).SetLogFuncOnSend(func() {
-		log.Println()
-	})
-	c.Connect("localhost:2000")
+	conn, err := net.Dial("tcp", "localhost:2000")
 	bman := NewBarrierManagerImp(t.nrProcs)
 	lman := NewLockManagerImp()
-	t.manager = *NewTest_TM_Manager(c.GetTransciever(), bman, lman, t.nrProcs, t)
+	t.manager = *NewTM_Manager(conn, bman, lman, t)
+	t.manager.ITransciever.(network.LoggableTransciever).SetLogFuncOnSend(func(message network.Message) {
+		log.Println("manager sending message:", message)
+	})
+	t.manager.ITransciever.(network.LoggableTransciever).SetLogFuncOnReceive(func(message network.Message) {
+		log.Println("manager received message:", message)
+	})
+	t.manager.ITransciever.(network.LoggableTransciever).ShouldLog(true)
 	return t.Join("localhost:2000")
 }
 
@@ -230,6 +242,7 @@ func (t *TreadMarks) HandleLockAcquireRequest(msg *TM_Message) TM_Message {
 	msg.From, msg.To = msg.To, msg.From
 	msg.Type = LOCK_ACQUIRE_RESPONSE
 	msg.VC = t.vc
+	t.Send(msg)
 	return *msg
 }
 
@@ -386,24 +399,27 @@ func (t *TreadMarks) Shutdown() {
 
 func (t *TreadMarks) AcquireLock(id int) {
 	c := make(chan string)
+	t.eventchanMap[t.eventNumber] = c
 	msg := TM_Message{
 		Type:  LOCK_ACQUIRE_REQUEST,
-		To:    1,
+		To:    0,
 		From:  t.ProcId,
 		Diffs: nil,
 		Id:    id,
 		VC:    t.vc,
-		Event: &c,
+		Event: t.eventNumber,
 	}
 	err := t.Send(msg)
 	panicOnErr(err)
 	<-c
+	t.eventchanMap[t.eventNumber] = nil
+	t.eventNumber++
 }
 
 func (t *TreadMarks) ReleaseLock(id int) {
 	msg := TM_Message{
 		Type:  LOCK_RELEASE,
-		To:    1,
+		To:    0,
 		From:  t.ProcId,
 		Diffs: nil,
 		Id:    id,
@@ -414,6 +430,7 @@ func (t *TreadMarks) ReleaseLock(id int) {
 
 func (t *TreadMarks) Barrier(id int) {
 	c := make(chan string)
+	t.eventchanMap[t.eventNumber] = c
 	//last known timestamp from manager that this host has seen
 	var managerTs Vectorclock
 	if t.GetIntervalRecord(byte(0), 0) == nil {
@@ -431,12 +448,14 @@ func (t *TreadMarks) Barrier(id int) {
 		Diffs:     nil,
 		VC:        t.vc,
 		Id:        id,
-		Event:     &c,
+		Event:     t.eventNumber,
 		Intervals: t.GetUnseenIntervalsAtProc(managerTs, t.ProcId),
 	}
 	err := t.Send(msg)
 	panicOnErr(err)
 	<-c
+	t.eventchanMap[t.eventNumber] = nil
+	t.eventNumber++
 }
 
 func (t *TreadMarks) incorporateIntervalsIntoDatastructures(msg *TM_Message) {
@@ -471,16 +490,20 @@ func (t *TreadMarks) incorporateIntervalsIntoDatastructures(msg *TM_Message) {
 
 func (t *TreadMarks) sendCopyRequest(pageNr int, procNr byte) {
 	c := make(chan string)
+	t.eventchanMap[t.eventNumber] = c
+
 	msg := TM_Message{
 		Type:   COPY_REQUEST,
 		To:     procNr,
 		From:   t.ProcId,
-		Event:  &c,
+		Event:  t.eventNumber,
 		PageNr: pageNr,
 	}
 	err := t.Send(msg)
 	panicOnErr(err)
 	<-c
+	t.eventchanMap[t.eventNumber] = nil
+	t.eventNumber++
 }
 
 func panicOnErr(err error) {
