@@ -277,7 +277,9 @@ func (t *TreadMarks) updateDatastructures() {
 func (t *TreadMarks) RequestAndApplyDiffs(pageNr int) {
 	group := new(sync.WaitGroup)
 	messages := t.GenerateDiffRequests(pageNr, group)
-	for _, msg := range messages {
+	fmt.Println("Boom")
+	for i, msg := range messages {
+		fmt.Println("Sending message ", i)
 		t.Send(msg)
 	}
 	group.Wait()
@@ -336,8 +338,7 @@ func (t *TreadMarks) GenerateDiffRequests(pageNr int, group *sync.WaitGroup) []T
 
 	//Then we build the messages
 	messages := make([]TM_Message, 0)
-	t.waitgroupMap[t.eventNumber] = group
-	t.eventNumber++
+
 	for i := 0; i < t.nrProcs; i++ {
 		if ProcStartTS[i].Value == nil || ProcEndTS[i].Value == nil {
 			continue
@@ -351,6 +352,10 @@ func (t *TreadMarks) GenerateDiffRequests(pageNr int, group *sync.WaitGroup) []T
 			Event:  t.eventNumber,
 		}
 		messages = append(messages, message)
+	}
+	if len(messages) > 0{
+		t.waitgroupMap[t.eventNumber] = group
+		t.eventNumber++
 	}
 	return messages
 }
