@@ -113,7 +113,7 @@ func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarri
 			if entry := tm.GetPageEntry(pageNr); !entry.hascopy {
 				tm.sendCopyRequest(pageNr, byte(tm.GetCopyset(pageNr)[0]))
 			}
-			//TODO: get and apply diffs before continuing
+			tm.RequestAndApplyDiffs(pageNr)
 			tm.SetRights(addr, memory.READ_WRITE)
 		case "WRITE":
 			pageNr := tm.GetPageAddr(addr) / tm.GetPageSize()
@@ -126,7 +126,7 @@ func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarri
 				val := tm.PrivilegedRead(tm.GetPageAddr(addr), tm.GetPageSize())
 				tm.twinMap[pageNr] = val
 			}
-			//TODO: get and apply diffs before continuing
+			tm.RequestAndApplyDiffs(pageNr)
 			tm.SetRights(addr, memory.READ_WRITE)
 			tm.PrivilegedWrite(addr, []byte{value})
 		}
@@ -163,9 +163,9 @@ func (t *TreadMarks) Join(address string) error {
 		case BARRIER_RESPONSE:
 			t.eventchanMap[msg.Event] <- "continue"
 		case DIFF_REQUEST:
-			//remember to create own diff and set read protection on page(s)
+			t.HandleDiffRequest(msg)
 		case DIFF_RESPONSE:
-
+			t.HandleDiffResponse(msg)
 		case COPY_REQUEST:
 			//if we have a twin, send that. Else just send the current contents of page
 			if pg, ok := t.twinMap[msg.PageNr]; ok {
@@ -358,6 +358,17 @@ func (t *TreadMarks) HandleDiffRequest(message TM_Message) TM_Message {
 	//First we populate a list of pairs with all the relevant diffs.
 	vc := message.VC
 	pageNr := message.PageNr
+	mwnl := t.GetWritenoticeList(t.ProcId, pageNr)
+	if len(mwnl) > 0 {
+		if mwnl[0].Diff == nil {
+			pageVal, err := t.ReadBytes(pageNr*t.GetPageSize(), t.GetPageSize())
+			panicOnErr(err)
+			diff := CreateDiff(t.twinMap[pageNr], pageVal)
+			mwnl[0].Diff = &diff
+			t.twinMap[pageNr] = nil
+			t.SetRights(pageNr*t.GetPageSize(), memory.READ_ONLY)
+		}
+	}
 	pairs := make([]Pair, 0)
 	for proc := byte(0); proc < byte(t.nrProcs); proc = proc + byte(1) {
 		for _, wnr := range t.GetWritenoticeList(proc, pageNr) {
