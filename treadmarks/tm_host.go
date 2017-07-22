@@ -53,7 +53,6 @@ type TM_Message struct {
 	Intervals []Interval
 	Event     byte
 	Data      []byte
-	Group     *sync.WaitGroup
 }
 
 func (m TM_Message) GetFrom() byte {
@@ -83,6 +82,7 @@ type TreadMarks struct {
 	eventchanMap      map[byte]chan string
 	eventNumber       byte
 	lastVCFromManager Vectorclock
+	waitgroupMap map[byte]*sync.WaitGroup
 }
 
 func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarriers int) *TreadMarks {
@@ -314,6 +314,8 @@ func (t *TreadMarks) GenerateDiffRequests(pageNr int, group *sync.WaitGroup) []T
 
 	//Then we build the messages
 	messages := make([]TM_Message, 0)
+	t.waitgroupMap[t.eventNumber] = group
+	t.eventNumber++
 	for i := 0; i < t.nrProcs; i++ {
 		if ProcStartTS[i].Value == nil || ProcEndTS[i].Value == nil {
 			continue
@@ -324,7 +326,7 @@ func (t *TreadMarks) GenerateDiffRequests(pageNr int, group *sync.WaitGroup) []T
 			Type:   DIFF_REQUEST,
 			VC:     ProcEndTS[i],
 			PageNr: pageNr,
-			Group:  group,
+			Event:  t.eventNumber,
 		}
 		messages = append(messages, message)
 	}
@@ -364,7 +366,8 @@ func (t *TreadMarks) HandleDiffResponse(message TM_Message) {
 		wnl := t.GetWritenoticeList(byte(j), message.PageNr)
 		for k, wn := range wnl {
 			if i >= len(pairs) {
-				message.Group.Done()
+				t.waitgroupMap[message.Event].Done()
+				t.waitgroupMap[message.Event] = nil
 				return
 			} else if wn.Interval.Timestamp.Equals(pairs[i].Car.(Vectorclock)) {
 				diff := new(Diff)
@@ -377,7 +380,6 @@ func (t *TreadMarks) HandleDiffResponse(message TM_Message) {
 		}
 		j++
 	}
-	message.Group.Done()
 }
 
 func (t *TreadMarks) Shutdown() {
