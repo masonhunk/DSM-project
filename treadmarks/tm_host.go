@@ -273,6 +273,20 @@ func (t *TreadMarks) updateDatastructures() {
 	}
 }
 
+func (t *TreadMarks) RequestAndApplyDiffs(pageNr int) {
+	group := new(sync.WaitGroup)
+	messages := t.GenerateDiffRequests(pageNr, group)
+	for _, msg := range messages {
+		t.Send(msg)
+	}
+	group.Wait()
+	pe := t.GetPageEntry(pageNr)
+	channel := pe.OrderedDiffChannel()
+	for diff := range channel {
+		t.ApplyDiff(pageNr, diff)
+	}
+}
+
 func (t *TreadMarks) GenerateDiffRequests(pageNr int, group *sync.WaitGroup) []TM_Message {
 	//First we check if we have the page already or need to request a copy.
 	if t.GetPageEntry(pageNr).hascopy == false {
