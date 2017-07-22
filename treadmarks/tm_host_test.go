@@ -617,3 +617,48 @@ func TestTreadMarks_HandleDiffResponse_TestSingleDiffMultipleProcs(t *testing.T)
 	assert.Equal(t, tm.GetWritenoticeList(0, 0)[0].Diff.Diffs[0], Pair{1, 2})
 	assert.Equal(t, tm.GetWritenoticeList(1, 0)[0].Diff.Diffs[0], Pair{3, 4})
 }
+
+func TestTreadMarks_ApplyDiff_singledif(t *testing.T) {
+	vm := memory.NewVmem(128, 8)
+	tm := NewTreadMarks(vm, 2, 1, 1)
+	diff := &Diff{[]Pair{{1, byte(2)}}}
+	tm.PrivilegedWrite(0, []byte{byte(0), byte(0), byte(0), byte(0), byte(0), byte(0), byte(0), byte(0)})
+	assert.Equal(t, tm.PrivilegedRead(0, 8), []byte{byte(0), byte(0), byte(0), byte(0), byte(0), byte(0), byte(0), byte(0)})
+	tm.ApplyDiff(0, diff)
+	assert.Equal(t, tm.PrivilegedRead(0, 8), []byte{byte(0), byte(2), byte(0), byte(0), byte(0), byte(0), byte(0), byte(0)})
+}
+func TestTreadMarks_ApplyDiff_multidif(t *testing.T) {
+	vm := memory.NewVmem(128, 8)
+	tm := NewTreadMarks(vm, 2, 1, 1)
+	diff := &Diff{[]Pair{
+		{1, byte(1)},
+		{2, byte(2)},
+		{3, byte(3)},
+		{4, byte(4)},
+		{5, byte(5)},
+		{6, byte(6)},
+		{7, byte(7)},
+	}}
+	tm.PrivilegedWrite(0, []byte{byte(0), byte(0), byte(0), byte(0), byte(0), byte(0), byte(0), byte(0)})
+	assert.Equal(t, tm.PrivilegedRead(0, 8), []byte{byte(0), byte(0), byte(0), byte(0), byte(0), byte(0), byte(0), byte(0)})
+	tm.ApplyDiff(0, diff)
+	assert.Equal(t, tm.PrivilegedRead(0, 8), []byte{byte(0), byte(1), byte(2), byte(3), byte(4), byte(5), byte(6), byte(7)})
+}
+
+func TestTreadMarks_ApplyDiff_multidifunordered(t *testing.T) {
+	vm := memory.NewVmem(128, 8)
+	tm := NewTreadMarks(vm, 2, 1, 1)
+	diff := &Diff{[]Pair{
+		{1, byte(1)},
+		{6, byte(6)},
+		{3, byte(3)},
+		{5, byte(5)},
+		{2, byte(2)},
+		{7, byte(7)},
+		{4, byte(4)},
+	}}
+	tm.PrivilegedWrite(0, []byte{byte(0), byte(0), byte(0), byte(0), byte(0), byte(0), byte(0), byte(0)})
+	assert.Equal(t, tm.PrivilegedRead(0, 8), []byte{byte(0), byte(0), byte(0), byte(0), byte(0), byte(0), byte(0), byte(0)})
+	tm.ApplyDiff(0, diff)
+	assert.Equal(t, tm.PrivilegedRead(0, 8), []byte{byte(0), byte(1), byte(2), byte(3), byte(4), byte(5), byte(6), byte(7)})
+}

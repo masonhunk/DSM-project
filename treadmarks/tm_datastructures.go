@@ -2,7 +2,6 @@ package treadmarks
 
 import (
 	"DSM-project/memory"
-	"fmt"
 	"sync"
 )
 
@@ -190,32 +189,28 @@ func (pe *PageArrayEntry) OrderedDiffChannel() chan *Diff {
 		done := 0
 		for i, wnr := range wnra {
 			index[i] = len(wnr) - 1
+			done = done + index[i]
 		}
-		fmt.Println("Starting run with indexes: ", index)
 		for {
-			smallest := true
+
 			for i := 0; i < procNr; i++ {
-				fmt.Println("Checking if proc ", i, " is the smallest...")
+				smallest := true
 				if index[i] < 0 {
-					done++
+					done--
 					continue
 				}
 				ts1 := wnra[i][index[i]].Interval.Timestamp
 				for j := 0; j < procNr; j++ {
-					fmt.Println("Comparing with proc ", j)
 					if index[j] < 0 {
-						fmt.Println("Proc ", j, " had a negative index.")
 						continue
 					}
 					ts2 := wnra[j][index[j]].Interval.Timestamp
 					if ts2.IsBefore(ts1) {
-						fmt.Println("Proc ", j, " had a writenotice before this, so we should use that first.")
 						smallest = false
 						break
 					}
 				}
 				if smallest {
-					fmt.Println("Proc ", i, " was the smallest and is pushed.")
 					channel <- wnra[i][index[i]].Diff
 					index[i] = index[i] - 1
 				}

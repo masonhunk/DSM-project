@@ -506,6 +506,15 @@ func (t *TreadMarks) sendCopyRequest(pageNr int, procNr byte) {
 	t.eventNumber++
 }
 
+func (t *TreadMarks) ApplyDiff(pageNr int, diffList *Diff) {
+	addr := pageNr * t.GetPageSize()
+	data := t.PrivilegedRead(addr, t.GetPageSize())
+	for _, diff := range diffList.Diffs {
+		data[diff.Car.(int)] = diff.Cdr.(byte)
+	}
+	t.PrivilegedWrite(addr, data)
+}
+
 func panicOnErr(err error) {
 	if err != nil {
 		panic(err)
