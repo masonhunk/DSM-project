@@ -114,10 +114,8 @@ func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarri
 			tm.sendCopyRequest(pageNr, byte(copyset[len(tm.GetCopyset(pageNr))-1])) //blocks until copy has been received
 			entry.SetHasCopy(true)
 		}
-		fmt.Println("before requesting diffs")
 		//get and apply diffs before continuing
 		tm.RequestAndApplyDiffs(pageNr)
-		fmt.Println("after requesting diffs")
 
 		switch accessType {
 		case "READ":
@@ -341,8 +339,7 @@ func (t *TreadMarks) GenerateDiffRequests(pageNr int, group *sync.WaitGroup) []T
 
 	//Then we build the messages
 	messages := make([]TM_Message, 0)
-	t.waitgroupMap[t.eventNumber] = group
-	t.eventNumber++
+
 	for i := 0; i < t.nrProcs; i++ {
 		if ProcStartTS[i].Value == nil || ProcEndTS[i].Value == nil {
 			continue
@@ -356,6 +353,10 @@ func (t *TreadMarks) GenerateDiffRequests(pageNr int, group *sync.WaitGroup) []T
 			Event:  t.eventNumber,
 		}
 		messages = append(messages, message)
+	}
+	if len(messages) > 0{
+		t.waitgroupMap[t.eventNumber] = group
+		t.eventNumber++
 	}
 	return messages
 }
