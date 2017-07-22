@@ -114,8 +114,10 @@ func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarri
 			tm.sendCopyRequest(pageNr, byte(copyset[len(tm.GetCopyset(pageNr))-1])) //blocks until copy has been received
 			entry.SetHasCopy(true)
 		}
+		fmt.Println("before requesting diffs")
 		//get and apply diffs before continuing
 		tm.RequestAndApplyDiffs(pageNr)
+		fmt.Println("after requesting diffs")
 
 		switch accessType {
 		case "READ":
@@ -277,6 +279,9 @@ func (t *TreadMarks) updateDatastructures() {
 func (t *TreadMarks) RequestAndApplyDiffs(pageNr int) {
 	group := new(sync.WaitGroup)
 	messages := t.GenerateDiffRequests(pageNr, group)
+	if len(messages) == 0 {
+		return
+	}
 	for _, msg := range messages {
 		t.Send(msg)
 	}

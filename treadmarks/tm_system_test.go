@@ -150,7 +150,7 @@ func TestShouldGetCopyIfNoCopy(t *testing.T) {
 
 	assert.True(t, host2.GetPageEntry(1).hascopy)
 	assert.Equal(t, byte(10), res)
-	assert.Equal(t, memory.READ_WRITE, host2.GetRights(13))
+	assert.Equal(t, memory.READ_ONLY, host2.GetRights(13))
 }
 
 func TestBarrierManagerVCUpdate(t *testing.T) {
