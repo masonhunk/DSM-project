@@ -104,7 +104,7 @@ func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarri
 		eventchanMap:       make(map[byte]chan string),
 		waitgroupMap:       make(map[byte]*sync.WaitGroup),
 		eventNumber:        byte(0),
-		lastVCFromManager:  *NewVectorclock(nrProcs),
+		lastVCFromManager:  *NewVectorclock(nrProcs + 1),
 	}
 
 	tm.VirtualMemory.AddFaultListener(func(addr int, faultType byte, accessType string, value byte) {
@@ -466,7 +466,8 @@ func (t *TreadMarks) ReleaseLock(id int) {
 func (t *TreadMarks) Barrier(id int) {
 	c := make(chan string)
 	t.eventchanMap[t.eventNumber] = c
-
+	t.vc.Increment(t.ProcId)
+	t.updateDatastructures()
 	msg := TM_Message{
 		Type:      BARRIER_REQUEST,
 		To:        0,

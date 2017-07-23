@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/stretchr/testify/assert"
 	"log"
+	"sync"
 	"testing"
 	"time"
 )
@@ -288,5 +289,69 @@ func TestWritesBeforeAcquire(t *testing.T) {
 }
 
 func TestShouldNotCreateNewIntervalOnLockReacquire(t *testing.T) {
+
+}
+
+func TestBarrierReadWrites(t *testing.T) {
+	host1 := setupTreadMarksStruct(3)
+	host2 := setupTreadMarksStruct(3)
+	host3 := setupTreadMarksStruct(3)
+
+	host1.Startup()
+	host2.Join("localhost:2000")
+	host3.Join("localhost:2000")
+
+	started := make(chan bool)
+	group := new(sync.WaitGroup)
+	group.Add(3)
+	go func() {
+		started <- true
+		host1.AcquireLock(1)
+		host1.Write(13, byte(13))
+		host1.ReleaseLock(1)
+		host1.Barrier(1)
+		group.Done()
+	}()
+	<-started
+	go func() {
+		started <- true
+		host2.AcquireLock(2)
+		host2.Write(12, byte(12))
+		host2.ReleaseLock(2)
+		host2.Barrier(1)
+		group.Done()
+	}()
+	<-started
+	go func() {
+		started <- true
+		host3.Write(1, byte(1))
+		host3.Barrier(1)
+		group.Done()
+	}()
+	<-started
+	group.Wait()
+	time.Sleep(4000 * time.Millisecond)
+
+	//all changes made in host1 and host2 should be seen by all.
+	res1, _ := host1.Read(12)
+	res2, _ := host1.Read(13)
+	assert.Equal(t, byte(12), res1) //failed
+	assert.Equal(t, byte(13), res2)
+
+	res1, _ = host2.Read(12)
+	res2, _ = host2.Read(13)
+	assert.Equal(t, byte(12), res1)
+	assert.Equal(t, byte(13), res2) //failed
+
+	res1, _ = host3.Read(12)
+	res2, _ = host3.Read(13)
+	assert.Equal(t, byte(12), res1) //failed
+	assert.Equal(t, byte(13), res2)
+
+	// The write by host3 should not be seen since it was not part of a lock
+	res1, _ = host1.Read(1)
+	res2, _ = host2.Read(1)
+	assert.Equal(t, byte(0), res1)
+	assert.Equal(t, byte(0), res2)
 
 }
