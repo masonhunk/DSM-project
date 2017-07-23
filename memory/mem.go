@@ -41,7 +41,9 @@ type Vmem struct {
 }
 
 func (m *Vmem) PrivilegedRead(addr, length int) []byte {
-	return m.Stack[addr : addr+length]
+	var read []byte
+	copy(read, m.Stack[addr : addr+length])
+	return read
 }
 
 func (m *Vmem) PrivilegedWrite(addr int, data []byte) error {
@@ -146,11 +148,15 @@ func (m *Vmem) Read(addr int) (byte, error) {
 }
 
 func (m *Vmem) ReadBytes(addr, length int) ([]byte, error) {
+
 	start := addr
 	end := addr + length - 1
+	var result []byte
+	copy(result, m.Stack[start : end+1])
 	if m.arDisabled {
-		return m.Stack[start : end+1], nil
+		return result, nil
 	}
+
 	for i := start; i < end; i += m.PAGE_BYTESIZE {
 		access := m.AccessMap[m.GetPageAddr(i)]
 		switch access {
@@ -159,14 +165,14 @@ func (m *Vmem) ReadBytes(addr, length int) ([]byte, error) {
 			for _, l := range m.faultListeners {
 				l(addr, 0, "READ", 0)
 			}
-			return m.Stack[start : end+1], errors.New("access denied at location: " + strconv.Itoa(i))
+			return result, errors.New("access denied at location: " + strconv.Itoa(i))
 		case READ_WRITE, READ_ONLY:
 			continue
 		default:
 			return nil, errors.New("unknown access value at: " + strconv.Itoa(i))
 		}
 	}
-	return m.Stack[start : end+1], nil
+	return result, nil
 }
 
 func (m *Vmem) Write(addr int, val byte) error {
