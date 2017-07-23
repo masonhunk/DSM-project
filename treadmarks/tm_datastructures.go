@@ -220,7 +220,7 @@ func (pe *PageArrayEntry) OrderedDiffChannel() chan *Diff {
 					index[i] = index[i] - 1
 				}
 			}
-			if done == procNr {
+			if done < 1 {
 				break
 			}
 		}

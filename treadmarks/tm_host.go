@@ -118,7 +118,6 @@ func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarri
 		}
 		//get and apply diffs before continuing
 		tm.RequestAndApplyDiffs(pageNr)
-
 		switch accessType {
 		case "READ":
 			tm.SetRights(addr, memory.READ_ONLY)
@@ -287,6 +286,7 @@ func (t *TreadMarks) RequestAndApplyDiffs(pageNr int) {
 		t.Send(msg)
 	}
 	group.Wait()
+	//all responses have been received. Now apply them
 	pe := t.GetPageEntry(pageNr)
 	channel := pe.OrderedDiffChannel()
 	for diff := range channel {
@@ -394,7 +394,6 @@ func (t *TreadMarks) HandleDiffRequest(message TM_Message) TM_Message {
 	message.From = t.ProcId
 	message.Diffs = pairs
 	message.Type = DIFF_RESPONSE
-	fmt.Printf("%+v\n:", message)
 	return message
 }
 
@@ -455,10 +454,10 @@ func (t *TreadMarks) AcquireLock(id int) {
 
 func (t *TreadMarks) ReleaseLock(id int) {
 	msg := TM_Message{
-		Type:  LOCK_RELEASE,
-		To:    0,
-		From:  t.ProcId,
-		Id:    id,
+		Type: LOCK_RELEASE,
+		To:   0,
+		From: t.ProcId,
+		Id:   id,
 	}
 	err := t.Send(msg)
 	panicOnErr(err)
