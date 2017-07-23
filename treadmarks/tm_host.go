@@ -163,7 +163,7 @@ func (t *TreadMarks) Join(address string) error {
 			t.incorporateIntervalsIntoDatastructures(&msg)
 			t.eventchanMap[msg.Event] <- "continue"
 		case DIFF_REQUEST:
-			t.HandleDiffRequest(msg)
+			return t.Send(t.HandleDiffRequest(msg))
 		case DIFF_RESPONSE:
 			t.HandleDiffResponse(msg)
 		case COPY_REQUEST:
@@ -277,9 +277,10 @@ func (t *TreadMarks) updateDatastructures() {
 func (t *TreadMarks) RequestAndApplyDiffs(pageNr int) {
 	group := new(sync.WaitGroup)
 	messages := t.GenerateDiffRequests(pageNr, group)
-	if len(messages) == 0 {
+	if len(messages) <= 0 {
 		return
 	}
+	group.Add(len(messages))
 	for _, msg := range messages {
 		t.Send(msg)
 	}
@@ -287,6 +288,7 @@ func (t *TreadMarks) RequestAndApplyDiffs(pageNr int) {
 	pe := t.GetPageEntry(pageNr)
 	channel := pe.OrderedDiffChannel()
 	for diff := range channel {
+		fmt.Println(diff)
 		t.ApplyDiff(pageNr, diff)
 	}
 }
@@ -354,7 +356,7 @@ func (t *TreadMarks) GenerateDiffRequests(pageNr int, group *sync.WaitGroup) []T
 		}
 		messages = append(messages, message)
 	}
-	if len(messages) > 0{
+	if len(messages) > 0 {
 		t.waitgroupMap[t.eventNumber] = group
 		t.eventNumber++
 	}
@@ -391,6 +393,7 @@ func (t *TreadMarks) HandleDiffRequest(message TM_Message) TM_Message {
 	message.From = t.ProcId
 	message.Diffs = pairs
 	message.Type = DIFF_RESPONSE
+	fmt.Printf("%+v\n:", message)
 	return message
 }
 
