@@ -86,6 +86,8 @@ type TreadMarks struct {
 }
 
 func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarriers int) *TreadMarks {
+	gob.RegisterName("pairs", []Pair{})
+	gob.Register(Vectorclock{})
 	gob.Register(TM_Message{})
 	gob.Register(network.SimpleMessage{})
 
@@ -123,7 +125,6 @@ func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarri
 		case "WRITE":
 			//create a twin
 			val := tm.PrivilegedRead(tm.GetPageAddr(addr), tm.GetPageSize())
-			fmt.Println("set twin", val, "with pagenr", pageNr)
 			tm.twinMap[pageNr] = val
 			tm.PrivilegedWrite(addr, []byte{value})
 			tm.SetRights(addr, memory.READ_WRITE)
@@ -289,7 +290,6 @@ func (t *TreadMarks) RequestAndApplyDiffs(pageNr int) {
 	pe := t.GetPageEntry(pageNr)
 	channel := pe.OrderedDiffChannel()
 	for diff := range channel {
-		fmt.Println(diff)
 		t.ApplyDiff(pageNr, diff)
 	}
 }
@@ -373,9 +373,7 @@ func (t *TreadMarks) HandleDiffRequest(message TM_Message) TM_Message {
 		if mwnl[0].Diff == nil {
 			pageVal, err := t.ReadBytes(pageNr*t.GetPageSize(), t.GetPageSize())
 			panicOnErr(err)
-			fmt.Println("before:", t.twinMap[pageNr], pageVal)
 			diff := CreateDiff(t.twinMap[pageNr], pageVal)
-			fmt.Println("created diff:", diff)
 			mwnl[0].Diff = &diff
 			t.twinMap[pageNr] = nil
 			t.SetRights(pageNr*t.GetPageSize(), memory.READ_ONLY)
@@ -388,7 +386,6 @@ func (t *TreadMarks) HandleDiffRequest(message TM_Message) TM_Message {
 				break
 			}
 			if wnr.Diff != nil {
-				fmt.Println(wnr.Diff, wnr.Diff.Diffs)
 				pairs = append(pairs, Pair{wnr.Interval.Timestamp, wnr.Diff.Diffs})
 			}
 		}
@@ -416,7 +413,8 @@ func (t *TreadMarks) HandleDiffResponse(message TM_Message) {
 				return
 			} else if wn.Interval.Timestamp.Equals(pairs[i].Car.(Vectorclock)) {
 				diff := new(Diff)
-				diff.Diffs = pairs[i].Cdr.(Diff).Diffs
+				diff.Diffs = pairs[i].Cdr.([]Pair)
+				//diff.Diffs = pairs[i].Cdr.(Diff).Diffs
 				wnl[k].Diff = diff
 				i++
 			} else if wn.Interval.Timestamp.IsBefore(pairs[i].Car.(Vectorclock)) {
@@ -425,6 +423,7 @@ func (t *TreadMarks) HandleDiffResponse(message TM_Message) {
 		}
 		j++
 	}
+	t.waitgroupMap[message.Event].Done()
 }
 
 func (t *TreadMarks) Shutdown() {
@@ -443,7 +442,6 @@ func (t *TreadMarks) AcquireLock(id int) {
 		Type:  LOCK_ACQUIRE_REQUEST,
 		To:    0,
 		From:  t.ProcId,
-		Diffs: nil,
 		Id:    id,
 		VC:    t.vc,
 		Event: t.eventNumber,
@@ -460,7 +458,6 @@ func (t *TreadMarks) ReleaseLock(id int) {
 		Type:  LOCK_RELEASE,
 		To:    0,
 		From:  t.ProcId,
-		Diffs: nil,
 		Id:    id,
 	}
 	err := t.Send(msg)
@@ -475,7 +472,6 @@ func (t *TreadMarks) Barrier(id int) {
 		Type:      BARRIER_REQUEST,
 		To:        0,
 		From:      t.ProcId,
-		Diffs:     nil,
 		VC:        t.vc,
 		Id:        id,
 		Event:     t.eventNumber,
