@@ -117,8 +117,8 @@ func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarri
 			entry.SetHasCopy(true)
 		}
 		//get and apply diffs before continuing
-		fmt.Println("Applying and requesting diffs for page ", pageNr)
 		tm.RequestAndApplyDiffs(pageNr)
+
 		switch accessType {
 		case "READ":
 			tm.SetRights(addr, memory.READ_ONLY)
@@ -280,7 +280,6 @@ func (t *TreadMarks) RequestAndApplyDiffs(pageNr int) {
 	group := new(sync.WaitGroup)
 	messages := t.GenerateDiffRequests(pageNr, group)
 	if len(messages) <= 0 {
-		fmt.Println("No diffs")
 		return
 	}
 	group.Add(len(messages))
@@ -291,8 +290,12 @@ func (t *TreadMarks) RequestAndApplyDiffs(pageNr int) {
 	//all responses have been received. Now apply them
 	pe := t.GetPageEntry(pageNr)
 	channel := pe.OrderedDiffChannel()
+	fmt.Println("write notices at page 1 from proc 2:", t.GetWritenoticeList(byte(2), 1))
 	for diff := range channel {
-		t.ApplyDiff(pageNr, diff)
+		fmt.Println("got this diff:", diff)
+		if diff != nil {
+			t.ApplyDiff(pageNr, diff)
+		}
 	}
 }
 
@@ -396,16 +399,17 @@ func (t *TreadMarks) HandleDiffRequest(message TM_Message) TM_Message {
 	message.To = message.From
 	message.From = t.ProcId
 	message.Diffs = pairs
+	message.VC = t.vc
 	message.Type = DIFF_RESPONSE
 	return message
 }
 
 func (t *TreadMarks) HandleDiffResponse(message TM_Message) {
 	pairs := message.Diffs
-	i := 0
-	j := 0
+	i := 0 //diff nr in msg
+	j := 0 //index of process in page array entry
 	for {
-		if j >= t.nrProcs {
+		if j > t.nrProcs {
 			break
 		}
 		wnl := t.GetWritenoticeList(byte(j), message.PageNr)
@@ -416,8 +420,10 @@ func (t *TreadMarks) HandleDiffResponse(message TM_Message) {
 			} else if wn.Interval.Timestamp.Equals(pairs[i].Car.(Vectorclock)) {
 				diff := new(Diff)
 				diff.Diffs = pairs[i].Cdr.([]Pair)
+				fmt.Println("saw diff:", diff)
 				//diff.Diffs = pairs[i].Cdr.(Diff).Diffs
 				wnl[k].Diff = diff
+				fmt.Println("write notice:", t.GetWritenoticeList(byte(j), message.PageNr)[k].Diff)
 				i++
 			} else if wn.Interval.Timestamp.IsBefore(pairs[i].Car.(Vectorclock)) {
 				break
@@ -498,15 +504,6 @@ func (t *TreadMarks) incorporateIntervalsIntoDatastructures(msg *TM_Message) {
 
 		for _, wn := range interval.WriteNotices {
 
-			//check if I have a write notice for this page with no diff at head of list. If so, create diff.
-			if myWn := t.GetWriteNoticeListHead(wn.PageNr, t.ProcId); myWn != nil && myWn.Diff == nil {
-				pageVal, err := t.ReadBytes(wn.PageNr*t.GetPageSize(), t.GetPageSize())
-				panicOnErr(err)
-				diff := CreateDiff(t.twinMap[wn.PageNr], pageVal)
-				t.twinMap[wn.PageNr] = nil
-				myWn.Diff = &diff
-			}
-
 			//add sender to copyset of this page
 			if t.GetPageEntry(wn.PageNr) == nil {
 				log.Println("nil!")
@@ -516,6 +513,16 @@ func (t *TreadMarks) incorporateIntervalsIntoDatastructures(msg *TM_Message) {
 			var res *WriteNoticeRecord = t.PrependWriteNotice(interval.Proc, wn)
 			res.Interval = ir
 			ir.WriteNotices = append(ir.WriteNotices, res)
+
+			//check if I have a write notice for this page with no diff at head of list. If so, create diff.
+			if myWn := t.GetWriteNoticeListHead(wn.PageNr, t.ProcId); myWn != nil {
+				if myWn.Diff == nil {
+					pageVal := t.PrivilegedRead(wn.PageNr*t.GetPageSize(), t.GetPageSize())
+					diff := CreateDiff(t.twinMap[wn.PageNr], pageVal)
+					t.twinMap[wn.PageNr] = nil
+					myWn.Diff = &diff
+				}
+			}
 
 			//finally invalidate the page
 			t.SetRights(wn.PageNr*t.GetPageSize(), memory.NO_ACCESS)

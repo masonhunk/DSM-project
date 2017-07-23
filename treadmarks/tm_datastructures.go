@@ -197,7 +197,6 @@ func (pe *PageArrayEntry) OrderedDiffChannel() chan *Diff {
 			done = done + index[i]
 		}
 		for {
-
 			for i := 0; i < procNr; i++ {
 				smallest := true
 				if index[i] < 0 {

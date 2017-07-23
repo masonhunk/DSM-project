@@ -54,8 +54,8 @@ func (lm *LockManagerImp) HandleLockRelease(id int, newOwner byte) error {
 	if ok == false {
 		return errors.New("LockManager doesn't have a lock with ID " + strconv.Itoa(id))
 	}
-	lm.Unlock()
 	lm.last[id] = newOwner
+	lm.Unlock()
 	lock.Unlock()
 	return nil
 }

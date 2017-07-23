@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"sync"
 )
 
 var AccessDeniedErr = errors.New("access denied")
@@ -39,6 +40,7 @@ type Vmem struct {
 	mallocHistory  map[int]int //maps address to length
 	arDisabled     bool
 	faultListeners []FaultListener
+	mutex          sync.Mutex
 }
 
 func (m *Vmem) PrivilegedRead(addr, length int) []byte {
@@ -124,6 +126,7 @@ func NewVmem(memSize int, pageByteSize int) *Vmem {
 	m.mallocHistory = make(map[int]int)
 	m.arDisabled = false
 	m.faultListeners = make([]FaultListener, 0)
+	m.mutex = sync.Mutex{}
 	return m
 }
 
@@ -164,7 +167,7 @@ func (m *Vmem) ReadBytes(addr, length int) ([]byte, error) {
 	}
 
 	for i := start; i < end; i += m.PAGE_BYTESIZE {
-		access := m.AccessMap[m.GetPageAddr(i)]
+		access := m.GetRights(m.GetPageAddr(i))
 		switch access {
 		case NO_ACCESS:
 			//notify all listeners
@@ -186,7 +189,7 @@ func (m *Vmem) Write(addr int, val byte) error {
 		m.Stack[addr] = val
 		return nil
 	}
-	access := m.AccessMap[m.GetPageAddr(addr)]
+	access := m.GetRights(m.GetPageAddr(addr))
 	switch access {
 	case NO_ACCESS:
 		//notify all listeners
@@ -209,11 +212,16 @@ func (m *Vmem) Write(addr int, val byte) error {
 }
 
 func (m *Vmem) GetRights(addr int) byte {
-	return m.AccessMap[m.GetPageAddr(addr)]
+	m.mutex.Lock()
+	res := m.AccessMap[m.GetPageAddr(addr)]
+	m.mutex.Unlock()
+	return res
 }
 
 func (m *Vmem) SetRights(addr int, access byte) {
+	m.mutex.Lock()
 	m.AccessMap[m.GetPageAddr(addr)] = access
+	m.mutex.Unlock()
 }
 
 func (m *Vmem) GetPageAddr(addr int) int {
