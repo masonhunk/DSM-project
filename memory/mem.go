@@ -41,8 +41,8 @@ type Vmem struct {
 }
 
 func (m *Vmem) PrivilegedRead(addr, length int) []byte {
-	var read []byte
-	copy(read, m.Stack[addr : addr+length])
+	read := make([]byte, length)
+	copy(read, m.Stack[addr:addr+length])
 	return read
 }
 
@@ -151,8 +151,8 @@ func (m *Vmem) ReadBytes(addr, length int) ([]byte, error) {
 
 	start := addr
 	end := addr + length - 1
-	var result []byte
-	copy(result, m.Stack[start : end+1])
+	result := make([]byte, length)
+	copy(result, m.Stack[start:end+1])
 	if m.arDisabled {
 		return result, nil
 	}

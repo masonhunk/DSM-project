@@ -218,7 +218,7 @@ func TestCreationAndPropagationOfWriteNotices(t *testing.T) {
 	assert.Equal(t, Vectorclock{Value: []uint{0, 1, 0, 0}}, host2.vc)
 
 	host2.Write(25, byte(8))
-	host2.Write(13, byte(10))
+	host2.Write(13, byte(12))
 	host2.Write(0, byte(1))
 	host2.ReleaseLock(1)
 
