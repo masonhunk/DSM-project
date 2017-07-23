@@ -318,11 +318,11 @@ func (t *TreadMarks) GenerateDiffRequests(pageNr int, group *sync.WaitGroup) []T
 
 	//Then we "merge" the different intervals
 	for i := 0; i < t.nrProcs; i++ {
-		if ProcStartTS[i].Value == nil {
+		if ProcStartTS[i].Value == nil || i == int(t.ProcId) {
 			continue
 		}
 		for j := i; j < t.nrProcs; j++ {
-			if ProcStartTS[j].Value == nil {
+			if ProcStartTS[j].Value == nil || j == int(t.ProcId) {
 				continue
 			}
 			if ProcStartTS[i].IsAfter(ProcStartTS[j]) {
@@ -484,6 +484,9 @@ func (t *TreadMarks) Barrier(id int) {
 }
 
 func (t *TreadMarks) incorporateIntervalsIntoDatastructures(msg *TM_Message) {
+	fmt.Println("=============================")
+	fmt.Println("Incorporating following message into datastructure:")
+	fmt.Println(msg)
 	t.Lock()
 	for i := len(msg.Intervals) - 1; i >= 0; i-- {
 		interval := msg.Intervals[i]
@@ -492,6 +495,7 @@ func (t *TreadMarks) incorporateIntervalsIntoDatastructures(msg *TM_Message) {
 			WriteNotices: []*WriteNoticeRecord{},
 		}
 		for _, wn := range interval.WriteNotices {
+			fmt.Println("Incorporating writenotice for page nr ", wn.PageNr)
 			//add sender to copyset of this page
 			if t.GetPageEntry(wn.PageNr) == nil {
 				log.Println("nil!")

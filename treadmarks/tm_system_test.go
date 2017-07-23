@@ -257,6 +257,36 @@ func TestCreationAndPropagationOfWriteNotices(t *testing.T) {
 	assert.Equal(t, byte(8), res3)
 }
 
+func TestWritesBeforeAcquire(t *testing.T) {
+	host1 := setupTreadMarksStruct(3)
+	host2 := setupTreadMarksStruct(3)
+	host3 := setupTreadMarksStruct(3)
+
+	host1.Startup()
+	host2.Join("localhost:2000")
+	host3.Join("localhost:2000")
+
+	host2.Write(0, byte(5))
+	val, _ := host2.Read(0)
+	assert.Equal(t, byte(5), val)
+
+	val, _ = host3.Read(0)
+	assert.Equal(t, byte(0), val)
+
+	host3.AcquireLock(1)
+	val, _ = host3.Read(0)
+	assert.Equal(t, byte(0), val)
+	host3.Write(1, byte(2))
+	host3.ReleaseLock(1)
+	time.Sleep(time.Second)
+	host2.AcquireLock(1)
+	val, _ = host2.Read(0)
+	assert.Equal(t, byte(5), val)
+	val, _ = host2.Read(1)
+	assert.Equal(t, byte(2), val)
+
+}
+
 func TestShouldNotCreateNewIntervalOnLockReacquire(t *testing.T) {
 
 }
