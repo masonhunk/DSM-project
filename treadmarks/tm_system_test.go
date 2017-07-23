@@ -235,6 +235,26 @@ func TestCreationAndPropagationOfWriteNotices(t *testing.T) {
 	assert.Len(t, host2.GetWritenoticeList(byte(1), 0), 0)
 
 	host3.ReleaseLock(1)
+
+	res, _ := host1.Read(13)
+	assert.Equal(t, byte(10), res)
+	res1, _ := host2.Read(13)
+	res2, _ := host2.Read(0)
+	res3, _ := host2.Read(25)
+
+	//host 2 should see all its own changes
+	assert.Equal(t, byte(12), res1)
+	assert.Equal(t, byte(1), res2)
+	assert.Equal(t, byte(8), res3)
+
+	//host 3 should see all changes by host 2
+	res1, _ = host3.Read(13)
+	res2, _ = host3.Read(0)
+	res3, _ = host3.Read(25)
+
+	assert.Equal(t, byte(12), res1)
+	assert.Equal(t, byte(1), res2)
+	assert.Equal(t, byte(8), res3)
 }
 
 func TestShouldNotCreateNewIntervalOnLockReacquire(t *testing.T) {
