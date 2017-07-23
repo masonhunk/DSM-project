@@ -83,8 +83,8 @@ func (bm *BarrierManagerImp) HandleBarrier(id int, f func()) *sync.WaitGroup {
 		barrier.Add(bm.nodes)
 		bm.barriers[id] = barrier
 	}
-	bm.Unlock()
 	f()
+	bm.Unlock()
 	barrier.Done()
 	barrier.Wait()
 	return barrier
@@ -98,7 +98,6 @@ type tm_Manager struct {
 	network.ITransciever //embedded type
 	nodes                int
 	tm                   *TreadMarks //the host instance on which this manager runs
-
 }
 
 func NewTest_TM_Manager(tr network.ITransciever, bm BarrierManager, lm LockManager, nodes int, tm *TreadMarks) *tm_Manager {
@@ -124,7 +123,6 @@ func NewTM_Manager(conn net.Conn, bm BarrierManager, lm LockManager, tm *TreadMa
 	m.nodes = tm.nrProcs
 	m.myId = byte(0)
 	m.tm = tm
-
 	return m
 }
 
@@ -196,11 +194,10 @@ func (m *tm_Manager) handleBarrierRequest(message *TM_Message) *TM_Message {
 		}
 	})
 	//barrier over
-
 	if m.tm != nil {
 		msg.Intervals = m.tm.GetAllUnseenIntervals(msg.VC)
-
 	}
+
 	m.vc.SetTick(byte(0), currTick+1)
 	msg.From, msg.To = msg.To, msg.From
 	msg.VC = m.vc

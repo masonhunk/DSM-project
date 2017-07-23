@@ -58,6 +58,7 @@ type TM_DataStructures struct {
 type PageArray struct {
 	array  map[int]*PageArrayEntry
 	nrProc int
+	*sync.Mutex
 }
 
 func (p *PageArray) SetCopyset(pageNr int, copyset []int) {
@@ -255,6 +256,7 @@ func NewPageArray(nrProc int) *PageArray {
 	p := new(PageArray)
 	p.array = make(map[int]*PageArrayEntry)
 	p.nrProc = nrProc
+	p.Mutex = &sync.Mutex{}
 	return p
 }
 
@@ -267,10 +269,13 @@ func (p *PageArray) SetPageEntry(pageNr int, pe *PageArrayEntry) {
 }
 
 func (p *PageArray) GetPageEntry(pageNr int) *PageArrayEntry {
+	p.Lock()
 	if _, ok := p.array[pageNr]; !ok {
 		p.SetPageEntry(pageNr, NewPageArrayEntry(p.nrProc))
 	}
-	return p.array[pageNr]
+	res := p.array[pageNr]
+	p.Unlock()
+	return res
 }
 
 func (p *PageArray) PrependWriteNotice(procId byte, wn WriteNotice) *WriteNoticeRecord {

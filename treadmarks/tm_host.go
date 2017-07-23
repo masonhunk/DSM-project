@@ -290,7 +290,7 @@ func (t *TreadMarks) RequestAndApplyDiffs(pageNr int) {
 	//all responses have been received. Now apply them
 	pe := t.GetPageEntry(pageNr)
 	channel := pe.OrderedDiffChannel()
-	fmt.Println("write notices at page 1 from proc 2:", t.GetWritenoticeList(byte(2), 1))
+	//fmt.Println("write notices at page 1 from proc 2:", t.GetWritenoticeList(byte(2), 1))
 	for diff := range channel {
 		fmt.Println("got this diff:", diff)
 		if diff != nil {
