@@ -400,3 +400,99 @@ func TestLockReqacquire(t *testing.T) {
 	host3.Shutdown()
 
 }
+
+func TestLockReqacquireNested(t *testing.T) {
+	host1 := setupTreadMarksStruct(3)
+	host2 := setupTreadMarksStruct(3)
+	host3 := setupTreadMarksStruct(3)
+
+	host1.Startup()
+	host2.Join("localhost:2000")
+	host3.Join("localhost:2000")
+
+	c1 := make(chan bool)
+	c2 := make(chan bool)
+
+	go func() {
+		c1 <- true
+		host1.AcquireLock(1)
+		host1.Write(1, byte(1))
+		c1 <- true
+		<-c1
+		host1.ReleaseLock(1)
+		fmt.Println("")
+	}()
+	go func() {
+		c2 <- true
+		host2.AcquireLock(1)
+		host2.Write(1, byte(2))
+		c2 <- true
+		<-c2
+		host2.ReleaseLock(1)
+	}()
+	<-c1
+	<-c1
+	<-c2
+	assert.Equal(t, []byte{1}, host1.PrivilegedRead(1, 1))
+	assert.Equal(t, []byte{0}, host2.PrivilegedRead(1, 1))
+
+	c1 <- true
+	<-c2
+	assert.Equal(t, []byte{1}, host1.PrivilegedRead(1, 1))
+	assert.Equal(t, []byte{2}, host2.PrivilegedRead(1, 1))
+
+	host1.Shutdown()
+	host2.Shutdown()
+	host3.Shutdown()
+}
+
+func TestLockReacquireDifferentLocks(t *testing.T) {
+	host1 := setupTreadMarksStruct(3)
+	host2 := setupTreadMarksStruct(3)
+	host3 := setupTreadMarksStruct(3)
+
+	host1.Startup()
+	host2.Join("localhost:2000")
+	host3.Join("localhost:2000")
+
+	c1 := make(chan bool)
+	c2 := make(chan bool)
+
+	go func() {
+		host1.AcquireLock(1)
+		host1.Write(1, byte(1))
+		c1 <- true
+		<-c1
+		host1.ReleaseLock(1)
+
+		host1.AcquireLock(2)
+		c1 <- true
+	}()
+	go func() {
+		host2.AcquireLock(2)
+		host2.Write(2, byte(2))
+		c2 <- true
+		<-c2
+		host2.ReleaseLock(2)
+
+		host2.AcquireLock(1)
+		c2 <- true
+	}()
+	<-c1
+	<-c2
+	assert.Equal(t, []byte{1}, host1.PrivilegedRead(1, 1))
+	assert.Equal(t, []byte{2}, host2.PrivilegedRead(2, 1))
+	c1 <- true
+	c2 <- true
+
+	<-c1
+	<-c2
+	r1, _ := host1.Read(2)
+	r2, _ := host2.Read(1)
+	assert.Equal(t, byte(1), r2)
+	assert.Equal(t, byte(2), r1)
+
+	host1.Shutdown()
+	host2.Shutdown()
+	host3.Shutdown()
+}
