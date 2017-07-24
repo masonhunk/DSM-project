@@ -12,6 +12,7 @@ type ProcArrayInterface1 interface {
 	GetUnseenIntervalsAtProc(procId byte, ts Vectorclock) []Interval
 	MapIntervalRecords(procId byte, f func(ir *IntervalRecord))
 	CreateNewInterval(procId byte, timestamp Vectorclock) *IntervalRecord
+	GetIntervalRecords(procNr byte) []*IntervalRecord
 }
 
 type IntervalRecord struct {
@@ -47,12 +48,12 @@ type ProcArray1 struct {
 
 func NewProcArray(nrProcs int) *ProcArray1 {
 	po := new(ProcArray1)
-	po.array = make([][]*IntervalRecord, nrProcs)
+	po.array = make([][]*IntervalRecord, nrProcs+1)
 	for i := range po.array {
 		po.array[i] = make([]*IntervalRecord, 0)
 	}
 	po.managerTimestamp = *NewVectorclock(nrProcs)
-	po.locks = make([]*sync.RWMutex, nrProcs)
+	po.locks = make([]*sync.RWMutex, nrProcs+1)
 	for i := range po.locks {
 		po.locks[i] = new(sync.RWMutex)
 	}
@@ -64,10 +65,10 @@ func NewProcArray(nrProcs int) *ProcArray1 {
 func (po *ProcArray1) AddIntervalRecord(procId byte, ir *IntervalRecord) {
 	ir.procId = procId
 	po.LockProc(procId)
-	po.array[procId] = append(po.array[procId], ir)
+	po.array[int(procId)] = append(po.array[int(procId)], ir)
 	po.UnlockProc(procId)
 	po.Lock()
-	po.dict[fmt.Sprint(ir.procId, ir.Timestamp)] = ir
+	po.dict[fmt.Sprint(procId, ir.Timestamp)] = ir
 	po.Unlock()
 }
 
@@ -86,6 +87,12 @@ func (po *ProcArray1) GetIntervalRecord(procId byte, timestamp Vectorclock) *Int
 	return po.dict[fmt.Sprint(procId, timestamp)]
 }
 
+func (po *ProcArray1) GetIntervalRecords(procId byte) []*IntervalRecord {
+	po.RLock()
+	defer po.RUnlock()
+	return po.array[int(procId)]
+}
+
 func (po *ProcArray1) GetAllUnseenIntervals(ts Vectorclock) []Interval {
 	result := make([]Interval, 0)
 	for proc := range po.array {
@@ -97,15 +104,13 @@ func (po *ProcArray1) GetAllUnseenIntervals(ts Vectorclock) []Interval {
 func (po *ProcArray1) GetUnseenIntervalsAtProc(procId byte, ts Vectorclock) []Interval {
 	result := make([]Interval, 0)
 	po.RLockProc(procId)
-	array := po.array[procId]
+	array := po.array[int(procId)]
 	var thisTs Vectorclock
 	for i := len(array) - 1; i >= 0; i-- {
 		thisTs = array[i].Timestamp
 		if thisTs.Equals(ts) {
-			fmt.Println("We broke out because equal.")
 			break
 		} else if thisTs.IsBefore(ts) {
-			fmt.Println("We broke out because before.")
 			break
 		}
 		wns := make([]WriteNotice, len(array[i].WriteNotices))
@@ -125,10 +130,10 @@ func (po *ProcArray1) GetUnseenIntervalsAtProc(procId byte, ts Vectorclock) []In
 }
 
 func (po *ProcArray1) LockProc(procId byte) {
-	if po.locks[procId] == nil {
-		po.locks[procId] = new(sync.RWMutex)
+	if po.locks[int(procId)] == nil {
+		po.locks[int(procId)] = new(sync.RWMutex)
 	}
-	po.locks[procId].Lock()
+	po.locks[int(procId)].Lock()
 }
 
 func (po *ProcArray1) RLockProc(procId byte) {
@@ -152,9 +157,9 @@ func (po *ProcArray1) RUnlockProc(procId byte) {
 }
 
 func (po *ProcArray1) MapIntervalRecords(procId byte, f func(ir *IntervalRecord)) {
-	po.locks[int(procId)].Lock()
-	for _, int := range po.array[procId] {
+	po.LockProc(procId)
+	for _, int := range po.array[int(procId)] {
 		f(int)
 	}
-	po.locks[int(procId)].Unlock()
+	po.UnlockProc(procId)
 }

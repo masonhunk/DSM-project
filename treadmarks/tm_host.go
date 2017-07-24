@@ -82,6 +82,8 @@ type TreadMarks struct {
 	eventLock         *sync.RWMutex
 	lastVCFromManager Vectorclock
 	waitgroupMap      map[byte]*sync.WaitGroup
+	locks             map[int]*sync.Mutex
+	*sync.RWMutex
 }
 
 func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarriers int) *TreadMarks {
@@ -102,6 +104,7 @@ func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarri
 		eventNumber:       byte(0),
 		lastVCFromManager: *NewVectorclock(nrProcs),
 		eventLock:         new(sync.RWMutex),
+		locks:             make(map[int]*sync.Mutex),
 	}
 	ds := NewDataStructure(&tm.ProcId, nrProcs)
 	tm.DataStructureInterface = *ds
@@ -168,13 +171,7 @@ func (t *TreadMarks) Join(address string) error {
 		case DIFF_RESPONSE:
 			t.HandleDiffResponse(msg)
 		case COPY_REQUEST:
-			//if we have a twin, send that. Else just send the current contents of page
-			if pg, ok := t.twinMap[msg.PageNr]; ok {
-				msg.Data = pg
-			} else {
-				t.PrivilegedRead(msg.PageNr*t.GetPageSize(), t.GetPageSize())
-				msg.Data = pg
-			}
+			msg.Data = t.PrivilegedRead(msg.PageNr*t.GetPageSize(), t.GetPageSize())
 			msg.Type = COPY_RESPONSE
 			msg.From, msg.To = msg.To, msg.From
 			err := t.Send(msg)
@@ -229,12 +226,17 @@ func (t *TreadMarks) Startup() error {
 }
 
 func (t *TreadMarks) HandleLockAcquireResponse(message *TM_Message) {
+	lock := new(sync.RWMutex)
+
+	t.locks[message.Id] = new(sync.RWMutex)
+
 	//Here we need to add the incoming intervals to the correct write notices.
 	t.incorporateIntervalsIntoDatastructures(message)
 	t.vc = *t.vc.Merge(message.VC)
 }
 
 func (t *TreadMarks) HandleLockAcquireRequest(msg *TM_Message) TM_Message {
+
 	//send write notices back and stuff
 	//start by incrementing vc
 	t.vc.Increment(t.ProcId)
@@ -255,7 +257,6 @@ func (t *TreadMarks) updateDatastructures() {
 	for key := range t.twinMap {
 		wn := t.CreateNewWritenoticeRecord(t.ProcId, key, interval)
 		t.AddWriteNoticeRecord(t.ProcId, key, wn)
-
 	}
 
 	//We only actually add the interval if we have any writenotices
@@ -266,6 +267,7 @@ func (t *TreadMarks) updateDatastructures() {
 
 func (t *TreadMarks) RequestAndApplyDiffs(pageNr int) {
 	group := new(sync.WaitGroup)
+
 	messages := t.GenerateDiffRequests(pageNr, group)
 	if len(messages) <= 0 {
 		return
@@ -280,10 +282,11 @@ func (t *TreadMarks) RequestAndApplyDiffs(pageNr int) {
 	di := t.NewDiffIterator(pageNr)
 	for {
 		diff := di.Next()
-		fmt.Println("got this diff:", diff)
-		if diff != nil {
-			t.ApplyDiff(pageNr, diff)
+		if diff == nil {
+			di.Close()
+			break
 		}
+		t.ApplyDiff(pageNr, diff)
 	}
 }
 
@@ -301,7 +304,7 @@ func (t *TreadMarks) GenerateDiffRequests(pageNr int, group *sync.WaitGroup) []T
 
 		message := TM_Message{
 			From:   t.ProcId,
-			To:     byte(i),
+			To:     byte(i + 1),
 			Type:   DIFF_REQUEST,
 			VC:     endTs,
 			PageNr: pageNr,
@@ -335,7 +338,7 @@ func (t *TreadMarks) HandleDiffRequest(message TM_Message) TM_Message {
 		}
 	}
 	diffDescriptions := make([]DiffDescription, 0)
-	for proc := byte(0); proc < byte(t.nrProcs); proc = proc + byte(1) {
+	for proc := byte(1); proc <= byte(t.nrProcs); proc = proc + byte(1) {
 		for _, wnr := range t.GetWritenoticeRecords(proc, pageNr) {
 			if wnr.Interval.Timestamp.Compare(vc) < 0 {
 				break
@@ -355,7 +358,6 @@ func (t *TreadMarks) HandleDiffRequest(message TM_Message) TM_Message {
 }
 
 func (t *TreadMarks) HandleDiffResponse(message TM_Message) {
-
 	t.SetDiffs(message.PageNr, message.Diffs)
 	t.waitgroupMap[message.Event].Done()
 }
@@ -370,6 +372,9 @@ func (t *TreadMarks) Shutdown() {
 }
 
 func (t *TreadMarks) AcquireLock(id int) {
+	if id == t.currentLock {
+		return
+	}
 	c := make(chan string)
 	t.eventchanMap[t.eventNumber] = c
 	msg := TM_Message{
@@ -383,6 +388,7 @@ func (t *TreadMarks) AcquireLock(id int) {
 	err := t.Send(msg)
 	panicOnErr(err)
 	<-c
+	t.currentLock = id
 	t.eventchanMap[t.eventNumber] = nil
 	t.eventNumber++
 }
@@ -401,8 +407,6 @@ func (t *TreadMarks) ReleaseLock(id int) {
 func (t *TreadMarks) Barrier(id int) {
 	c := make(chan string)
 	t.eventchanMap[t.eventNumber] = c
-	fmt.Println("Working at proc ", t.ProcId)
-	fmt.Println("Which has VC :", t.vc)
 	t.vc.Increment(t.ProcId)
 	t.updateDatastructures()
 	msg := TM_Message{
@@ -414,7 +418,6 @@ func (t *TreadMarks) Barrier(id int) {
 		Event:     t.eventNumber,
 		Intervals: t.GetUnseenIntervalsAtProc(t.ProcId, t.lastVCFromManager),
 	}
-	fmt.Println("Sending barrier request with vectorclock ", msg.VC)
 	err := t.Send(msg)
 	panicOnErr(err)
 	<-c
@@ -423,27 +426,27 @@ func (t *TreadMarks) Barrier(id int) {
 }
 
 func (t *TreadMarks) incorporateIntervalsIntoDatastructures(msg *TM_Message) {
-
-	for i := len(msg.Intervals) - 1; i >= 0; i-- {
+	for i := 0; i < len(msg.Intervals); i++ {
 		interval := msg.Intervals[i]
 		ir := t.CreateNewInterval(interval.Proc, interval.Vt)
 
 		for _, wn := range interval.WriteNotices {
-
 			t.AddToCopyset(msg.From, wn.PageNr)
+			if len(t.GetWritenoticeRecords(t.ProcId, wn.PageNr)) > 0 {
+
+				if myWn := t.GetWritenoticeRecords(t.ProcId, wn.PageNr)[0]; myWn != nil {
+					if myWn.Diff == nil {
+						pageVal := t.PrivilegedRead(wn.PageNr*t.GetPageSize(), t.GetPageSize())
+						diff := CreateDiff(t.twinMap[wn.PageNr], pageVal)
+						t.twinMap[wn.PageNr] = nil
+						myWn.Diff = &diff
+					}
+				}
+			}
 			//prepend to write notice list and update pointers
 			res := t.CreateNewWritenoticeRecord(interval.Proc, wn.PageNr, ir)
 			t.AddWriteNoticeRecord(interval.Proc, wn.PageNr, res)
-
 			//check if I have a write notice for this page with no diff at head of list. If so, create diff.
-			if myWn := t.GetWritenoticeRecords(t.ProcId, wn.PageNr)[0]; myWn != nil {
-				if myWn.Diff == nil {
-					pageVal := t.PrivilegedRead(wn.PageNr*t.GetPageSize(), t.GetPageSize())
-					diff := CreateDiff(t.twinMap[wn.PageNr], pageVal)
-					t.twinMap[wn.PageNr] = nil
-					myWn.Diff = &diff
-				}
-			}
 
 			//finally invalidate the page
 			t.SetRights(wn.PageNr*t.GetPageSize(), memory.NO_ACCESS)

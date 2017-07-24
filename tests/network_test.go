@@ -77,7 +77,6 @@ func TestServerCreationWithMultipleClients(t *testing.T) {
 	c2.Close()
 	c3.Close()
 	s.StopServer()
-	fmt.Println(messages)
 
 	assert.Len(t, messages, 6)
 	assert.Len(t, s.Clients, 3)

@@ -80,7 +80,7 @@ func (bm *BarrierManagerImp) HandleBarrier(id int, f func()) *sync.WaitGroup {
 	barrier, ok := bm.barriers[id]
 	if ok == false {
 		barrier = new(sync.WaitGroup)
-		barrier.Add(bm.nodes - 1)
+		barrier.Add(bm.nodes)
 		bm.barriers[id] = barrier
 	}
 	f()
@@ -91,13 +91,13 @@ func (bm *BarrierManagerImp) HandleBarrier(id int, f func()) *sync.WaitGroup {
 }
 
 type tm_Manager struct {
-	vc   Vectorclock
-	myId byte
+	vc Vectorclock
 	BarrierManager
 	LockManager
 	network.ITransciever //embedded type
 	nodes                int
 	tm                   *TreadMarks //the host instance on which this manager runs
+	doOnce               *sync.Once
 }
 
 func NewTest_TM_Manager(tr network.ITransciever, bm BarrierManager, lm LockManager, nodes int, tm *TreadMarks) *tm_Manager {
@@ -106,7 +106,6 @@ func NewTest_TM_Manager(tr network.ITransciever, bm BarrierManager, lm LockManag
 	m.LockManager = lm
 	m.ITransciever = tr
 	m.nodes = nodes
-	m.myId = byte(0)
 	m.tm = tm
 
 	return m
@@ -121,7 +120,6 @@ func NewTM_Manager(conn net.Conn, bm BarrierManager, lm LockManager, tm *TreadMa
 	})
 	m.vc = *NewVectorclock(tm.nrProcs)
 	m.nodes = tm.nrProcs
-	m.myId = byte(0)
 	m.tm = tm
 	return m
 }
@@ -143,14 +141,13 @@ func (m *tm_Manager) HandleMessage(message network.Message) error {
 	case LOCK_RELEASE:
 		err = m.handleLockReleaseRequest(&msg)
 	case BARRIER_REQUEST:
-		fmt.Println("Handling message with vc ", msg.VC)
 		response = m.handleBarrierRequest(&msg)
 	case MALLOC_REQUEST:
 		panic("Implement me!")
 	case FREE_REQUEST:
 		panic("Implement me!")
 	case COPY_REQUEST:
-		response.From = m.myId
+		response.From = m.tm.ProcId
 		response.To = msg.From
 		response.Type = COPY_RESPONSE
 		response.PageNr = msg.PageNr
@@ -172,7 +169,7 @@ func (m *tm_Manager) handleLockAcquireRequest(message *TM_Message) *TM_Message {
 	message.To = lastOwner
 	if lastOwner == 0 {
 		message.To = message.From
-		message.From = m.myId
+		message.From = m.tm.ProcId
 		message.Type = LOCK_ACQUIRE_RESPONSE
 	}
 	return message
@@ -184,27 +181,26 @@ func (m *tm_Manager) handleLockReleaseRequest(message *TM_Message) error {
 }
 
 func (m *tm_Manager) handleBarrierRequest(message *TM_Message) *TM_Message {
+	m.doOnce = new(sync.Once)
 	var msg TM_Message = *message
-	fmt.Println("Handling barrier with vc ", msg.VC)
-	fmt.Println("Manager vc is ", m.vc)
 	id := message.Id
-	var currTick uint
 	m.HandleBarrier(id, func() {
 		if m.tm != nil {
 			m.tm.incorporateIntervalsIntoDatastructures(message)
-			fmt.Println(m.vc.Value)
-			fmt.Println(message.VC.Value)
 			m.vc = *m.vc.Merge(message.VC)
-			fmt.Println(m.vc.Value)
-			currTick = m.vc.GetTick(byte(0))
+
 		}
 	})
 	//barrier over
+
+	m.doOnce.Do(func() {
+		m.vc.Increment(m.tm.ProcId)
+	})
+
 	if m.tm != nil {
 		msg.Intervals = m.tm.GetAllUnseenIntervals(msg.VC)
 	}
 
-	m.vc.SetTick(byte(0), currTick+1)
 	msg.From, msg.To = msg.To, msg.From
 	msg.VC = m.vc
 	msg.Event = message.Event

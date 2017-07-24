@@ -2,7 +2,6 @@ package memory
 
 import (
 	"errors"
-	"fmt"
 	"strconv"
 	"sync"
 )
@@ -136,21 +135,17 @@ func (m *Vmem) Read(addr int) (byte, error) {
 		return m.Stack[addr], nil
 	}
 	access := m.AccessMap[m.GetPageAddr(addr)]
-	fmt.Println("Process trying to read from ", addr, ".")
 
 	switch access {
 	case NO_ACCESS:
-		fmt.Println("Had access rights: NO_ACCESS")
 		//notify all listeners
 		for _, l := range m.faultListeners {
 			l(addr, 0, "READ", 0)
 		}
 		return m.Stack[addr], errors.New("access denied")
 	case READ_ONLY:
-		fmt.Println("Had access rights: READ_ONLY")
 		return m.Stack[addr], nil
 	case READ_WRITE:
-		fmt.Println("Had access rights: READ_WRITE")
 		return m.Stack[addr], nil
 	}
 	return 127, errors.New("unknown error")

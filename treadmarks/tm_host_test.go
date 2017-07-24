@@ -3,15 +3,11 @@ package treadmarks
 import (
 	"DSM-project/memory"
 	"DSM-project/network"
-	"fmt"
 	"github.com/stretchr/testify/assert"
 	"sync"
 	"testing"
 	"time"
 )
-
-//TODO remove when done. Is only there to make the compiler shut up.
-var _ = fmt.Print
 
 func TestCreateDiff(t *testing.T) {
 	original := []byte{0, 1, 2, 3, 4}
@@ -412,10 +408,6 @@ func TestTreadMarks_HandleDiffRequest_DiffsVCConcurrentToRequestVC(t *testing.T)
 		"We should recieve the diffs of WR1, with the vectorclock ", vc)
 	request = TM_Message{From: byte(0), To: byte(1), Type: DIFF_REQUEST, VC: *testVC, PageNr: 1}
 	diffs = tm.HandleDiffRequest(request)
-	fmt.Println(tm.GetWritenoticeRecords(1, 0))
-	fmt.Println(tm.GetWritenoticeRecords(1, 1))
-	fmt.Println(tm.GetWritenoticeRecords(1, 1))
-	fmt.Println(diffs.Diffs)
 	expected = []DiffDescription{{byte(0), tm.vc, *tm.GetWritenoticeRecords(1, 0)[1].Diff}}
 	assert.Equal(t, diffs.Diffs, expected,
 		"We should recieve the diffs of WR2, with the vectorclock ", vc)

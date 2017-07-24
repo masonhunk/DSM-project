@@ -110,7 +110,7 @@ func (p *PageArray1) CreateNewWritenoticeRecord(procId byte, pageNr int, int *In
 func (p *PageArray1) GetWritenoticeRecords(procId byte, pageNr int) []*WriteNoticeRecord {
 	pe := p.getEntry(pageNr)
 	pe.RLock()
-	wnrs := pe.writeNoticeArray[int(procId)]
+	wnrs := pe.writeNoticeArray[int(procId)-1]
 	pe.RUnlock()
 	return wnrs
 }
@@ -243,10 +243,10 @@ func (pe *PageArrayEntry1) SetHasCopy(hasCopy bool) {
 
 func (pe *PageArrayEntry1) AddWritenoticeRecord(procId byte, wnr *WriteNoticeRecord) {
 	wnr.pageNr = pe.pageNr
-	newSlice := make([]*WriteNoticeRecord, len(pe.writeNoticeArray[procId])+1)
-	copy(newSlice[1:], pe.writeNoticeArray[procId])
+	newSlice := make([]*WriteNoticeRecord, len(pe.writeNoticeArray[int(procId)-1])+1)
+	copy(newSlice[1:], pe.writeNoticeArray[int(procId)-1])
 	newSlice[0] = wnr
-	pe.writeNoticeArray[procId] = newSlice
+	pe.writeNoticeArray[int(procId)-1] = newSlice
 	pe.writeNoticeArrayVCLookup[wnr.ToString()] = wnr
 }
 
@@ -342,28 +342,33 @@ func (pe *PageArrayEntry1) NewDiffIterator() *DiffIterator {
 	di := new(DiffIterator)
 	di.index = make([]int, len(pe.writeNoticeArray))
 	di.order = make([]byte, 0)
-
 	di.pageNr = pe.pageNr
 	di.lock = pe.RWMutex
 	di.lock.Lock()
 
 	di.pe = pe
+	for i := range di.index {
+		di.Insert(byte(i))
+	}
 	return di
 }
 
 func (di *DiffIterator) Next() *Diff {
 	var proc byte
-	if len(di.order) == 1 {
-		defer di.lock.Unlock()
-	} else if len(di.order) < 1 {
+	if len(di.order) > 1 {
+		proc, di.order = di.order[0], di.order[1:]
+
+	} else if len(di.order) == 1 {
+		proc, di.order = di.order[0], make([]byte, 0)
+	} else {
 		return nil
 	}
-	proc, di.order = di.order[0], di.order[1:]
 	index := di.index[int(proc)]
 	wnrl := di.pe.writeNoticeArray[proc]
 	wnr := wnrl[index]
 	di.index[int(proc)] = index + 1
 	di.Insert(proc)
+
 	return wnr.Diff
 }
 
@@ -372,7 +377,6 @@ func (di *DiffIterator) Close() {
 }
 
 func (di *DiffIterator) Insert(proc byte) {
-
 	var this *WriteNoticeRecord
 	var that *WriteNoticeRecord
 	i := int(proc)

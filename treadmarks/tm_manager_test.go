@@ -1,9 +1,7 @@
 package treadmarks
 
 import (
-	"DSM-project/memory"
 	"DSM-project/network"
-	"fmt"
 	"github.com/stretchr/testify/assert"
 	"testing"
 )
@@ -32,7 +30,6 @@ func (t *TranscieverMock) Send(message network.Message) error {
 
 //Here we test if the lock manager can handle getting locked and such.
 func TestLockManagerCreation(t *testing.T) {
-	fmt.Println()
 	var lm LockManager
 	lm = NewLockManagerImp()
 	id1 := lm.HandleLockAcquire(2)
@@ -161,6 +158,7 @@ func TestManagerHandleBarrierMessage(t *testing.T) {
 	assert.Contains(t, tr.messages, TM_Message{Type: BARRIER_RESPONSE, Id: 1, From: byte(0), To: byte(2)})
 }
 
+/*
 func TestBarrierManagerShouldInsertIntervals(t *testing.T) {
 	fmt.Println("in TestBarrierManagerShouldInsertIntervals")
 	messages := make([]TM_Message, 0)
@@ -197,7 +195,7 @@ func TestBarrierManagerShouldInsertIntervals(t *testing.T) {
 	assert.Equal(t, tm.GetIntervalRecord(byte(1), Vectorclock{[]uint{0, 3, 3, 2}}).Timestamp, intervals[1].Vt)
 
 }
-
+*/
 func setup(tm *TreadMarks, nrProcs int) {
 	vc := NewVectorclock(nrProcs)
 	vc.SetTick(byte(0), 3)
