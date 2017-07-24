@@ -4,6 +4,7 @@ import (
 	"DSM-project/network"
 	"errors"
 	"fmt"
+	"log"
 	"net"
 	"strconv"
 	"sync"
@@ -97,7 +98,7 @@ type tm_Manager struct {
 	LockManager
 	network.ITransciever //embedded type
 	nodes                int
-	tm                   *TreadMarks //the host instance on which this manager runs
+	datastructures       TM_DataStructures
 }
 
 func NewTest_TM_Manager(tr network.ITransciever, bm BarrierManager, lm LockManager, nodes int, tm *TreadMarks) *tm_Manager {
@@ -107,8 +108,9 @@ func NewTest_TM_Manager(tr network.ITransciever, bm BarrierManager, lm LockManag
 	m.ITransciever = tr
 	m.nodes = nodes
 	m.myId = byte(0)
-	m.tm = tm
-
+	pageArray := *NewPageArray(nodes)
+	procArray := MakeProcArray(nodes + 1)
+	m.datastructures = TM_DataStructures{new(sync.RWMutex), procArray, pageArray}
 	return m
 }
 
@@ -122,7 +124,11 @@ func NewTM_Manager(conn net.Conn, bm BarrierManager, lm LockManager, tm *TreadMa
 	m.vc = *NewVectorclock(tm.nrProcs + 1)
 	m.nodes = tm.nrProcs
 	m.myId = byte(0)
-	m.tm = tm
+	nodes := tm.nrProcs
+	pageArray := *NewPageArray(nodes)
+	procArray := MakeProcArray(nodes + 1)
+	m.datastructures = TM_DataStructures{new(sync.RWMutex), procArray, pageArray}
+
 	return m
 }
 
@@ -149,12 +155,14 @@ func (m *tm_Manager) HandleMessage(message network.Message) error {
 	case FREE_REQUEST:
 		panic("Implement me!")
 	case COPY_REQUEST:
-		response.From = m.myId
+		/*response.From = m.myId
 		response.To = msg.From
 		response.Type = COPY_RESPONSE
 		response.PageNr = msg.PageNr
 		response.Event = msg.Event
-		response.Data = m.tm.PrivilegedRead(msg.PageNr*m.tm.GetPageSize(), m.tm.GetPageSize())
+		response.Data = m.tm.PrivilegedRead(msg.PageNr*m.tm.GetPageSize(), m.tm.GetPageSize())*/
+		response = &msg
+		response.To = byte(1)
 	default:
 		panic("Saw an unknown message type in manager:" + message.GetType())
 	}
@@ -187,16 +195,35 @@ func (m *tm_Manager) handleBarrierRequest(message *TM_Message) *TM_Message {
 	id := message.Id
 	var currTick uint
 	m.HandleBarrier(id, func() {
-		if m.tm != nil {
-			m.tm.incorporateIntervalsIntoDatastructures(message)
-			m.vc = *m.vc.Merge(message.VC)
-			currTick = m.vc.GetTick(byte(0))
+		for i := len(msg.Intervals) - 1; i >= 0; i-- {
+			interval := msg.Intervals[i]
+			ir := &IntervalRecord{
+				Timestamp:    interval.Vt,
+				WriteNotices: []*WriteNoticeRecord{},
+			}
+			for _, wn := range interval.WriteNotices {
+				//add sender to copyset of this page
+				if m.datastructures.GetPageEntry(wn.PageNr) == nil {
+					log.Println("nil!")
+				}
+				m.datastructures.SetCopyset(wn.PageNr, []int{int(msg.From)})
+				//prepend to write notice list and update pointers
+				var res *WriteNoticeRecord = m.datastructures.PrependWriteNotice(interval.Proc, wn)
+				res.Interval = ir
+				ir.WriteNotices = append(ir.WriteNotices, res)
+
+			}
+			m.datastructures.PrependIntervalRecord(interval.Proc, ir)
+
 		}
+
+		m.vc = *m.vc.Merge(message.VC)
+		currTick = m.vc.GetTick(byte(0))
+
 	})
+
 	//barrier over
-	if m.tm != nil {
-		msg.Intervals = m.tm.GetAllUnseenIntervals(msg.VC)
-	}
+	msg.Intervals = m.datastructures.GetAllUnseenIntervals(msg.VC)
 
 	m.vc.SetTick(byte(0), currTick+1)
 	msg.From, msg.To = msg.To, msg.From

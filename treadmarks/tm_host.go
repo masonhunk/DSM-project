@@ -169,13 +169,16 @@ func (t *TreadMarks) Join(address string) error {
 		case DIFF_RESPONSE:
 			t.HandleDiffResponse(msg)
 		case COPY_REQUEST:
-			//if we have a twin, send that. Else just send the current contents of page
-			if pg, ok := t.twinMap[msg.PageNr]; ok {
-				msg.Data = pg
-			} else {
-				t.PrivilegedRead(msg.PageNr*t.GetPageSize(), t.GetPageSize())
-				msg.Data = pg
-			}
+			//Just send current contents
+			msg.Data = t.PrivilegedRead(msg.PageNr*t.GetPageSize(), t.GetPageSize())
+			/*
+				//if we have a twin, send that. Else just send the current contents of page
+				if pg, ok := t.twinMap[msg.PageNr]; ok {
+					msg.Data = pg
+				} else {
+					pg := t.PrivilegedRead(msg.PageNr*t.GetPageSize(), t.GetPageSize())
+					msg.Data = pg
+				}*/
 			msg.Type = COPY_RESPONSE
 			msg.From, msg.To = msg.To, msg.From
 			err := t.Send(msg)

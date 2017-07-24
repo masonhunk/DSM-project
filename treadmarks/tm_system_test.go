@@ -194,9 +194,9 @@ func TestBarrierManagerVCUpdate(t *testing.T) {
 	<-done
 	<-done
 	<-done
-	assert.Equal(t, Vectorclock{Value: []uint{1, 1, 1, 0}}, host1.vc)
-	assert.Equal(t, Vectorclock{Value: []uint{1, 1, 1, 0}}, host2.vc)
-	assert.Equal(t, Vectorclock{Value: []uint{1, 1, 1, 0}}, host3.vc)
+	assert.Equal(t, Vectorclock{Value: []uint{1, 2, 2, 1}}, host1.vc)
+	assert.Equal(t, Vectorclock{Value: []uint{1, 2, 2, 1}}, host2.vc)
+	assert.Equal(t, Vectorclock{Value: []uint{1, 2, 2, 1}}, host3.vc)
 
 }
 
@@ -330,7 +330,6 @@ func TestBarrierReadWrites(t *testing.T) {
 	}()
 	<-started
 	group.Wait()
-
 
 	assert.Equal(t, Vectorclock{Value: []uint{1, 1, 1, 1}}, host1.vc)
 	assert.Equal(t, Vectorclock{Value: []uint{1, 1, 1, 1}}, host2.vc)
