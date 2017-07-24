@@ -82,8 +82,9 @@ type TreadMarks struct {
 	eventLock         *sync.RWMutex
 	lastVCFromManager Vectorclock
 	waitgroupMap      map[byte]*sync.WaitGroup
+	haveLock          map[int]bool
 	locks             map[int]*sync.Mutex
-	*sync.RWMutex
+	*sync.Mutex
 }
 
 func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarriers int) *TreadMarks {
@@ -105,7 +106,9 @@ func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarri
 		lastVCFromManager: *NewVectorclock(nrProcs),
 		eventLock:         new(sync.RWMutex),
 		locks:             make(map[int]*sync.Mutex),
+		haveLock:          make(map[int]bool),
 	}
+	tm.Mutex = new(sync.Mutex)
 	ds := NewDataStructure(&tm.ProcId, nrProcs)
 	tm.DataStructureInterface = *ds
 
@@ -226,9 +229,6 @@ func (t *TreadMarks) Startup() error {
 }
 
 func (t *TreadMarks) HandleLockAcquireResponse(message *TM_Message) {
-	lock := new(sync.RWMutex)
-
-	t.locks[message.Id] = new(sync.RWMutex)
 
 	//Here we need to add the incoming intervals to the correct write notices.
 	t.incorporateIntervalsIntoDatastructures(message)
@@ -236,7 +236,8 @@ func (t *TreadMarks) HandleLockAcquireResponse(message *TM_Message) {
 }
 
 func (t *TreadMarks) HandleLockAcquireRequest(msg *TM_Message) TM_Message {
-
+	t.locks[msg.Id].Lock()
+	defer t.locks[msg.Id].Unlock()
 	//send write notices back and stuff
 	//start by incrementing vc
 	t.vc.Increment(t.ProcId)
@@ -372,9 +373,15 @@ func (t *TreadMarks) Shutdown() {
 }
 
 func (t *TreadMarks) AcquireLock(id int) {
-	if id == t.currentLock {
+	t.Lock()
+	defer t.Unlock()
+	lock := new(sync.Mutex)
+	lock.Lock()
+	t.locks[id] = lock
+	if t.haveLock[id] == true {
 		return
 	}
+
 	c := make(chan string)
 	t.eventchanMap[t.eventNumber] = c
 	msg := TM_Message{
@@ -388,12 +395,20 @@ func (t *TreadMarks) AcquireLock(id int) {
 	err := t.Send(msg)
 	panicOnErr(err)
 	<-c
-	t.currentLock = id
+
 	t.eventchanMap[t.eventNumber] = nil
 	t.eventNumber++
 }
 
 func (t *TreadMarks) ReleaseLock(id int) {
+	t.Lock()
+	defer t.Unlock()
+	t.locks[id].Unlock()
+	if t.haveLock[id] {
+		t.haveLock[id] = false
+		return
+	}
+	t.haveLock[id] = true
 	msg := TM_Message{
 		Type: LOCK_RELEASE,
 		To:   0,
