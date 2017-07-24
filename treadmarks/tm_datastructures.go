@@ -72,31 +72,6 @@ type PageArrayEntry struct {
 	*sync.RWMutex
 }
 
-type IntervalRecord struct {
-	Timestamp    Vectorclock
-	WriteNotices []*WriteNoticeRecord
-}
-
-type WriteNoticeRecord struct {
-	Id          int8
-	WriteNotice WriteNotice
-	Interval    *IntervalRecord
-	Diff        *Diff
-}
-
-type Interval struct {
-	Proc         byte
-	Vt           Vectorclock
-	WriteNotices []WriteNotice
-}
-
-type WriteNotice struct {
-	PageNr int
-}
-type Diff struct {
-	Diffs []Pair
-}
-
 //Everything that concerns ProcArray
 type ProcArray [][]IntervalRecord
 
@@ -306,20 +281,6 @@ func (p *PageArray) GetWriteNoticeListHead(pageNr int, procNr byte) *WriteNotice
 }
 
 //Things regarding diffs
-
-func CreateDiff(original, new []byte) Diff {
-	res := make([]Pair, 0)
-	for i, data := range original {
-		if new[i] != data {
-			res = append(res, Pair{i, new[i]})
-		}
-	}
-	return Diff{res}
-}
-
-type Pair struct {
-	Car, Cdr interface{}
-}
 
 type Page struct {
 	vm   *memory.VirtualMemory

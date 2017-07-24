@@ -80,7 +80,7 @@ func (bm *BarrierManagerImp) HandleBarrier(id int, f func()) *sync.WaitGroup {
 	barrier, ok := bm.barriers[id]
 	if ok == false {
 		barrier = new(sync.WaitGroup)
-		barrier.Add(bm.nodes)
+		barrier.Add(bm.nodes - 1)
 		bm.barriers[id] = barrier
 	}
 	f()
@@ -119,7 +119,7 @@ func NewTM_Manager(conn net.Conn, bm BarrierManager, lm LockManager, tm *TreadMa
 	m.ITransciever = network.NewTransciever(conn, func(message network.Message) error {
 		return m.HandleMessage(message)
 	})
-	m.vc = *NewVectorclock(tm.nrProcs + 1)
+	m.vc = *NewVectorclock(tm.nrProcs)
 	m.nodes = tm.nrProcs
 	m.myId = byte(0)
 	m.tm = tm
@@ -143,6 +143,7 @@ func (m *tm_Manager) HandleMessage(message network.Message) error {
 	case LOCK_RELEASE:
 		err = m.handleLockReleaseRequest(&msg)
 	case BARRIER_REQUEST:
+		fmt.Println("Handling message with vc ", msg.VC)
 		response = m.handleBarrierRequest(&msg)
 	case MALLOC_REQUEST:
 		panic("Implement me!")
@@ -184,12 +185,17 @@ func (m *tm_Manager) handleLockReleaseRequest(message *TM_Message) error {
 
 func (m *tm_Manager) handleBarrierRequest(message *TM_Message) *TM_Message {
 	var msg TM_Message = *message
+	fmt.Println("Handling barrier with vc ", msg.VC)
+	fmt.Println("Manager vc is ", m.vc)
 	id := message.Id
 	var currTick uint
 	m.HandleBarrier(id, func() {
 		if m.tm != nil {
 			m.tm.incorporateIntervalsIntoDatastructures(message)
+			fmt.Println(m.vc.Value)
+			fmt.Println(message.VC.Value)
 			m.vc = *m.vc.Merge(message.VC)
+			fmt.Println(m.vc.Value)
 			currTick = m.vc.GetTick(byte(0))
 		}
 	})

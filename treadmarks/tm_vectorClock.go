@@ -33,7 +33,7 @@ func (v *Vectorclock) Merge(o Vectorclock) *Vectorclock {
 }
 
 func (v *Vectorclock) Increment(id byte) {
-	v.Value[id] = v.Value[id] + 1
+	v.Value[int(id)] = v.Value[int(id)] + 1
 }
 
 //Returns true of v is before o causally.
@@ -47,11 +47,11 @@ func (v *Vectorclock) IsAfter(o Vectorclock) bool {
 }
 
 func (v *Vectorclock) GetTick(id byte) uint {
-	return v.Value[id]
+	return v.Value[int(id)]
 }
 
 func (v *Vectorclock) SetTick(id byte, tick uint) {
-	v.Value[id] = tick
+	v.Value[int(id)] = tick
 }
 
 //Returns true if every entry in v is equal to the matching entry in o
