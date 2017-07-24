@@ -4,7 +4,6 @@ import (
 	"DSM-project/network"
 	"errors"
 	"fmt"
-	"log"
 	"net"
 	"strconv"
 	"sync"
@@ -92,13 +91,13 @@ func (bm *BarrierManagerImp) HandleBarrier(id int, f func()) *sync.WaitGroup {
 }
 
 type tm_Manager struct {
-	vc   Vectorclock
-	myId byte
+	vc Vectorclock
 	BarrierManager
 	LockManager
 	network.ITransciever //embedded type
 	nodes                int
-	datastructures       TM_DataStructures
+	tm                   *TreadMarks //the host instance on which this manager runs
+	doOnce               *sync.Once
 }
 
 func NewTest_TM_Manager(tr network.ITransciever, bm BarrierManager, lm LockManager, nodes int, tm *TreadMarks) *tm_Manager {
@@ -107,10 +106,8 @@ func NewTest_TM_Manager(tr network.ITransciever, bm BarrierManager, lm LockManag
 	m.LockManager = lm
 	m.ITransciever = tr
 	m.nodes = nodes
-	m.myId = byte(0)
-	pageArray := *NewPageArray(nodes)
-	procArray := MakeProcArray(nodes + 1)
-	m.datastructures = TM_DataStructures{new(sync.RWMutex), procArray, pageArray}
+	m.tm = tm
+
 	return m
 }
 
@@ -121,14 +118,9 @@ func NewTM_Manager(conn net.Conn, bm BarrierManager, lm LockManager, tm *TreadMa
 	m.ITransciever = network.NewTransciever(conn, func(message network.Message) error {
 		return m.HandleMessage(message)
 	})
-	m.vc = *NewVectorclock(tm.nrProcs + 1)
+	m.vc = *NewVectorclock(tm.nrProcs)
 	m.nodes = tm.nrProcs
-	m.myId = byte(0)
-	nodes := tm.nrProcs
-	pageArray := *NewPageArray(nodes)
-	procArray := MakeProcArray(nodes + 1)
-	m.datastructures = TM_DataStructures{new(sync.RWMutex), procArray, pageArray}
-
+	m.tm = tm
 	return m
 }
 
@@ -155,14 +147,12 @@ func (m *tm_Manager) HandleMessage(message network.Message) error {
 	case FREE_REQUEST:
 		panic("Implement me!")
 	case COPY_REQUEST:
-		/*response.From = m.myId
+		response.From = m.tm.ProcId
 		response.To = msg.From
 		response.Type = COPY_RESPONSE
 		response.PageNr = msg.PageNr
 		response.Event = msg.Event
-		response.Data = m.tm.PrivilegedRead(msg.PageNr*m.tm.GetPageSize(), m.tm.GetPageSize())*/
-		response = &msg
-		response.To = byte(1)
+		response.Data = m.tm.PrivilegedRead(msg.PageNr*m.tm.GetPageSize(), m.tm.GetPageSize())
 	default:
 		panic("Saw an unknown message type in manager:" + message.GetType())
 	}
@@ -179,7 +169,7 @@ func (m *tm_Manager) handleLockAcquireRequest(message *TM_Message) *TM_Message {
 	message.To = lastOwner
 	if lastOwner == 0 {
 		message.To = message.From
-		message.From = m.myId
+		message.From = m.tm.ProcId
 		message.Type = LOCK_ACQUIRE_RESPONSE
 	}
 	return message
@@ -191,41 +181,26 @@ func (m *tm_Manager) handleLockReleaseRequest(message *TM_Message) error {
 }
 
 func (m *tm_Manager) handleBarrierRequest(message *TM_Message) *TM_Message {
+	m.doOnce = new(sync.Once)
 	var msg TM_Message = *message
 	id := message.Id
-	var currTick uint
 	m.HandleBarrier(id, func() {
-		for i := len(msg.Intervals) - 1; i >= 0; i-- {
-			interval := msg.Intervals[i]
-			ir := &IntervalRecord{
-				Timestamp:    interval.Vt,
-				WriteNotices: []*WriteNoticeRecord{},
-			}
-			for _, wn := range interval.WriteNotices {
-				//add sender to copyset of this page
-				if m.datastructures.GetPageEntry(wn.PageNr) == nil {
-					log.Println("nil!")
-				}
-				m.datastructures.SetCopyset(wn.PageNr, []int{int(msg.From)})
-				//prepend to write notice list and update pointers
-				var res *WriteNoticeRecord = m.datastructures.PrependWriteNotice(interval.Proc, wn)
-				res.Interval = ir
-				ir.WriteNotices = append(ir.WriteNotices, res)
-
-			}
-			m.datastructures.PrependIntervalRecord(interval.Proc, ir)
+		if m.tm != nil {
+			m.tm.incorporateIntervalsIntoDatastructures(message)
+			m.vc = *m.vc.Merge(message.VC)
 
 		}
+	})
+	//barrier over
 
-		m.vc = *m.vc.Merge(message.VC)
-		currTick = m.vc.GetTick(byte(0))
-
+	m.doOnce.Do(func() {
+		m.vc.Increment(m.tm.ProcId)
 	})
 
-	//barrier over
-	msg.Intervals = m.datastructures.GetAllUnseenIntervals(msg.VC)
+	if m.tm != nil {
+		msg.Intervals = m.tm.GetAllUnseenIntervals(msg.VC)
+	}
 
-	m.vc.SetTick(byte(0), currTick+1)
 	msg.From, msg.To = msg.To, msg.From
 	msg.VC = m.vc
 	msg.Event = message.Event
