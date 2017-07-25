@@ -18,6 +18,7 @@ type VirtualMemory interface {
 	Read(addr int) (byte, error)
 	ReadBytes(addr, length int) ([]byte, error)
 	Write(addr int, val byte) error
+	WriteBytes(addr int, val []byte) error
 	PrivilegedRead(addr, length int) []byte
 	PrivilegedWrite(addr int, data []byte) error
 	GetRights(addr int) byte
@@ -204,6 +205,14 @@ func (m *Vmem) Write(addr int, val byte) error {
 	}
 	return errors.New("unknown error")
 
+}
+
+func (m *Vmem) WriteBytes(addr int, val []byte) error {
+	var err error = nil
+	for b := range val {
+		err = m.Write(addr+b, val[b])
+	}
+	return err
 }
 
 func (m *Vmem) GetRights(addr int) byte {
