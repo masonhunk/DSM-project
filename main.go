@@ -2,10 +2,10 @@ package main
 
 import (
 	"flag"
-	"os"
 	"log"
-	"runtime/pprof"
+	"os"
 	"runtime"
+	"runtime/pprof"
 )
 
 var cpuprofile = flag.String("cpuprofile", "", "write cpu profile `file`")
@@ -17,7 +17,7 @@ func main() {
 	if *cpuprofile == "" {
 		cpuname := *benchmark + ".prof"
 		setupCPUProf(cpuname)
-	} else{
+	} else {
 		setupCPUProf(*cpuprofile)
 	}
 
@@ -39,7 +39,7 @@ func main() {
 
 }
 
-func setupCPUProf(filename string){
+func setupCPUProf(filename string) {
 	f, err := os.Create(filename)
 	if err != nil {
 		log.Fatal("could not create CPU profile: ", err)
@@ -49,7 +49,7 @@ func setupCPUProf(filename string){
 	}
 }
 
-func setupMemProf(filename string){
+func setupMemProf(filename string) {
 	f, err := os.Create(filename)
 	if err != nil {
 		log.Fatal("could not create memory profile: ", err)
@@ -61,21 +61,21 @@ func setupMemProf(filename string){
 	f.Close()
 }
 
-func mockBenchmark(){
+func mockBenchmark() {
 	k := 2
-	for i:= 0; i < 1000000000; i++{
-		if k > 100{
+	for i := 0; i < 1000000000; i++ {
+		if k > 100 {
 			k = mod(k)
-		}else {
+		} else {
 			k = mult(k)
 		}
 	}
 }
 
-func mult(i int) int{
-	return i*2
+func mult(i int) int {
+	return i * 2
 }
 
-func mod( i int) int{
+func mod(i int) int {
 	return i % 1000
 }
