@@ -3,6 +3,7 @@ package multiview
 import (
 	"DSM-project/memory"
 	"DSM-project/network"
+	"DSM-project/treadmarks"
 	"log"
 	"sync"
 )
@@ -14,6 +15,8 @@ type minipage struct {
 
 //this is the actual manager.
 type Manager struct {
+	treadmarks.LockManager
+	treadmarks.BarrierManager
 	copyLock *sync.RWMutex
 	tr       network.ITransciever
 	cl       *network.Client      //The transciever that we are sending messages over.
@@ -34,6 +37,20 @@ func NewManager(vm memory.VirtualMemory) *Manager {
 		vm:       vm,
 		mpt:      make(map[int]minipage),
 		log:      make(map[int]int),
+	}
+	return &m
+}
+
+func NewUpdatedManager(vm memory.VirtualMemory, lm treadmarks.LockManager, bm treadmarks.BarrierManager) *Manager {
+	m := Manager{
+		copyLock:       new(sync.RWMutex),
+		copies:         make(map[int][]byte),
+		locks:          make(map[int]*sync.RWMutex),
+		vm:             vm,
+		mpt:            make(map[int]minipage),
+		log:            make(map[int]int),
+		LockManager:    lm,
+		BarrierManager: bm,
 	}
 	return &m
 }
@@ -80,7 +97,12 @@ func (m *Manager) HandleMessage(message network.MultiviewMessage) {
 		m.HandleWriteAck(message)
 	case READ_ACK:
 		m.HandleReadAck(message)
-
+	case LOCK_ACQUIRE_REQUEST:
+		m.handleLockAcquireRequest(&message)
+	case BARRIER_REQUEST:
+		m.handleBarrierRequest(&message)
+	case LOCK_RELEASE:
+		m.handleLockReleaseRequest(&message)
 	}
 }
 
@@ -231,6 +253,30 @@ func (m *Manager) HandleFree(message network.MultiviewMessage) {
 	m.vm.Free(message.Fault_addr % m.vm.Size())
 	message.Type = FREE_REPLY
 	message.To = message.From
+	m.tr.Send(message)
+}
+
+func (m *Manager) handleLockAcquireRequest(message *network.MultiviewMessage) {
+	id := message.Id
+	m.HandleLockAcquire(id)
+	message.From, message.To = message.To, message.From
+	message.From = byte(0)
+	message.Type = LOCK_ACQUIRE_RESPONSE
+	m.tr.Send(message)
+}
+
+func (m *Manager) handleLockReleaseRequest(message *network.MultiviewMessage) error {
+	id := message.Id
+	return m.HandleLockRelease(id, message.From)
+}
+
+func (m *Manager) handleBarrierRequest(message *network.MultiviewMessage) {
+	id := message.Id
+	m.HandleBarrier(id, func() {})
+	//barrier over
+
+	message.From, message.To = message.To, message.From
+	message.Type = BARRIER_RESPONSE
 	m.tr.Send(message)
 }
 

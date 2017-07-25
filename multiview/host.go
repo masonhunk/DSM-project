@@ -3,6 +3,7 @@ package multiview
 import (
 	"DSM-project/memory"
 	"DSM-project/network"
+	"DSM-project/treadmarks"
 	"encoding/gob"
 	"errors"
 	"log"
@@ -11,19 +12,24 @@ import (
 )
 
 const (
-	READ_REQUEST       = "RR"
-	WRITE_REQUEST      = "WR"
-	READ_REPLY         = "RRPL"
-	WRITE_REPLY        = "WRPL"
-	INVALIDATE_REPLY   = "INV_REPL"
-	INVALIDATE_REQUEST = "INV_REQ"
-	MALLOC_REQUEST     = "MR"
-	FREE_REQUEST       = "FR"
-	MALLOC_REPLY       = "MRPL"
-	FREE_REPLY         = "FRPL"
-	WELCOME_MESSAGE    = "WELC"
-	READ_ACK           = "RA"
-	WRITE_ACK          = "WA"
+	READ_REQUEST          = "RR"
+	WRITE_REQUEST         = "WR"
+	READ_REPLY            = "RRPL"
+	WRITE_REPLY           = "WRPL"
+	INVALIDATE_REPLY      = "INV_REPL"
+	INVALIDATE_REQUEST    = "INV_REQ"
+	MALLOC_REQUEST        = "MR"
+	FREE_REQUEST          = "FR"
+	MALLOC_REPLY          = "MRPL"
+	FREE_REPLY            = "FRPL"
+	WELCOME_MESSAGE       = "WELC"
+	READ_ACK              = "RA"
+	WRITE_ACK             = "WA"
+	LOCK_ACQUIRE_REQUEST  = "lock_acq_req"
+	LOCK_ACQUIRE_RESPONSE = "lock_acq_resp"
+	LOCK_RELEASE          = "lock_rel"
+	BARRIER_REQUEST       = "barr_req"
+	BARRIER_RESPONSE      = "barr_resp"
 )
 
 type Multiview struct {
@@ -90,7 +96,7 @@ func (m *Multiview) Join(memSize, pageByteSize int) error {
 	return err
 }
 
-func (m *Multiview) Initialize(memSize, pageByteSize int) error {
+func (m *Multiview) Initialize(memSize, pageByteSize int, nrProcs int) error {
 	var err error
 	m.server, err = network.NewServer(func(message network.Message) error { return nil }, "2000")
 	if err != nil {
@@ -99,7 +105,9 @@ func (m *Multiview) Initialize(memSize, pageByteSize int) error {
 	log.Println("sucessfully started server")
 	time.Sleep(time.Millisecond * 100)
 	vm := memory.NewVmem(memSize, pageByteSize)
-	manager := NewManager(vm)
+	bm := treadmarks.NewBarrierManagerImp(nrProcs)
+	lm := treadmarks.NewLockManagerImp()
+	manager := NewUpdatedManager(vm, lm, bm)
 	manager.Connect("localhost:2000")
 	return m.Join(memSize, pageByteSize)
 }
@@ -113,6 +121,48 @@ func (m *Multiview) StartAndConnect(memSize, pageByteSize int, client network.IC
 	m.conn = client
 	m.mem.addFaultListener(m.onFault)
 	return m.conn.Connect("localhost:2000")
+}
+
+func (m *Multiview) Lock(id int) {
+	c := make(chan string)
+	m.chanMap[m.sequenceNumber] = c
+	msg := network.MultiviewMessage{
+		Type:    LOCK_ACQUIRE_REQUEST,
+		From:    m.id,
+		To:      byte(0),
+		Id:      id,
+		EventId: m.sequenceNumber,
+	}
+	m.conn.Send(msg)
+	<-c
+	m.chanMap[m.sequenceNumber] = nil
+	m.sequenceNumber++
+}
+
+func (m *Multiview) Release(id int) {
+	msg := network.MultiviewMessage{
+		Type: LOCK_RELEASE,
+		From: m.id,
+		To:   byte(0),
+		Id:   id,
+	}
+	m.conn.Send(msg)
+}
+
+func (m *Multiview) Barrier(id int) {
+	c := make(chan string)
+	m.chanMap[m.sequenceNumber] = c
+	msg := network.MultiviewMessage{
+		Type:    BARRIER_REQUEST,
+		From:    m.id,
+		To:      byte(0),
+		Id:      id,
+		EventId: m.sequenceNumber,
+	}
+	m.conn.Send(msg)
+	<-c
+	m.chanMap[m.sequenceNumber] = nil
+	m.sequenceNumber++
 }
 
 func (m *hostMem) translateAddr(addr int) int {
@@ -302,6 +352,10 @@ func (m *Multiview) messageHandler(msg network.MultiviewMessage, c chan bool) er
 		} else {
 			m.chanMap[msg.EventId] <- "ok"
 		}
+	case LOCK_ACQUIRE_RESPONSE:
+		m.chanMap[msg.EventId] <- "ok"
+	case BARRIER_RESPONSE:
+		m.chanMap[msg.EventId] <- "ok"
 	}
 	return nil
 }

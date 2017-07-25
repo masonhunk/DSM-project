@@ -1,13 +1,13 @@
 package network
 
 import (
-	"net"
 	"log"
+	"net"
 )
 
-type SimpleMessage struct{
+type SimpleMessage struct {
 	From byte
-	To byte
+	To   byte
 	Type string
 }
 
@@ -23,17 +23,18 @@ func (m SimpleMessage) GetType() string {
 	return m.Type
 }
 
-type MultiviewMessage struct{
-	From byte
-	To byte
-	Type string
-	Fault_addr int
+type MultiviewMessage struct {
+	From          byte
+	To            byte
+	Type          string
+	Fault_addr    int
 	Minipage_size int
 	Minipage_base int // addrress in the vpage address space
-	Privbase int //address in the privileged view
-	EventId byte
-	Err error
-	Data []byte //Data of the message
+	Privbase      int //address in the privileged view
+	EventId       byte
+	Err           error
+	Data          []byte //Data of the message
+	Id            int
 }
 
 func (m MultiviewMessage) GetType() string {
@@ -47,15 +48,16 @@ func (m MultiviewMessage) GetFrom() byte {
 func (m MultiviewMessage) GetTo() byte {
 	return m.To
 }
+
 type Message interface {
 	GetFrom() byte
 	GetTo() byte
 	GetType() string
 }
 
-type Endpoint struct{
+type Endpoint struct {
 	done chan bool
-	l net.Listener
+	l    net.Listener
 }
 
 func NewEndpoint(port string, handler func(conn net.Conn)) (Endpoint, error) {
@@ -71,7 +73,7 @@ func NewEndpoint(port string, handler func(conn net.Conn)) (Endpoint, error) {
 		for {
 			//Do stuff with connections
 			conn, err := l.Accept()
-			if err != nil{
+			if err != nil {
 				log.Println("Endpoint - Accept failed:", err)
 				l.Close()
 				done <- true
@@ -83,15 +85,11 @@ func NewEndpoint(port string, handler func(conn net.Conn)) (Endpoint, error) {
 
 		}
 	}()
-	 <- running
+	<-running
 	return Endpoint{done, l}, nil
 }
 
-
 func (e *Endpoint) Close() {
 	e.l.Close()
-	<- e.done
+	<-e.done
 }
-
-
-
