@@ -125,18 +125,19 @@ func (m *Multiview) StartAndConnect(memSize, pageByteSize int, client network.IC
 
 func (m *Multiview) Lock(id int) {
 	c := make(chan string)
-	m.chanMap[m.sequenceNumber] = c
+	m.sequenceNumber++
+	i := m.sequenceNumber
+	m.chanMap[i] = c
 	msg := network.MultiviewMessage{
 		Type:    LOCK_ACQUIRE_REQUEST,
 		From:    m.id,
 		To:      byte(0),
 		Id:      id,
-		EventId: m.sequenceNumber,
+		EventId: i,
 	}
 	m.conn.Send(msg)
 	<-c
-	m.chanMap[m.sequenceNumber] = nil
-	m.sequenceNumber++
+	m.chanMap[i] = nil
 }
 
 func (m *Multiview) Release(id int) {
@@ -151,18 +152,19 @@ func (m *Multiview) Release(id int) {
 
 func (m *Multiview) Barrier(id int) {
 	c := make(chan string)
-	m.chanMap[m.sequenceNumber] = c
+	m.sequenceNumber++
+	i := m.sequenceNumber
+	m.chanMap[i] = c
 	msg := network.MultiviewMessage{
 		Type:    BARRIER_REQUEST,
 		From:    m.id,
 		To:      byte(0),
 		Id:      id,
-		EventId: m.sequenceNumber,
+		EventId: i,
 	}
 	m.conn.Send(msg)
 	<-c
-	m.chanMap[m.sequenceNumber] = nil
-	m.sequenceNumber++
+	m.chanMap[i] = nil
 }
 
 func (m *hostMem) translateAddr(addr int) int {
@@ -204,18 +206,19 @@ func (m *Multiview) Write(addr int, val byte) error {
 
 func (m *Multiview) Malloc(sizeInBytes int) (int, error) {
 	c := make(chan string)
-	m.chanMap[m.sequenceNumber] = c
+	m.sequenceNumber++
+	i := m.sequenceNumber
+	m.chanMap[i] = c
 	msg := network.MultiviewMessage{
 		Type:          MALLOC_REQUEST,
 		From:          m.id,
 		To:            byte(0),
-		EventId:       m.sequenceNumber,
+		EventId:       i,
 		Minipage_size: sizeInBytes, //<- contains the size for the allocation!
 	}
 	m.conn.Send(msg)
 	s := <-c
-	m.chanMap[m.sequenceNumber] = nil
-	m.sequenceNumber++
+	m.chanMap[i] = nil
 	res, err := strconv.Atoi(s)
 	if err != nil {
 		return 0, errors.New(s)
@@ -225,19 +228,20 @@ func (m *Multiview) Malloc(sizeInBytes int) (int, error) {
 
 func (m *Multiview) Free(pointer, length int) error {
 	c := make(chan string)
-	m.chanMap[m.sequenceNumber] = c
+	m.sequenceNumber++
+	i := m.sequenceNumber
+	m.chanMap[i] = c
 	msg := network.MultiviewMessage{
 		Type:          FREE_REQUEST,
 		From:          m.id,
 		To:            byte(0),
-		EventId:       m.sequenceNumber,
+		EventId:       i,
 		Fault_addr:    pointer,
 		Minipage_size: length, //<- length here
 	}
 	m.conn.Send(msg)
 	res := <-c
-	m.chanMap[m.sequenceNumber] = nil
-	m.sequenceNumber++
+	m.chanMap[i] = nil
 	if res != "ok" {
 		return errors.New(res)
 	}
@@ -257,7 +261,9 @@ func (m *Multiview) onFault(addr int, faultType byte, accessType string, value b
 		str = WRITE_REQUEST
 	}
 	c := make(chan string)
-	m.chanMap[m.sequenceNumber] = c
+	m.sequenceNumber++
+	i := m.sequenceNumber
+	m.chanMap[i] = c
 	msg := network.MultiviewMessage{
 		Type:       str,
 		From:       m.id,
@@ -268,8 +274,7 @@ func (m *Multiview) onFault(addr int, faultType byte, accessType string, value b
 	err := m.conn.Send(msg)
 	if err == nil {
 		<-c
-		m.chanMap[m.sequenceNumber] = nil
-		m.sequenceNumber++
+		m.chanMap[i] = nil
 		//send ack
 		msg := network.MultiviewMessage{
 			From:       m.id,

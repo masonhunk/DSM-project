@@ -143,25 +143,29 @@ func TestMultiview_Barrier(t *testing.T) {
 	mw3.Join(1024, 32)
 
 	ptr, _ := mw1.Malloc(512)
-
+	group := sync.WaitGroup{}
+	group.Add(2)
 	started := make(chan bool)
 	go func() {
 		started <- true
 		mw1.Write(ptr, byte(10))
+		group.Done()
 		mw1.Barrier(1)
 		mw1.Write(ptr+1, byte(11))
+		group.Done()
 	}()
 	<-started
-	log.Println("arrived at barrier at host 1")
+
 	go func() {
 		started <- true
+		group.Done()
 		mw2.Barrier(1)
 		mw2.Write(ptr, byte(12))
-		mw2.Write(ptr+1, byte(13))
+		group.Done()
 	}()
 	<-started
-	log.Println("arrived at barrier at host 2")
-
+	group.Wait()
+	group.Add(2)
 	//not yet over barrier
 	res1, _ := mw1.Read(ptr)
 	res2, _ := mw2.Read(ptr)
@@ -171,18 +175,16 @@ func TestMultiview_Barrier(t *testing.T) {
 	assert.Equal(t, byte(10), res2)
 	assert.Equal(t, byte(10), res3)
 
-	res1, _ = mw1.Read(ptr+1)
-	res2, _ = mw2.Read(ptr+1)
-	res3, _ = mw3.Read(ptr+1)
+	res1, _ = mw1.Read(ptr + 1)
+	res2, _ = mw2.Read(ptr + 1)
+	res3, _ = mw3.Read(ptr + 1)
 
 	assert.Equal(t, byte(0), res1)
 	assert.Equal(t, byte(0), res2)
 	assert.Equal(t, byte(0), res3)
 
-	log.Println("arrived at barrier at host 3")
-	mw2.Barrier(1)
-	log.Println("barrier ovevr")
-
+	mw3.Barrier(1)
+	group.Wait()
 	res1, _ = mw1.Read(ptr)
 	res2, _ = mw2.Read(ptr)
 	res3, _ = mw3.Read(ptr)
@@ -191,13 +193,13 @@ func TestMultiview_Barrier(t *testing.T) {
 	assert.Equal(t, byte(12), res2)
 	assert.Equal(t, byte(12), res3)
 
-	res1, _ = mw1.Read(ptr+1)
-	res2, _ = mw2.Read(ptr+1)
-	res3, _ = mw3.Read(ptr+1)
+	res1, _ = mw1.Read(ptr + 1)
+	res2, _ = mw2.Read(ptr + 1)
+	res3, _ = mw3.Read(ptr + 1)
 
-	assert.Equal(t, byte(13), res1)
-	assert.Equal(t, byte(13), res2)
-	assert.Equal(t, byte(13), res3)
+	assert.Equal(t, byte(11), res1)
+	assert.Equal(t, byte(11), res2)
+	assert.Equal(t, byte(11), res3)
 
 	mw2.Leave()
 	mw3.Leave()
