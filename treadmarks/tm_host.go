@@ -191,7 +191,7 @@ func (t *TreadMarks) Join(address string) error {
 	t.IClient = client
 	for {
 		if err := t.Connect(address); err != nil {
-			time.Sleep(time.Millisecond*100)
+			time.Sleep(time.Millisecond * 100)
 		} else {
 			break
 		}
