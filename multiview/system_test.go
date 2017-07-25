@@ -115,17 +115,91 @@ func TestMultiview_Lock(t *testing.T) {
 	}()
 	group.Wait()
 	res11, _ := mw1.Read(ptr)
-	res12, _ := mw1.Read(ptr+1)
+	res12, _ := mw1.Read(ptr + 1)
 	res21, _ := mw2.Read(ptr)
-	res22, _ := mw2.Read(ptr+1)
+	res22, _ := mw2.Read(ptr + 1)
 	res31, _ := mw3.Read(ptr)
-	res32, _ := mw3.Read(ptr+1)
+	res32, _ := mw3.Read(ptr + 1)
 
 	assert.Equal(t, byte(12), res11)
-	assert.Equal(t, byte(12), res21)//passed
+	assert.Equal(t, byte(12), res21) //passed
 	assert.Equal(t, byte(12), res31)
 	assert.Equal(t, byte(13), res12)
-	assert.Equal(t, byte(13), res22)//passed
+	assert.Equal(t, byte(13), res22) //passed
 	assert.Equal(t, byte(13), res32)
 
+	mw3.Leave()
+	mw2.Leave()
+	mw1.Shutdown()
+}
+
+func TestMultiview_Barrier(t *testing.T) {
+	mw1 := NewMultiView()
+	mw2 := NewMultiView()
+	mw3 := NewMultiView()
+
+	mw1.Initialize(1024, 32, 3)
+	mw2.Join(1024, 32)
+	mw3.Join(1024, 32)
+
+	ptr, _ := mw1.Malloc(512)
+
+	started := make(chan bool)
+	go func() {
+		started <- true
+		mw1.Write(ptr, byte(10))
+		mw1.Barrier(1)
+		mw1.Write(ptr+1, byte(11))
+	}()
+	<-started
+	log.Println("arrived at barrier at host 1")
+	go func() {
+		started <- true
+		mw2.Barrier(1)
+		mw2.Write(ptr, byte(12))
+		mw2.Write(ptr+1, byte(13))
+	}()
+	<-started
+	log.Println("arrived at barrier at host 2")
+
+	//not yet over barrier
+	res1, _ := mw1.Read(ptr)
+	res2, _ := mw2.Read(ptr)
+	res3, _ := mw3.Read(ptr)
+
+	assert.Equal(t, byte(10), res1)
+	assert.Equal(t, byte(10), res2)
+	assert.Equal(t, byte(10), res3)
+
+	res1, _ = mw1.Read(ptr+1)
+	res2, _ = mw2.Read(ptr+1)
+	res3, _ = mw3.Read(ptr+1)
+
+	assert.Equal(t, byte(0), res1)
+	assert.Equal(t, byte(0), res2)
+	assert.Equal(t, byte(0), res3)
+
+	log.Println("arrived at barrier at host 3")
+	mw2.Barrier(1)
+	log.Println("barrier ovevr")
+
+	res1, _ = mw1.Read(ptr)
+	res2, _ = mw2.Read(ptr)
+	res3, _ = mw3.Read(ptr)
+
+	assert.Equal(t, byte(12), res1)
+	assert.Equal(t, byte(12), res2)
+	assert.Equal(t, byte(12), res3)
+
+	res1, _ = mw1.Read(ptr+1)
+	res2, _ = mw2.Read(ptr+1)
+	res3, _ = mw3.Read(ptr+1)
+
+	assert.Equal(t, byte(13), res1)
+	assert.Equal(t, byte(13), res2)
+	assert.Equal(t, byte(13), res3)
+
+	mw2.Leave()
+	mw3.Leave()
+	mw1.Shutdown()
 }
