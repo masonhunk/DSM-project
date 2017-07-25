@@ -349,7 +349,7 @@ func (t *TreadMarks) HandleDiffRequest(message TM_Message) TM_Message {
 				break
 			}
 			if wnr.Diff != nil {
-				description := DiffDescription{Timestamp: *wnr.GetTimestamp(), Diff: *wnr.Diff}
+				description := DiffDescription{ProcId: proc, Timestamp: *wnr.GetTimestamp(), Diff: *wnr.Diff}
 				diffDescriptions = append(diffDescriptions, description)
 			}
 		}

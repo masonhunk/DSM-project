@@ -3,6 +3,7 @@ package treadmarks
 import (
 	"fmt"
 	"sync"
+	"errors"
 )
 
 type PageArrayInterface1 interface {
@@ -138,7 +139,7 @@ func (p *PageArray1) SetDiffs(pageNr int, diffs []DiffDescription) {
 		wnr := pe.GetWriteNoticeRecord(diff.ProcId, diff.Timestamp)
 		newDiff := diff.Diff
 		if wnr == nil {
-			fmt.Println("wnr is nil!")
+			panicOnErr(errors.New("Got diff response with nil diff!"))
 		}
 		wnr.Diff = &newDiff
 	}
