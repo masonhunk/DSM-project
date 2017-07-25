@@ -39,7 +39,6 @@ func TestMalloc(t *testing.T) {
 }
 
 func TestMultipleHosts(t *testing.T) {
-	log.SetOutput(ioutil.Discard)
 	mw1 := NewMultiView()
 	mw2 := NewMultiView()
 	mw3 := NewMultiView()
@@ -85,13 +84,16 @@ func TestMultiview_Lock(t *testing.T) {
 	mw1.Initialize(1024, 32, 3)
 	mw2.Join(1024, 32)
 	mw3.Join(1024, 32)
+
+	ptr, _ := mw1.Malloc(512)
+
 	group := sync.WaitGroup{}
 	group.Add(3)
 	started := make(chan bool)
 	go func() {
 		mw1.Lock(1)
-		mw1.Write(100, byte(10))
-		mw1.Write(101, byte(11))
+		mw1.Write(ptr, byte(10))
+		mw1.Write(ptr+1, byte(11))
 		started <- true
 		mw1.Release(1)
 		group.Done()
@@ -99,30 +101,31 @@ func TestMultiview_Lock(t *testing.T) {
 	<-started
 	go func() {
 		mw2.Lock(1)
-		mw2.Write(100, byte(12))
-		mw2.Write(101, byte(13))
+		mw2.Write(ptr, byte(12))
+		mw2.Write(ptr+1, byte(13))
 		mw2.Release(1)
 		group.Done()
 	}()
 	go func() {
 		mw3.Lock(1)
-		mw3.Write(102, byte(14))
-		mw3.Write(103, byte(15))
+		mw3.Write(ptr+2, byte(14))
+		mw3.Write(ptr+3, byte(15))
 		mw3.Release(1)
 		group.Done()
 	}()
 	group.Wait()
-	res11, _ := mw1.Read(100)
-	res12, _ := mw1.Read(101)
-	res21, _ := mw2.Read(100)
-	res22, _ := mw2.Read(101)
-	res31, _ := mw3.Read(100)
-	res32, _ := mw3.Read(101)
+	res11, _ := mw1.Read(ptr)
+	res12, _ := mw1.Read(ptr+1)
+	res21, _ := mw2.Read(ptr)
+	res22, _ := mw2.Read(ptr+1)
+	res31, _ := mw3.Read(ptr)
+	res32, _ := mw3.Read(ptr+1)
+
 	assert.Equal(t, byte(12), res11)
-	assert.Equal(t, byte(12), res21)
+	assert.Equal(t, byte(12), res21)//passed
 	assert.Equal(t, byte(12), res31)
 	assert.Equal(t, byte(13), res12)
-	assert.Equal(t, byte(13), res22)
+	assert.Equal(t, byte(13), res22)//passed
 	assert.Equal(t, byte(13), res32)
 
 }
