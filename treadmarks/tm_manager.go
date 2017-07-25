@@ -78,15 +78,20 @@ func NewBarrierManagerImp(nodes int) *BarrierManagerImp {
 func (bm *BarrierManagerImp) HandleBarrier(id int, f func()) *sync.WaitGroup {
 	bm.Lock()
 	barrier, ok := bm.barriers[id]
-	if ok == false {
+	if !ok {
 		barrier = new(sync.WaitGroup)
 		barrier.Add(bm.nodes)
 		bm.barriers[id] = barrier
 	}
 	f()
-	bm.Unlock()
 	barrier.Done()
+	bm.Unlock()
 	barrier.Wait()
+	bm.Lock()
+	if bm.barriers[id] != nil {
+		delete(bm.barriers, id)
+	}
+	bm.Unlock()
 	return barrier
 }
 
@@ -152,7 +157,6 @@ func (m *tm_Manager) HandleMessage(message network.Message) error {
 		response.Type = COPY_RESPONSE
 		response.PageNr = msg.PageNr
 		response.Event = msg.Event
-		response.Data = m.tm.PrivilegedRead(msg.PageNr*m.tm.GetPageSize(), m.tm.GetPageSize())
 	default:
 		panic("Saw an unknown message type in manager:" + message.GetType())
 	}

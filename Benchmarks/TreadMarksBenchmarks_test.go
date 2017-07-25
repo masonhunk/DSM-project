@@ -19,6 +19,7 @@ func BenchmarkTreadMarks(b *testing.B) {
 }
 
 func TestJacobiProgram(t *testing.T) {
+	//log.SetOutput(ioutil.Discard)
 	group := sync.WaitGroup{}
 	group.Add(2)
 	go JacobiProgramTreadMarks(4, 2, true, group)
@@ -36,8 +37,8 @@ func setupTreadMarksStruct(nrProcs, memsize, pagebytesize, nrlocks, nrbarriers i
 }
 
 func JacobiProgramTreadMarks(nrIterations int, nrProcs int, isManager bool, group sync.WaitGroup) {
-	const M = 1024
-	const N = 1024
+	const M = 256
+	const N = 256
 	const float32_BYTE_LENGTH = 4 //32 bits
 	var privateArray [][]float32  //privateArray[M][N]
 	privateArray = make([][]float32, M)
@@ -45,7 +46,7 @@ func JacobiProgramTreadMarks(nrIterations int, nrProcs int, isManager bool, grou
 		privateArray[i] = make([]float32, N)
 	}
 	gridEntryToAddr := func(m, n int) int {
-		if m >= M || n >= N {
+		if m >= M || n >= N || m < 0 || n < 0 {
 			//panic(fmt.Errorf("index out of bounds in scratch array:%v, %v", m, n))
 			return -1
 		}
@@ -61,11 +62,12 @@ func JacobiProgramTreadMarks(nrIterations int, nrProcs int, isManager bool, grou
 	}
 
 	length := M / nrProcs
-	begin := length * int(tm.ProcId)
-	end := length*(int(tm.ProcId)+1) - 1
+	begin := length * int(tm.ProcId-1)
+	end := length * int(tm.ProcId)
 	fmt.Println("begin, end:", begin, end)
 
 	for iter := 0; iter <= nrIterations; iter++ {
+		fmt.Println("in iteration nr", iter)
 		for i := begin; i < end; i++ {
 			for j := 0; j < N; j++ {
 				divisionAmount := 4
@@ -73,10 +75,10 @@ func JacobiProgramTreadMarks(nrIterations int, nrProcs int, isManager bool, grou
 				r2 := gridEntryToAddr(i+1, j)
 				r3 := gridEntryToAddr(i, j-1)
 				r4 := gridEntryToAddr(i, j+1)
-				var g1 []byte
-				var g2 []byte
-				var g3 []byte
-				var g4 []byte
+				var g1 []byte = make([]byte, 8)
+				var g2 []byte = make([]byte, 8)
+				var g3 []byte = make([]byte, 8)
+				var g4 []byte = make([]byte, 8)
 				if r1 == -1 {
 					divisionAmount--
 				} else {
@@ -97,9 +99,6 @@ func JacobiProgramTreadMarks(nrIterations int, nrProcs int, isManager bool, grou
 				} else {
 					g4, _ = tm.ReadBytes(gridEntryToAddr(i, j+1), float32_BYTE_LENGTH)
 				}
-				fmt.Println("i, j:", i, j)
-				fmt.Println("converted address:", gridEntryToAddr(i, j))
-
 				privateArray[i][j] = (bytesToFloat32(g1) + bytesToFloat32(g2) + bytesToFloat32(g3) + bytesToFloat32(g4)) / 4
 			}
 			tm.Barrier(1)
@@ -107,22 +106,23 @@ func JacobiProgramTreadMarks(nrIterations int, nrProcs int, isManager bool, grou
 				for j := 0; j < N; j++ {
 					addr := gridEntryToAddr(i, j)
 					var valAsBytes []byte = float32ToBytes(privateArray[i][j])
-					i := 0
-					for _, b := range valAsBytes {
-						tm.Write(addr+i, b)
-						i++
+					for r, b := range valAsBytes {
+						tm.Write(addr+r, b)
 					}
 				}
 			}
 			tm.Barrier(2)
 		}
 	}
-	if isManager {
-		tm.Shutdown()
-	} else {
-		tm.Close()
-	}
-	group.Done()
+	defer func() {
+		if isManager {
+			tm.Shutdown()
+		} else {
+			tm.Close()
+		}
+		fmt.Println("exiting algorithm...")
+		group.Done()
+	}()
 
 }
 
@@ -134,7 +134,7 @@ func bytesToFloat32(bytes []byte) float32 {
 
 func float32ToBytes(float float32) []byte {
 	bits := math.Float32bits(float)
-	bytes := make([]byte, 8)
+	bytes := make([]byte, 4)
 	binary.LittleEndian.PutUint32(bytes, bits)
 	return bytes
 }

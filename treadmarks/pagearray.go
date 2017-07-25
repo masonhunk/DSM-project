@@ -137,6 +137,9 @@ func (p *PageArray1) SetDiffs(pageNr int, diffs []DiffDescription) {
 	for _, diff := range diffs {
 		wnr := pe.GetWriteNoticeRecord(diff.ProcId, diff.Timestamp)
 		newDiff := diff.Diff
+		if wnr == nil {
+			fmt.Println("wnr is nil!")
+		}
 		wnr.Diff = &newDiff
 	}
 	pe.RUnlock()

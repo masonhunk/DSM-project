@@ -363,6 +363,7 @@ func (t *TreadMarks) HandleDiffRequest(message TM_Message) TM_Message {
 }
 
 func (t *TreadMarks) HandleDiffResponse(message TM_Message) {
+	fmt.Printf("%s%+v\n", "got diff message:", message)
 	t.SetDiffs(message.PageNr, message.Diffs)
 	t.waitgroupMap[message.Event].Done()
 }
