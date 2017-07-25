@@ -120,7 +120,13 @@ func (m *Multiview) StartAndConnect(memSize, pageByteSize int, client network.IC
 	}
 	m.conn = client
 	m.mem.addFaultListener(m.onFault)
-	return m.conn.Connect("localhost:2000")
+	for {
+		if err := m.conn.Connect("localhost:2000"); err != nil {
+			m.conn.Connect("localhost:2000")
+		} else {
+			break
+		}
+	}
 }
 
 func (m *Multiview) Lock(id int) {

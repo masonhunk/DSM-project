@@ -189,8 +189,12 @@ func (t *TreadMarks) Join(address string) error {
 	}
 	client := network.NewClient(msgHandler)
 	t.IClient = client
-	if err := t.Connect(address); err != nil {
-		return err
+	for {
+		if err := t.Connect(address); err != nil {
+			time.Sleep(time.Millisecond*100)
+		} else {
+			break
+		}
 	}
 	<-c
 	client.GetTransciever().(network.LoggableTransciever).SetLogFuncOnSend(func(message network.Message) {
