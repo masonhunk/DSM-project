@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"sync"
 	"time"
+	"os"
 )
 
 const (
@@ -112,8 +113,15 @@ func (m *Multiview) Join(memSize, pageByteSize int) error {
 
 func (m *Multiview) Initialize(memSize, pageByteSize int, nrProcs int) error {
 	var err error
-	m.server, err = network.NewServer(func(message network.Message) error { return nil }, "2000")
+	f, err := os.Create("multivewLog.csv")
 	if err != nil {
+		f.Close()
+		log.Fatal(err)
+	}
+	logger := network.NewCSVStructLogger(f)
+	m.server, err = network.NewServer(func(message network.Message) error { return nil }, "2000", *logger)
+	if err != nil {
+		logger.Close()
 		return err
 	}
 	log.Println("sucessfully started server")
