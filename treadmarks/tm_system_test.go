@@ -219,13 +219,15 @@ func TestCreationAndPropagationOfWriteNotices(t *testing.T) {
 	assert.Len(t, host1.GetIntervalRecord(byte(1), Vectorclock{Value: []uint{1, 0, 0}}).WriteNotices, 1)
 	assert.Equal(t, Vectorclock{Value: []uint{1, 0, 0}}, host2.vc)
 
+	assert.Len(t, host2.GetIntervalRecords(byte(1)), 1)
+	assert.Len(t, host2.GetIntervalRecords(byte(2)), 0)
+	assert.Len(t, host2.GetIntervalRecords(byte(3)), 0)
 	host2.Write(25, byte(8))
 	host2.Write(13, byte(12))
 	host2.Write(0, byte(1))
 	host2.ReleaseLock(1)
 
 	host3.AcquireLock(1)
-
 	assert.Equal(t, Vectorclock{Value: []uint{1, 0, 0}}, host2.GetIntervalRecord(byte(1), Vectorclock{Value: []uint{1, 0, 0}}).Timestamp)
 	assert.Equal(t, Vectorclock{Value: []uint{1, 1, 0}}, host2.GetIntervalRecord(byte(2), Vectorclock{Value: []uint{1, 1, 0}}).Timestamp)
 	assert.Len(t, host2.GetIntervalRecord(byte(1), Vectorclock{Value: []uint{1, 0, 0}}).WriteNotices, 1)
@@ -493,10 +495,11 @@ func TestLockReqacquire(t *testing.T) {
 	host2.AcquireLock(1)
 	host2.Write(1, byte(2))
 	host2.ReleaseLock(1)
-	//assert.Equal(t, Vectorclock{[]uint{1,0,0}}, host1.vc)
+	assert.Equal(t, Vectorclock{[]uint{1, 0, 0}}, host1.vc)
 
 	host1.AcquireLock(1)
-
+	assert.Equal(t, Vectorclock{[]uint{1, 1, 0}}, host1.vc)
+	assert.Equal(t, Vectorclock{[]uint{1, 1, 0}}, host2.vc)
 	host1.Shutdown()
 	host2.Shutdown()
 	host3.Shutdown()
