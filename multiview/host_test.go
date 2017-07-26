@@ -21,7 +21,7 @@ func TestHandlerREADWRITE_REPLY(t *testing.T) {
 	c := make(chan bool)
 	go mw.messageHandler(msg, c)
 	<-c
-	assert.Equal(t, byte(9), mw.id)
+	assert.Equal(t, byte(9), mw.Id)
 	//test read_reply, ie. from a read request
 	channel := make(chan string)
 	mw.chanMap[100] = channel

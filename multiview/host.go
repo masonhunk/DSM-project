@@ -35,7 +35,7 @@ const (
 type Multiview struct {
 	conn           network.IClient
 	mem            *hostMem
-	id             byte
+	Id             byte
 	server         network.Server
 	chanMap        map[byte]chan string
 	sequenceNumber byte
@@ -88,11 +88,9 @@ func (m *Multiview) Join(memSize, pageByteSize int) error {
 	}
 	client := network.NewClient(handler)
 	err := m.StartAndConnect(memSize, pageByteSize, client)
-	if err != nil {
-		log.Println(err)
-	}
+	panicOnErr(err)
 	<-c
-	log.Println("host joined network with id: ", m.id)
+	log.Println("host joined network with id: ", m.Id)
 	return err
 }
 
@@ -122,11 +120,12 @@ func (m *Multiview) StartAndConnect(memSize, pageByteSize int, client network.IC
 	m.mem.addFaultListener(m.onFault)
 	for {
 		if err := m.conn.Connect("localhost:2000"); err != nil {
-			m.conn.Connect("localhost:2000")
+			time.Sleep(time.Millisecond * 100)
 		} else {
 			break
 		}
 	}
+	return nil
 }
 
 func (m *Multiview) Lock(id int) {
@@ -136,7 +135,7 @@ func (m *Multiview) Lock(id int) {
 	m.chanMap[i] = c
 	msg := network.MultiviewMessage{
 		Type:    LOCK_ACQUIRE_REQUEST,
-		From:    m.id,
+		From:    m.Id,
 		To:      byte(0),
 		Id:      id,
 		EventId: i,
@@ -149,7 +148,7 @@ func (m *Multiview) Lock(id int) {
 func (m *Multiview) Release(id int) {
 	msg := network.MultiviewMessage{
 		Type: LOCK_RELEASE,
-		From: m.id,
+		From: m.Id,
 		To:   byte(0),
 		Id:   id,
 	}
@@ -163,7 +162,7 @@ func (m *Multiview) Barrier(id int) {
 	m.chanMap[i] = c
 	msg := network.MultiviewMessage{
 		Type:    BARRIER_REQUEST,
-		From:    m.id,
+		From:    m.Id,
 		To:      byte(0),
 		Id:      id,
 		EventId: i,
@@ -191,6 +190,13 @@ func (m *Multiview) Read(addr int) (byte, error) {
 	return res, nil
 }
 
+/*func (m *Multiview) ReadBytes(addr, length int) ([]byte, error) {
+	result := make([]byte, length)
+	for i := 0; i < length; i++ {
+		result[i], _ = m.Read(addr+i)
+	}
+	return result, nil
+}*/
 func (m *Multiview) ReadBytes(addr, length int) ([]byte, error) {
 	//check access rights
 	for i := addr; i < addr+length; i += m.mem.vm.GetPageSize() {
@@ -217,7 +223,7 @@ func (m *Multiview) Malloc(sizeInBytes int) (int, error) {
 	m.chanMap[i] = c
 	msg := network.MultiviewMessage{
 		Type:          MALLOC_REQUEST,
-		From:          m.id,
+		From:          m.Id,
 		To:            byte(0),
 		EventId:       i,
 		Minipage_size: sizeInBytes, //<- contains the size for the allocation!
@@ -239,7 +245,7 @@ func (m *Multiview) Free(pointer, length int) error {
 	m.chanMap[i] = c
 	msg := network.MultiviewMessage{
 		Type:          FREE_REQUEST,
-		From:          m.id,
+		From:          m.Id,
 		To:            byte(0),
 		EventId:       i,
 		Fault_addr:    pointer,
@@ -272,38 +278,35 @@ func (m *Multiview) onFault(addr int, faultType byte, accessType string, value b
 	m.chanMap[i] = c
 	msg := network.MultiviewMessage{
 		Type:       str,
-		From:       m.id,
+		From:       m.Id,
 		To:         byte(0),
 		EventId:    m.sequenceNumber,
 		Fault_addr: addr,
 	}
 	err := m.conn.Send(msg)
-	if err == nil {
-		<-c
-		m.chanMap[i] = nil
-		//send ack
-		msg := network.MultiviewMessage{
-			From:       m.id,
-			To:         byte(0),
-			Fault_addr: addr,
-		}
-		if faultType == 0 {
-			msg.Type = READ_ACK
-		} else if faultType == 1 {
-			msg.Type = WRITE_ACK
-		}
-		m.conn.Send(msg)
-	} else {
-		log.Println(err)
+	panicOnErr(err)
+	<-c
+	m.chanMap[i] = nil
+	//send ack
+	msg = network.MultiviewMessage{
+		From:       m.Id,
+		To:         byte(0),
+		Fault_addr: addr,
 	}
+	if faultType == 0 {
+		msg.Type = READ_ACK
+	} else if faultType == 1 {
+		msg.Type = WRITE_ACK
+	}
+	m.conn.Send(msg)
 
 }
 
 func (m *Multiview) messageHandler(msg network.MultiviewMessage, c chan bool) error {
-	log.Println("received message at host", m.id, "with type:", msg.Type)
+	log.Println("received message at host", m.Id, "with type:", msg.Type)
 	switch msg.Type {
 	case WELCOME_MESSAGE:
-		m.id = msg.To
+		m.Id = msg.To
 		c <- true
 	case READ_REPLY, WRITE_REPLY:
 		privBase := msg.Privbase
@@ -339,12 +342,10 @@ func (m *Multiview) messageHandler(msg network.MultiviewMessage, c chan bool) er
 		//send reply back to requester including data
 		msg.To = msg.From
 		res, err := m.ReadBytes(msg.Privbase, msg.Minipage_size)
-		if err != nil {
-			log.Println(err)
-		} else {
-			msg.Data = res
-			m.conn.Send(msg)
-		}
+		panicOnErr(err)
+		msg.Data = res
+		m.conn.Send(msg)
+
 	case INVALIDATE_REQUEST:
 		m.mem.accessMap[m.mem.getVPageNr(msg.Fault_addr)] = memory.NO_ACCESS
 		msg.Type = INVALIDATE_REPLY
@@ -369,4 +370,10 @@ func (m *Multiview) messageHandler(msg network.MultiviewMessage, c chan bool) er
 		m.chanMap[msg.EventId] <- "ok"
 	}
 	return nil
+}
+
+func panicOnErr(err error) {
+	if err != nil {
+		panic(err)
+	}
 }

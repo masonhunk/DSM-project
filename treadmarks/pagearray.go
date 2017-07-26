@@ -1,9 +1,9 @@
 package treadmarks
 
 import (
+	"errors"
 	"fmt"
 	"sync"
-	"errors"
 )
 
 type PageArrayInterface1 interface {

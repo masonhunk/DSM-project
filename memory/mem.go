@@ -168,7 +168,7 @@ func (m *Vmem) ReadBytes(addr, length int) ([]byte, error) {
 		case NO_ACCESS:
 			//notify all listeners
 			for _, l := range m.faultListeners {
-				l(addr, 0, "READ", 0)
+				l(m.GetPageAddr(i), 0, "READ", 0)
 			}
 			return result, errors.New("access denied at location: " + strconv.Itoa(i))
 		case READ_WRITE, READ_ONLY:

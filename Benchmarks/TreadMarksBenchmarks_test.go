@@ -18,7 +18,7 @@ func BenchmarkTreadMarks(b *testing.B) {
 	}
 }
 
-func TestJacobiProgram(t *testing.T) {
+func TestJacobiProgramTreadMarks(t *testing.T) {
 	//log.SetOutput(ioutil.Discard)
 	group := sync.WaitGroup{}
 	group.Add(2)
@@ -60,6 +60,8 @@ func JacobiProgramTreadMarks(nrIterations int, nrProcs int, isManager bool, grou
 		tm.Join("localhost:2000")
 		fmt.Println("joined with id:", tm.ProcId)
 	}
+
+	tm.Barrier(0)
 
 	length := M / nrProcs
 	begin := length * int(tm.ProcId-1)
