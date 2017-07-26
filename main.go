@@ -1,6 +1,7 @@
 package main
 
 import (
+	"DSM-project/Benchmarks"
 	"flag"
 	"log"
 	"os"
@@ -27,7 +28,7 @@ func main() {
 	case "TSP":
 		//Run tsp algorithm
 	default:
-		mockBenchmark()
+
 	}
 
 	if *memprofile == "" {

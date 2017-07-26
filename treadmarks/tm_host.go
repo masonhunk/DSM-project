@@ -3,6 +3,7 @@ package treadmarks
 import (
 	"DSM-project/memory"
 	"DSM-project/network"
+	"encoding/binary"
 	"encoding/gob"
 	"errors"
 	"fmt"
@@ -197,15 +198,29 @@ func (t *TreadMarks) Join(address string) error {
 	}
 	<-c
 	client.GetTransciever().(network.LoggableTransciever).SetLogFuncOnSend(func(message network.Message) {
-		log.Printf("%s%d%s%+v", "host", t.ProcId, " sent message:", message)
+		//log.Printf("%s%d%s%+v", "host", t.ProcId, " sent message:", message)
 	})
 	client.GetTransciever().(network.LoggableTransciever).SetLogFuncOnReceive(func(message network.Message) {
-		log.Printf("%s%d%s%+v", "host", t.ProcId, " received message:", message)
+		//log.Printf("%s%d%s%+v", "host", t.ProcId, " received message:", message)
 	})
 	client.GetTransciever().(network.LoggableTransciever).ShouldLog(true)
 
 	log.Println("host successfully joined system with id:", t.ProcId)
 	return nil
+}
+
+func (t *TreadMarks) ReadInt(addr int) int {
+
+	b, _ := t.ReadBytes(addr, 4)
+	result, _ := binary.Varint(b)
+	return int(result)
+}
+
+func (t *TreadMarks) WriteInt(addr int, i int) {
+	buff := make([]byte, 4)
+	_ = binary.PutVarint(buff, int64(i))
+
+	t.WriteBytes(addr, buff)
 }
 
 func (t *TreadMarks) Startup() error {
@@ -222,10 +237,10 @@ func (t *TreadMarks) Startup() error {
 	lman := NewLockManagerImp()
 	t.manager = *NewTM_Manager(conn, bman, lman, t)
 	t.manager.ITransciever.(network.LoggableTransciever).SetLogFuncOnSend(func(message network.Message) {
-		log.Printf("%s%+v", "manager sent message:", message)
+		//log.Printf("%s%+v", "manager sent message:", message)
 	})
 	t.manager.ITransciever.(network.LoggableTransciever).SetLogFuncOnReceive(func(message network.Message) {
-		log.Printf("%s%+v", "manager received message:", message)
+		//log.Printf("%s%+v", "manager received message:", message)
 	})
 	t.manager.ITransciever.(network.LoggableTransciever).ShouldLog(true)
 	return t.Join("localhost:2000")
@@ -240,6 +255,7 @@ func (t *TreadMarks) HandleLockAcquireResponse(message *TM_Message) {
 
 func (t *TreadMarks) HandleLockAcquireRequest(msg *TM_Message) TM_Message {
 	t.locks[msg.Id].Lock()
+	t.haveLock[msg.Id] = false
 	defer t.locks[msg.Id].Unlock()
 	//send write notices back and stuff
 	//start by incrementing vc
@@ -406,7 +422,6 @@ func (t *TreadMarks) ReleaseLock(id int) {
 	defer t.Unlock()
 	t.locks[id].Unlock()
 	if t.haveLock[id] {
-		t.haveLock[id] = false
 		return
 	}
 	t.haveLock[id] = true

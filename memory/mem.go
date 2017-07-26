@@ -162,7 +162,7 @@ func (m *Vmem) ReadBytes(addr, length int) ([]byte, error) {
 		return result, nil
 	}
 
-	for i := start; i < end; i += m.PAGE_BYTESIZE {
+	for i := start; i < end; i++ {
 		access := m.GetRights(m.GetPageAddr(i))
 		switch access {
 		case NO_ACCESS:
