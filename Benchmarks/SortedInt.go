@@ -29,6 +29,7 @@ func SortedIntBenchmark(nrProcs int, isManager bool, N int, Bmax uint32, Imax in
 		tm.Join("localhost:2000")
 		fmt.Println("joined with id: ", tm.ProcId)
 	}
+
 	defer tm.Shutdown()
 }
 
