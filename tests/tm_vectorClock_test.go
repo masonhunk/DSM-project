@@ -8,9 +8,9 @@ import (
 
 func TestVectorclockIncrement(t *testing.T) {
 	vc := treadmarks.NewVectorclock(4)
-	assert.Equal(t, uint(0), vc.GetTick(0))
-	vc.Increment(0)
-	assert.Equal(t, uint(1), vc.GetTick(0))
+	assert.Equal(t, uint(0), vc.GetTick(1))
+	vc.Increment(1)
+	assert.Equal(t, uint(1), vc.GetTick(1))
 }
 
 func TestVectorclockCompare(t *testing.T) {
@@ -92,7 +92,7 @@ func TestVectorEqual(t *testing.T) {
 	vc1 := treadmarks.NewVectorclock(3)
 	vc2 := treadmarks.NewVectorclock(3)
 	vc3 := treadmarks.NewVectorclock(3)
-	vc3.SetTick(byte(0), 4)
+	vc3.SetTick(byte(1), 4)
 	assert.True(t, vc1.Equals(*vc2))
 	assert.False(t, vc1.Equals(*vc3))
 }

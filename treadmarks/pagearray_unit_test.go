@@ -52,9 +52,9 @@ func TestPageArrayEntry1_AddWritenoticeRecord(t *testing.T) {
 	pe := NewPageArrayEntry1(&b, 2, 1)
 	wnr1 := &WriteNoticeRecord{Id: 2}
 	wnr2 := &WriteNoticeRecord{Id: 2}
-	pe.AddWritenoticeRecord(byte(0), wnr1)
+	pe.AddWritenoticeRecord(byte(1), wnr1)
 	assert.Equal(t, pe.writeNoticeArray[0][0].Id, wnr1.Id)
-	pe.AddWritenoticeRecord(byte(0), wnr2)
+	pe.AddWritenoticeRecord(byte(1), wnr2)
 	assert.Equal(t, pe.writeNoticeArray[0][0].Id, wnr2.Id)
 	assert.Equal(t, pe.writeNoticeArray[0][1].Id, wnr1.Id)
 	assert.Equal(t, wnr1.Id, pe.writeNoticeArrayVCLookup[wnr1.ToString()].Id)
@@ -65,28 +65,28 @@ func TestPageArrayEntry1_GetWriteNoticeRecord(t *testing.T) {
 	b := byte(1)
 	pe := NewPageArrayEntry1(&b, 2, 1)
 	vc1 := *NewVectorclock(2)
-	vc1.SetTick(byte(0), 2)
+	vc1.SetTick(byte(1), 2)
 	vc2 := *NewVectorclock(2)
 	int1 := &IntervalRecord{Timestamp: vc1}
 	int2 := &IntervalRecord{Timestamp: vc2}
 	wnr1 := &WriteNoticeRecord{Id: 1, Interval: int1}
 	wnr2 := &WriteNoticeRecord{Id: 2, Interval: int2}
-	pe.AddWritenoticeRecord(byte(0), wnr1)
-	pe.AddWritenoticeRecord(byte(0), wnr2)
-	assert.Equal(t, wnr1, pe.GetWriteNoticeRecord(byte(0), vc1))
-	assert.Equal(t, wnr2, pe.GetWriteNoticeRecord(byte(0), vc2))
+	pe.AddWritenoticeRecord(byte(1), wnr1)
+	pe.AddWritenoticeRecord(byte(1), wnr2)
+	assert.Equal(t, wnr1, pe.GetWriteNoticeRecord(byte(1), vc1))
+	assert.Equal(t, wnr2, pe.GetWriteNoticeRecord(byte(1), vc2))
 }
 
 func TestPageArrayEntry1_SetDiff(t *testing.T) {
 	b := byte(1)
 	pe := NewPageArrayEntry1(&b, 2, 1)
 	vc := NewVectorclock(2)
-	vc.SetTick(byte(0), 2)
+	vc.SetTick(byte(1), 2)
 	inter := &IntervalRecord{Timestamp: *vc}
 	wnr := &WriteNoticeRecord{Id: 1, Interval: inter}
-	pe.AddWritenoticeRecord(byte(0), wnr)
+	pe.AddWritenoticeRecord(byte(1), wnr)
 	diff := DiffDescription{
-		ProcId:    byte(0),
+		ProcId:    byte(1),
 		Timestamp: *vc,
 		Diff:      Diff{[]Pair{{byte(1), byte(2)}}},
 	}
@@ -99,21 +99,21 @@ func TestPageArrayEntry1_SetDiffs(t *testing.T) {
 	pe := NewPageArrayEntry1(&b, 2, 1)
 	vc1 := NewVectorclock(2)
 	vc2 := NewVectorclock(2)
-	vc1.SetTick(byte(0), 2)
-	vc2.SetTick(byte(0), 1)
+	vc1.SetTick(byte(1), 2)
+	vc2.SetTick(byte(1), 1)
 	int1 := &IntervalRecord{Timestamp: *vc1}
 	int2 := &IntervalRecord{Timestamp: *vc2}
 	wnr1 := &WriteNoticeRecord{Id: 1, Interval: int1}
 	wnr2 := &WriteNoticeRecord{Id: 2, Interval: int2}
-	pe.AddWritenoticeRecord(byte(0), wnr2)
-	pe.AddWritenoticeRecord(byte(0), wnr1)
+	pe.AddWritenoticeRecord(byte(1), wnr2)
+	pe.AddWritenoticeRecord(byte(1), wnr1)
 	diff1 := DiffDescription{
-		ProcId:    byte(0),
+		ProcId:    byte(1),
 		Timestamp: *vc1,
 		Diff:      Diff{[]Pair{{byte(1), byte(2)}}},
 	}
 	diff2 := DiffDescription{
-		ProcId:    byte(0),
+		ProcId:    byte(1),
 		Timestamp: *vc2,
 		Diff:      Diff{[]Pair{{byte(3), byte(4)}}},
 	}
@@ -140,16 +140,16 @@ func TestPageArray1_GetWritenoticeRecord(t *testing.T) {
 	assert.Nil(t, p.GetWritenoticeRecord(byte(1), 1, *vc1))
 	int1 := &IntervalRecord{Timestamp: *vc1}
 	wnr1 := &WriteNoticeRecord{Id: 1, Interval: int1}
-	p.AddWriteNoticeRecord(byte(0), 1, wnr1)
-	assert.Equal(t, wnr1.Id, p.GetWritenoticeRecord(byte(0), 1, *vc1).Id)
+	p.AddWriteNoticeRecord(byte(1), 1, wnr1)
+	assert.Equal(t, wnr1.Id, p.GetWritenoticeRecord(byte(1), 1, *vc1).Id)
 	vc2 := NewVectorclock(2)
-	vc2.Increment(byte(0))
+	vc2.Increment(byte(1))
 	assert.Nil(t, p.GetWritenoticeRecord(byte(1), 1, *vc2))
 	int2 := &IntervalRecord{Timestamp: *vc2}
 	wnr2 := &WriteNoticeRecord{Id: 2, Interval: int2}
-	p.AddWriteNoticeRecord(byte(0), 1, wnr2)
-	assert.Equal(t, wnr1.Id, p.GetWritenoticeRecord(byte(0), 1, *vc1).Id)
-	assert.Equal(t, wnr2.Id, p.GetWritenoticeRecord(byte(0), 1, *vc2).Id)
+	p.AddWriteNoticeRecord(byte(1), 1, wnr2)
+	assert.Equal(t, wnr1.Id, p.GetWritenoticeRecord(byte(1), 1, *vc1).Id)
+	assert.Equal(t, wnr2.Id, p.GetWritenoticeRecord(byte(1), 1, *vc2).Id)
 }
 
 func TestPageArray1_MapWriteNotices(t *testing.T) {
@@ -157,14 +157,14 @@ func TestPageArray1_MapWriteNotices(t *testing.T) {
 	p := NewPageArray1(&b, 2)
 	vc1 := NewVectorclock(2)
 	vc2 := NewVectorclock(2)
-	vc2.Increment(byte(0))
+	vc2.Increment(byte(1))
 	assert.Nil(t, p.GetWritenoticeRecord(byte(1), 1, *vc1))
 	int1 := &IntervalRecord{Timestamp: *vc1}
 	wnr1 := &WriteNoticeRecord{Id: 1, Interval: int1}
 	int2 := &IntervalRecord{Timestamp: *vc2}
 	wnr2 := &WriteNoticeRecord{Id: 2, Interval: int2}
-	p.AddWriteNoticeRecord(byte(0), 1, wnr1)
-	p.AddWriteNoticeRecord(byte(0), 1, wnr2)
+	p.AddWriteNoticeRecord(byte(1), 1, wnr1)
+	p.AddWriteNoticeRecord(byte(1), 1, wnr2)
 	p.MapWriteNotices(func(wn *WriteNoticeRecord) { wn.Id = wn.Id + 1 }, 1, byte(0))
 	assert.Equal(t, 2, wnr1.Id)
 	assert.Equal(t, 3, wnr2.Id)
@@ -175,21 +175,21 @@ func TestPageArray1_SetDiff(t *testing.T) {
 	p := NewPageArray1(&b, 2)
 	vc1 := NewVectorclock(2)
 	vc2 := NewVectorclock(2)
-	vc2.Increment(byte(0))
+	vc2.Increment(byte(1))
 	int1 := &IntervalRecord{Timestamp: *vc1}
 	wnr1 := &WriteNoticeRecord{Id: 1, Interval: int1}
 	int2 := &IntervalRecord{Timestamp: *vc2}
 	wnr2 := &WriteNoticeRecord{Id: 2, Interval: int2}
-	p.AddWriteNoticeRecord(byte(0), 1, wnr1)
-	p.AddWriteNoticeRecord(byte(0), 1, wnr2)
+	p.AddWriteNoticeRecord(byte(1), 1, wnr1)
+	p.AddWriteNoticeRecord(byte(1), 1, wnr2)
 
 	diff1 := DiffDescription{
-		ProcId:    byte(0),
+		ProcId:    byte(1),
 		Timestamp: *vc1,
 		Diff:      Diff{[]Pair{{byte(1), byte(2)}}},
 	}
 	diff2 := DiffDescription{
-		ProcId:    byte(0),
+		ProcId:    byte(1),
 		Timestamp: *vc2,
 		Diff:      Diff{[]Pair{{byte(3), byte(4)}}},
 	}
@@ -215,23 +215,23 @@ func TestPageArray1_GetWritenoticeRecords(t *testing.T) {
 	wnr3 := &WriteNoticeRecord{Id: 3}
 	wnr4 := &WriteNoticeRecord{Id: 3}
 	wnr5 := &WriteNoticeRecord{Id: 3}
-	p.AddWriteNoticeRecord(byte(0), 1, wnr1)
-	p.AddWriteNoticeRecord(byte(0), 1, wnr2)
-	p.AddWriteNoticeRecord(byte(1), 1, wnr3)
-	p.AddWriteNoticeRecord(byte(0), 0, wnr4)
-	p.AddWriteNoticeRecord(byte(1), 0, wnr5)
-	p.AddWriteNoticeRecord(byte(1), 3, wnr1)
-	p.AddWriteNoticeRecord(byte(1), 3, wnr2)
-	p.AddWriteNoticeRecord(byte(1), 3, wnr3)
-	p.AddWriteNoticeRecord(byte(1), 3, wnr4)
-	p.AddWriteNoticeRecord(byte(1), 3, wnr5)
+	p.AddWriteNoticeRecord(byte(1), 1, wnr1)
+	p.AddWriteNoticeRecord(byte(1), 1, wnr2)
+	p.AddWriteNoticeRecord(byte(2), 1, wnr3)
+	p.AddWriteNoticeRecord(byte(1), 0, wnr4)
+	p.AddWriteNoticeRecord(byte(2), 0, wnr5)
+	p.AddWriteNoticeRecord(byte(2), 3, wnr1)
+	p.AddWriteNoticeRecord(byte(2), 3, wnr2)
+	p.AddWriteNoticeRecord(byte(2), 3, wnr3)
+	p.AddWriteNoticeRecord(byte(2), 3, wnr4)
+	p.AddWriteNoticeRecord(byte(2), 3, wnr5)
 
-	assert.Equal(t, []*WriteNoticeRecord{wnr2, wnr1}, p.GetWritenoticeRecords(byte(0), 1))
-	assert.Equal(t, []*WriteNoticeRecord{wnr3}, p.GetWritenoticeRecords(byte(1), 1))
-	assert.Equal(t, []*WriteNoticeRecord{wnr4}, p.GetWritenoticeRecords(byte(0), 0))
-	assert.Equal(t, []*WriteNoticeRecord{wnr5}, p.GetWritenoticeRecords(byte(1), 0))
+	assert.Equal(t, []*WriteNoticeRecord{wnr2, wnr1}, p.GetWritenoticeRecords(byte(1), 1))
+	assert.Equal(t, []*WriteNoticeRecord{wnr3}, p.GetWritenoticeRecords(byte(2), 1))
+	assert.Equal(t, []*WriteNoticeRecord{wnr4}, p.GetWritenoticeRecords(byte(1), 0))
+	assert.Equal(t, []*WriteNoticeRecord{wnr5}, p.GetWritenoticeRecords(byte(2), 0))
 	assert.Equal(t, []*WriteNoticeRecord{wnr5, wnr4, wnr3, wnr2, wnr1},
-		p.GetWritenoticeRecords(byte(1), 3))
+		p.GetWritenoticeRecords(byte(2), 3))
 }
 
 func TestDiffIterator_Insert(t *testing.T) {
@@ -239,17 +239,17 @@ func TestDiffIterator_Insert(t *testing.T) {
 	// For this testcase, the vc have the following order:
 	// vc1 < vc2 < vc3
 	// vc3 ~ vc4
-	vc1 := NewVectorclock(4)
-	vc2 := NewVectorclock(4)
-	vc2.SetTick(byte(0), 1)
-	vc3 := NewVectorclock(4)
-	vc3.SetTick(byte(0), 2)
-	vc4 := NewVectorclock(4)
-	vc4.SetTick(byte(1), 2)
+	vc1 := NewVectorclock(3)
+	vc2 := NewVectorclock(3)
+	vc2.SetTick(byte(1), 1)
+	vc3 := NewVectorclock(3)
+	vc3.SetTick(byte(1), 2)
+	vc4 := NewVectorclock(3)
+	vc4.SetTick(byte(2), 2)
 
-	smallProc := byte(0)
-	mediumProc := byte(1)
-	largeProc := byte(2)
+	smallProc := byte(1)
+	mediumProc := byte(2)
+	largeProc := byte(3)
 	smallInt := &IntervalRecord{Timestamp: *vc1}
 	mediumInt := &IntervalRecord{Timestamp: *vc2}
 	largeInt := &IntervalRecord{Timestamp: *vc3}
@@ -263,7 +263,7 @@ func TestDiffIterator_Insert(t *testing.T) {
 
 	//First all tests will have diffs.
 	b := byte(1)
-	pe := NewPageArrayEntry1(&b, 4, 1)
+	pe := NewPageArrayEntry1(&b, 3, 1)
 	pe.AddWritenoticeRecord(smallProc, smallWrite)
 	pe.AddWritenoticeRecord(mediumProc, mediumWrite)
 	pe.AddWritenoticeRecord(largeProc, largeWrite)

@@ -89,9 +89,9 @@ func TestMultiMessages(t *testing.T) {
 	c := network.NewClient(messageHandler)
 	c.Connect("localhost:2000")
 	time.Sleep(1000000000)
-	c.Send(network.SimpleMessage{To: 1, Type: "Test"})
-	c.Send(network.SimpleMessage{To: 1, Type: "Test"})
-	c.Send(network.SimpleMessage{To: 1, Type: "Test"})
+	c.Send(network.SimpleMessage{To: 0, Type: "Test"})
+	c.Send(network.SimpleMessage{To: 0, Type: "Test"})
+	c.Send(network.SimpleMessage{To: 0, Type: "Test"})
 	time.Sleep(1000000000)
 	c.Close()
 	s.StopServer()
@@ -107,10 +107,10 @@ func TestServerSending(t *testing.T) {
 	c.Connect("localhost:2000")
 	for len(s.Clients) < 1 {
 	}
-	s.Send(network.SimpleMessage{To: 1, Type: "Test"})
-	s.Send(network.SimpleMessage{To: 1, Type: "Test"})
-	s.Send(network.SimpleMessage{To: 1, Type: "Test"})
-	s.Send(network.SimpleMessage{To: 1, Type: "Test"})
+	s.Send(network.SimpleMessage{To: 0, Type: "Test"})
+	s.Send(network.SimpleMessage{To: 0, Type: "Test"})
+	s.Send(network.SimpleMessage{To: 0, Type: "Test"})
+	s.Send(network.SimpleMessage{To: 0, Type: "Test"})
 	time.Sleep(1000000000)
 	c.Close()
 	s.StopServer()
@@ -128,8 +128,8 @@ func TestClientToClient(t *testing.T) {
 	c2 := network.NewClient(func(message network.Message) error { m2 = append(m2, message.(network.SimpleMessage)); return nil })
 	c2.Connect("localhost:2000")
 
-	c1.Send(network.SimpleMessage{To: 2, Type: "From c1 to c2"})
-	c2.Send(network.SimpleMessage{To: 1, Type: "From c2 to c1"})
+	c1.Send(network.SimpleMessage{To: 1, Type: "From c1 to c2"})
+	c2.Send(network.SimpleMessage{To: 0, Type: "From c2 to c1"})
 
 	time.Sleep(1000000000)
 	c1.Close()
