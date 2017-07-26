@@ -198,7 +198,7 @@ func (m *tm_Manager) handleBarrierRequest(message *TM_Message) *TM_Message {
 	//barrier over
 
 	m.doOnce.Do(func() {
-		m.vc.Increment(m.tm.ProcId)
+		//m.vc.Increment(m.tm.ProcId)
 	})
 
 	if m.tm != nil {

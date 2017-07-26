@@ -296,7 +296,106 @@ func TestWritesBeforeAcquire(t *testing.T) {
 }
 
 func TestShouldNotCreateNewIntervalOnLockReacquire(t *testing.T) {
+	host1 := setupTreadMarksStruct(2)
+	host2 := setupTreadMarksStruct(2)
 
+	host1.Startup()
+	host2.Join("localhost:2000")
+
+	assert.Len(t, host1.GetWritenoticeRecords(byte(1), 0), 0)
+	assert.Len(t, host1.GetWritenoticeRecords(byte(2), 0), 0)
+	assert.Len(t, host2.GetWritenoticeRecords(byte(1), 0), 0)
+	assert.Len(t, host2.GetWritenoticeRecords(byte(2), 0), 0)
+
+	host1.Read(2)
+
+	assert.Len(t, host1.GetWritenoticeRecords(byte(1), 0), 0)
+	assert.Len(t, host1.GetWritenoticeRecords(byte(2), 0), 0)
+	assert.Len(t, host2.GetWritenoticeRecords(byte(1), 0), 0)
+	assert.Len(t, host2.GetWritenoticeRecords(byte(2), 0), 0)
+
+	host1.Write(1, byte(2))
+	assert.Equal(t, Vectorclock{[]uint{0, 0}}, host1.vc)
+	assert.Len(t, host1.GetWritenoticeRecords(byte(1), 0), 0)
+	assert.Len(t, host1.GetWritenoticeRecords(byte(2), 0), 0)
+	assert.Len(t, host2.GetWritenoticeRecords(byte(1), 0), 0)
+	assert.Len(t, host2.GetWritenoticeRecords(byte(2), 0), 0)
+
+	channel1 := make(chan bool, 0)
+	channel2 := make(chan bool, 0)
+	go func() {
+		channel1 <- true
+		assert.Equal(t, Vectorclock{[]uint{0, 0}}, host1.vc)
+		host1.Barrier(1)
+		assert.Equal(t, Vectorclock{[]uint{1, 0}}, host1.vc)
+		channel1 <- true
+	}()
+	go func() {
+		channel2 <- true
+		host2.Barrier(1)
+		assert.Equal(t, Vectorclock{[]uint{1, 0}}, host2.vc)
+		channel2 <- true
+	}()
+	<-channel1
+	<-channel2
+	<-channel1
+	<-channel2
+	assert.Equal(t, Vectorclock{[]uint{1, 0}}, host1.GetIntervalRecords(byte(1))[0].Timestamp)
+	assert.Len(t, host1.GetIntervalRecords(byte(2)), 0)
+	assert.Equal(t, Vectorclock{[]uint{1, 0}}, host2.GetIntervalRecords(byte(1))[0].Timestamp)
+	assert.Len(t, host2.GetIntervalRecords(byte(2)), 0)
+	assert.Nil(t, host1.GetWritenoticeRecords(byte(1), 0)[0].Diff)
+
+	assert.Len(t, host1.GetWritenoticeRecords(byte(1), 0), 1)
+	assert.Len(t, host1.GetWritenoticeRecords(byte(2), 0), 0)
+	assert.Len(t, host2.GetWritenoticeRecords(byte(1), 0), 1)
+	assert.Len(t, host2.GetWritenoticeRecords(byte(2), 0), 0)
+	host2.Write(1, byte(3))
+	assert.Len(t, host1.GetWritenoticeRecords(byte(1), 0), 1)
+	assert.Len(t, host1.GetWritenoticeRecords(byte(2), 0), 0)
+	assert.Len(t, host2.GetWritenoticeRecords(byte(1), 0), 1)
+	assert.Len(t, host2.GetWritenoticeRecords(byte(2), 0), 0)
+	assert.Equal(t, Vectorclock{[]uint{1, 0}}, host2.vc)
+	channel1 = make(chan bool, 0)
+	channel2 = make(chan bool, 0)
+	go func() {
+		channel1 <- true
+		host1.Barrier(1)
+		channel1 <- true
+	}()
+	go func() {
+		channel2 <- true
+		host2.Barrier(1)
+		channel2 <- true
+	}()
+	<-channel1
+	<-channel2
+	<-channel1
+	<-channel2
+	assert.Equal(t, host2.vc, Vectorclock{[]uint{1, 1}})
+	assert.Len(t, host1.GetWritenoticeRecords(byte(1), 0), 1)
+	assert.Len(t, host1.GetWritenoticeRecords(byte(2), 0), 1)
+	assert.Len(t, host2.GetWritenoticeRecords(byte(1), 0), 1)
+	assert.Len(t, host2.GetWritenoticeRecords(byte(2), 0), 1)
+
+	host2.Write(1, byte(4))
+	channel := make(chan bool)
+	go func() {
+		host1.Barrier(1)
+		channel <- true
+	}()
+	go func() {
+		host2.Barrier(1)
+		channel <- true
+	}()
+	<-channel
+	<-channel
+	assert.Equal(t, host1.vc, Vectorclock{[]uint{1, 2}})
+	assert.Equal(t, host2.vc, Vectorclock{[]uint{1, 2}})
+	assert.Len(t, host1.GetWritenoticeRecords(byte(1), 0), 1)
+	assert.Len(t, host1.GetWritenoticeRecords(byte(2), 0), 2)
+	assert.Len(t, host2.GetWritenoticeRecords(byte(1), 0), 1)
+	assert.Len(t, host2.GetWritenoticeRecords(byte(2), 0), 2)
 }
 
 func TestBarrierReadWrites(t *testing.T) {
