@@ -14,6 +14,8 @@ import (
 var cpuprofile = flag.String("cpuprofile", "", "write cpu profile `file`")
 var memprofile = flag.String("memprofile", "", "write memory profile to `file`")
 var benchmark = flag.String("benchmark", "default", "choose benchmark algorithm")
+var nrprocs = flag.Int("hosts", 1, "choose number of hosts.")
+var manager = flag.Bool("manager", true, "choose if instance is manager.")
 
 func main() {
 	flag.Parse()
@@ -39,12 +41,8 @@ func main() {
 		wg := sync.WaitGroup{}
 		wg.Add(1)
 		Benchmarks.JacobiProgramMultiView(10, 2, false, 32, &wg)
-	case "SortedIntTMSingle":
-		Benchmarks.SortedIntBenchmark(1, 1000, true, 8388608, 524288, 10)
-	case "SortedIntTM-manager":
-		Benchmarks.SortedIntBenchmark(4, 1000, true, 8388608, 524288, 10)
-	case "SortedIntTM-host":
-		Benchmarks.SortedIntBenchmark(4, 1000, true, 8388608, 524288, 10)
+	case "SortedIntTM":
+		Benchmarks.SortedIntTMBenchmark(*nrprocs, 1000, *manager, 8388608, 524288, 10)
 	default:
 
 	}

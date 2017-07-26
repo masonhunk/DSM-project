@@ -16,7 +16,7 @@ func setupTreadMarksStruct1(nrProcs, memsize, pagebytesize, nrlocks, nrbarriers 
 }
 
 //Benchmarks.SortedIntBenchmark(1, 1000, true, 8388608, 524288, 10)
-func SortedIntBenchmark(nrProcs int, batchSize int, isManager bool, N int, Bmax int, Imax int) {
+func SortedIntTMBenchmark(nrProcs int, batchSize int, isManager bool, N int, Bmax int, Imax int) {
 	//First we do setup.
 	runtime.GOMAXPROCS(2)
 
