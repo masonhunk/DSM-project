@@ -180,7 +180,9 @@ func (m *Manager) handleAck(message network.MultiviewMessage) int {
 		}
 	}
 	if !alreadyHas {
+		m.copyLock.Lock()
 		m.copies[vpage] = append(m.copies[vpage], message.From)
+		m.copyLock.Unlock()
 	}
 	return vpage
 }
@@ -228,7 +230,9 @@ func (m *Manager) HandleAlloc(message network.MultiviewMessage) {
 		m.mpt[startpg+i] = mp
 		m.log[startpg+i] = startpg
 		m.locks[startpg+i] = new(sync.RWMutex)
+		m.copyLock.Lock()
 		m.copies[startpg+i] = []byte{message.From}
+		m.copyLock.Unlock()
 	}
 
 	//Send reply to alloc requester
@@ -252,7 +256,9 @@ func (m *Manager) HandleFree(message network.MultiviewMessage) {
 		m.locks[i].Lock()
 		delete(m.log, i)
 		delete(m.mpt, i)
+		m.copyLock.Lock()
 		delete(m.copies, i)
+		m.copyLock.Unlock()
 		delete(m.locks, i)
 	}
 	m.vm.Free(message.Fault_addr % m.vm.Size())

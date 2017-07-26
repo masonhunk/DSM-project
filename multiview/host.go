@@ -8,6 +8,7 @@ import (
 	"errors"
 	"log"
 	"strconv"
+	"sync"
 	"time"
 )
 
@@ -45,6 +46,20 @@ type hostMem struct {
 	vm             memory.VirtualMemory
 	accessMap      map[int]byte //key = vpage number, value, access right
 	faultListeners []memory.FaultListener
+	*sync.RWMutex
+}
+
+func (m *Multiview) getInAccessMap(vpageNr int) byte {
+	m.mem.RLock()
+	res := m.mem.accessMap[vpageNr]
+	m.mem.RUnlock()
+	return res
+}
+
+func (m *Multiview) setInAccessMap(vpageNr int, val byte) {
+	m.mem.Lock()
+	m.mem.accessMap[vpageNr] = val
+	m.mem.Unlock()
 }
 
 func NewMultiView() *Multiview {
@@ -61,6 +76,7 @@ func NewHostMem(virtualMemory memory.VirtualMemory) *hostMem {
 	m.accessMap = make(map[int]byte)
 	m.faultListeners = make([]memory.FaultListener, 0)
 	m.vm.AccessRightsDisabled(true)
+	m.RWMutex = &sync.RWMutex{}
 	return m
 }
 
@@ -114,7 +130,7 @@ func (m *Multiview) StartAndConnect(memSize, pageByteSize int, client network.IC
 	vm := memory.NewVmem(memSize, pageByteSize)
 	m.mem = NewHostMem(vm)
 	for i := 0; i < memSize/pageByteSize; i++ {
-		m.mem.accessMap[i] = memory.READ_WRITE
+		m.setInAccessMap(i, memory.READ_WRITE)
 	}
 	m.conn = client
 	m.mem.addFaultListener(m.onFault)
@@ -181,7 +197,7 @@ func (m *hostMem) getVPageNr(addr int) int {
 }
 
 func (m *Multiview) Read(addr int) (byte, error) {
-	if m.mem.accessMap[m.mem.getVPageNr(addr)] == 0 {
+	if m.getInAccessMap(m.mem.getVPageNr(addr)) == memory.NO_ACCESS {
 		for _, l := range m.mem.faultListeners {
 			l(addr, 0, "READ", 0)
 		}
@@ -190,25 +206,28 @@ func (m *Multiview) Read(addr int) (byte, error) {
 	return res, nil
 }
 
-/*func (m *Multiview) ReadBytes(addr, length int) ([]byte, error) {
+func (m *Multiview) ReadBytes(addr, length int) ([]byte, error) {
 	result := make([]byte, length)
 	for i := 0; i < length; i++ {
-		result[i], _ = m.Read(addr+i)
+		result[i], _ = m.Read(addr + i)
 	}
 	return result, nil
-}*/
+}
+
+/*
 func (m *Multiview) ReadBytes(addr, length int) ([]byte, error) {
+	result := make([]byte, length)
 	//check access rights
 	for i := addr; i < addr+length; i += m.mem.vm.GetPageSize() {
-		if m.mem.accessMap[m.mem.getVPageNr(addr)] == memory.NO_ACCESS {
+		if m.getInAccessMap(m.mem.getVPageNr(addr)) == memory.NO_ACCESS {
 			return nil, errors.New("Access Denied")
 		}
 	}
 	return m.mem.vm.ReadBytes(m.mem.translateAddr(addr), length)
-}
+}*/
 
 func (m *Multiview) Write(addr int, val byte) error {
-	if m.mem.accessMap[m.mem.getVPageNr(addr)] != memory.READ_WRITE {
+	if m.getInAccessMap(m.mem.getVPageNr(addr)) != memory.READ_WRITE {
 		for _, l := range m.mem.faultListeners {
 			l(addr, 1, "WRITE", val)
 		}
@@ -258,6 +277,10 @@ func (m *Multiview) Free(pointer, length int) error {
 		return errors.New(res)
 	}
 	return nil
+}
+
+func (m *Multiview) GetPageSize() int {
+	return m.mem.vm.GetPageSize()
 }
 
 func (m *hostMem) addFaultListener(l memory.FaultListener) {
@@ -324,15 +347,15 @@ func (m *Multiview) messageHandler(msg network.MultiviewMessage, c chan bool) er
 		} else {
 			right = memory.READ_WRITE
 		}
-		m.mem.accessMap[m.mem.getVPageNr(msg.Fault_addr)] = right
+		m.setInAccessMap(m.mem.getVPageNr(msg.Fault_addr), right)
 		m.chanMap[msg.EventId] <- "done" //let the blocking caller resume their work
 	case READ_REQUEST, WRITE_REQUEST:
 		vpagenr := m.mem.getVPageNr(msg.Fault_addr)
-		if msg.Type == READ_REQUEST && m.mem.accessMap[vpagenr] == memory.READ_WRITE &&
-			vpagenr >= m.mem.vm.Size()/m.mem.vm.GetPageSize() {
-			m.mem.accessMap[vpagenr] = memory.READ_ONLY
-		} else if msg.Type == WRITE_REQUEST && vpagenr >= m.mem.vm.Size()/m.mem.vm.GetPageSize() {
-			m.mem.accessMap[vpagenr] = memory.NO_ACCESS
+		if msg.Type == READ_REQUEST && m.getInAccessMap(vpagenr) == memory.READ_WRITE {
+			m.setInAccessMap(vpagenr, memory.READ_ONLY)
+		} else if msg.Type == WRITE_REQUEST {
+			m.setInAccessMap(vpagenr, memory.NO_ACCESS)
+
 		}
 		if msg.Type == READ_REQUEST {
 			msg.Type = READ_REPLY
@@ -347,7 +370,7 @@ func (m *Multiview) messageHandler(msg network.MultiviewMessage, c chan bool) er
 		m.conn.Send(msg)
 
 	case INVALIDATE_REQUEST:
-		m.mem.accessMap[m.mem.getVPageNr(msg.Fault_addr)] = memory.NO_ACCESS
+		m.setInAccessMap(m.mem.getVPageNr(msg.Fault_addr), memory.NO_ACCESS)
 		msg.Type = INVALIDATE_REPLY
 		msg.To = byte(0)
 		m.conn.Send(msg)

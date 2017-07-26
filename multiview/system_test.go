@@ -205,3 +205,26 @@ func TestMultiview_Barrier(t *testing.T) {
 	mw3.Leave()
 	mw1.Shutdown()
 }
+
+func TestConsecutiveWritesAndReads(t *testing.T) {
+	mw1 := NewMultiView()
+	mw2 := NewMultiView()
+
+	mw1.Initialize(1024, 32, 2)
+	mw2.Join(1024, 32)
+
+	ptr, _ := mw1.Malloc(256)
+
+	mw1.Read(ptr)
+	mw2.Read(ptr)
+
+	mw1.Write(ptr, byte(10))
+	res, _ := mw2.Read(ptr)
+	assert.Equal(t, byte(10), res)
+	mw1.Write(ptr, byte(12))
+	res, _ = mw2.Read(ptr)
+	assert.Equal(t, byte(12), res)
+
+	mw2.Leave()
+	mw1.Shutdown()
+}

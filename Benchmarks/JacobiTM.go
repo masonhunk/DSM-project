@@ -7,17 +7,9 @@ import (
 	"fmt"
 	"math"
 	"sync"
-	"testing"
-	"time"
 )
 
-func BenchmarkTreadMarks(b *testing.B) {
-	// run the Fib function b.N times
-	for n := 0; n < b.N; n++ {
-
-	}
-}
-
+/*
 func TestJacobiProgramTreadMarks(t *testing.T) {
 	//log.SetOutput(ioutil.Discard)
 	group := sync.WaitGroup{}
@@ -28,7 +20,7 @@ func TestJacobiProgramTreadMarks(t *testing.T) {
 		JacobiProgramTreadMarks(4, 2, false, group)
 	}()
 	group.Wait()
-}
+}*/
 
 func setupTreadMarksStruct(nrProcs, memsize, pagebytesize, nrlocks, nrbarriers int) *treadmarks.TreadMarks {
 	vm1 := memory.NewVmem(memsize, pagebytesize)
@@ -45,7 +37,7 @@ func JacobiProgramTreadMarks(nrIterations int, nrProcs int, isManager bool, grou
 	for i := range privateArray {
 		privateArray[i] = make([]float32, N)
 	}
-	gridEntryToAddr := func(m, n int) int {
+	gridAddr := func(m, n int) int {
 		if m >= M || n >= N || m < 0 || n < 0 {
 			//panic(fmt.Errorf("index out of bounds in scratch array:%v, %v", m, n))
 			return -1
@@ -73,10 +65,10 @@ func JacobiProgramTreadMarks(nrIterations int, nrProcs int, isManager bool, grou
 		for i := begin; i < end; i++ {
 			for j := 0; j < N; j++ {
 				divisionAmount := 4
-				r1 := gridEntryToAddr(i-1, j)
-				r2 := gridEntryToAddr(i+1, j)
-				r3 := gridEntryToAddr(i, j-1)
-				r4 := gridEntryToAddr(i, j+1)
+				r1 := gridAddr(i-1, j)
+				r2 := gridAddr(i+1, j)
+				r3 := gridAddr(i, j-1)
+				r4 := gridAddr(i, j+1)
 				var g1 []byte = make([]byte, 8)
 				var g2 []byte = make([]byte, 8)
 				var g3 []byte = make([]byte, 8)
@@ -84,29 +76,29 @@ func JacobiProgramTreadMarks(nrIterations int, nrProcs int, isManager bool, grou
 				if r1 == -1 {
 					divisionAmount--
 				} else {
-					g1, _ = tm.ReadBytes(gridEntryToAddr(i-1, j), float32_BYTE_LENGTH)
+					g1, _ = tm.ReadBytes(gridAddr(i-1, j), float32_BYTE_LENGTH)
 				}
 				if r2 == -1 {
 					divisionAmount--
 				} else {
-					g2, _ = tm.ReadBytes(gridEntryToAddr(i+1, j), float32_BYTE_LENGTH)
+					g2, _ = tm.ReadBytes(gridAddr(i+1, j), float32_BYTE_LENGTH)
 				}
 				if r3 == -1 {
 					divisionAmount--
 				} else {
-					g3, _ = tm.ReadBytes(gridEntryToAddr(i, j-1), float32_BYTE_LENGTH)
+					g3, _ = tm.ReadBytes(gridAddr(i, j-1), float32_BYTE_LENGTH)
 				}
 				if r4 == -1 {
 					divisionAmount--
 				} else {
-					g4, _ = tm.ReadBytes(gridEntryToAddr(i, j+1), float32_BYTE_LENGTH)
+					g4, _ = tm.ReadBytes(gridAddr(i, j+1), float32_BYTE_LENGTH)
 				}
 				privateArray[i][j] = (bytesToFloat32(g1) + bytesToFloat32(g2) + bytesToFloat32(g3) + bytesToFloat32(g4)) / 4
 			}
 			tm.Barrier(1)
 			for i := begin; i < end; i++ {
 				for j := 0; j < N; j++ {
-					addr := gridEntryToAddr(i, j)
+					addr := gridAddr(i, j)
 					var valAsBytes []byte = float32ToBytes(privateArray[i][j])
 					for r, b := range valAsBytes {
 						tm.Write(addr+r, b)
