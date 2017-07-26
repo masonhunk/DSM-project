@@ -175,9 +175,9 @@ func TestBarrierManagerVCUpdate(t *testing.T) {
 	host3.AcquireLock(1)
 	host3.ReleaseLock(1)
 	time.Sleep(time.Millisecond * 300)
-	assert.Equal(t, Vectorclock{Value: []uint{1, 0, 0}}, host1.vc)
-	assert.Equal(t, Vectorclock{Value: []uint{1, 1, 0}}, host2.vc)
-	assert.Equal(t, Vectorclock{Value: []uint{1, 1, 0}}, host3.vc)
+	assert.Equal(t, Vectorclock{Value: []uint{0, 0, 0}}, host1.vc)
+	assert.Equal(t, Vectorclock{Value: []uint{0, 0, 0}}, host2.vc)
+	assert.Equal(t, Vectorclock{Value: []uint{0, 0, 0}}, host3.vc)
 
 	done := make(chan bool)
 	go func() {
@@ -195,9 +195,9 @@ func TestBarrierManagerVCUpdate(t *testing.T) {
 	<-done
 	<-done
 	<-done
-	assert.Equal(t, Vectorclock{Value: []uint{3, 2, 1}}, host1.vc)
-	assert.Equal(t, Vectorclock{Value: []uint{3, 2, 1}}, host2.vc)
-	assert.Equal(t, Vectorclock{Value: []uint{3, 2, 1}}, host3.vc)
+	assert.Equal(t, Vectorclock{Value: []uint{0, 0, 0}}, host1.vc)
+	assert.Equal(t, Vectorclock{Value: []uint{0, 0, 0}}, host2.vc)
+	assert.Equal(t, Vectorclock{Value: []uint{0, 0, 0}}, host3.vc)
 	host1.Shutdown()
 	host2.Shutdown()
 	host3.Shutdown()
@@ -396,6 +396,8 @@ func TestShouldNotCreateNewIntervalOnLockReacquire(t *testing.T) {
 	assert.Len(t, host1.GetWritenoticeRecords(byte(2), 0), 2)
 	assert.Len(t, host2.GetWritenoticeRecords(byte(1), 0), 1)
 	assert.Len(t, host2.GetWritenoticeRecords(byte(2), 0), 2)
+	host1.Shutdown()
+	host2.Shutdown()
 }
 
 func TestBarrierReadWrites(t *testing.T) {
@@ -437,9 +439,9 @@ func TestBarrierReadWrites(t *testing.T) {
 	<-started
 	group.Wait()
 
-	assert.Equal(t, Vectorclock{Value: []uint{2, 1, 1}}, host1.vc)
-	assert.Equal(t, Vectorclock{Value: []uint{2, 1, 1}}, host2.vc)
-	assert.Equal(t, Vectorclock{Value: []uint{2, 1, 1}}, host3.vc)
+	assert.Equal(t, Vectorclock{Value: []uint{1, 1, 1}}, host1.vc)
+	assert.Equal(t, Vectorclock{Value: []uint{1, 1, 1}}, host2.vc)
+	assert.Equal(t, Vectorclock{Value: []uint{1, 1, 1}}, host3.vc)
 
 	assert.Equal(t, &Vectorclock{Value: []uint{0, 1, 0}}, host1.GetWritenoticeRecords(byte(2), 1)[0].GetTimestamp())
 	//all changes made in host1 and host2 should be seen by all.
@@ -469,6 +471,7 @@ func TestBarrierReadWrites(t *testing.T) {
 	host3.Shutdown()
 
 }
+
 func TestLockReqacquire(t *testing.T) {
 	host1 := setupTreadMarksStruct(3)
 	host2 := setupTreadMarksStruct(3)
