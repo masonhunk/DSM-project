@@ -18,7 +18,7 @@ var benchmark = flag.String("benchmark", "default", "choose benchmark algorithm"
 func main() {
 	flag.Parse()
 	if *cpuprofile == "" {
-		cpuname := *benchmark + ".prof"
+		cpuname := *benchmark
 		setupCPUProf(cpuname)
 	} else {
 		setupCPUProf(*cpuprofile)
@@ -39,12 +39,18 @@ func main() {
 		wg := sync.WaitGroup{}
 		wg.Add(1)
 		Benchmarks.JacobiProgramMultiView(10, 2, false, 32, &wg)
+	case "SortedIntTMSingle":
+		Benchmarks.SortedIntBenchmark(1, 1000, true, 8388608, 524288, 10)
+	case "SortedIntTM-manager":
+		Benchmarks.SortedIntBenchmark(4, 1000, true, 8388608, 524288, 10)
+	case "SortedIntTM-host":
+		Benchmarks.SortedIntBenchmark(4, 1000, true, 8388608, 524288, 10)
 	default:
 
 	}
 
 	if *memprofile == "" {
-		memname := *benchmark + ".mprof"
+		memname := *benchmark
 		setupMemProf(memname)
 	} else {
 		setupMemProf(*memprofile)
@@ -53,7 +59,15 @@ func main() {
 }
 
 func setupCPUProf(filename string) {
-	f, err := os.Create(filename)
+	i := 0
+	for {
+		_, err := os.Stat(fmt.Sprintf("%s%s%d%s", filename, "_", i, ".prof"))
+		if os.IsNotExist(err) {
+			break
+		}
+		i++
+	}
+	f, err := os.Create(fmt.Sprintf("%s%s%d%s", filename, "_", i, ".prof"))
 	if err != nil {
 		log.Fatal("could not create CPU profile: ", err)
 	}
@@ -63,7 +77,15 @@ func setupCPUProf(filename string) {
 }
 
 func setupMemProf(filename string) {
-	f, err := os.Create(filename)
+	i := 0
+	for {
+		_, err := os.Stat(fmt.Sprintf("%s%s%d%s", filename, "_", i, ".mprof"))
+		if os.IsNotExist(err) {
+			break
+		}
+		i++
+	}
+	f, err := os.Create(fmt.Sprintf("%s%s%d%s", filename, "_", i, ".mprof"))
 	if err != nil {
 		log.Fatal("could not create memory profile: ", err)
 	}
@@ -72,23 +94,4 @@ func setupMemProf(filename string) {
 		log.Fatal("could not write memory profile: ", err)
 	}
 	f.Close()
-}
-
-func mockBenchmark() {
-	k := 2
-	for i := 0; i < 1000000000; i++ {
-		if k > 100 {
-			k = mod(k)
-		} else {
-			k = mult(k)
-		}
-	}
-}
-
-func mult(i int) int {
-	return i * 2
-}
-
-func mod(i int) int {
-	return i % 1000
 }

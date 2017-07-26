@@ -62,7 +62,7 @@ func SortedIntBenchmark(nrProcs int, batchSize int, isManager bool, N int, Bmax 
 				if j%100 == 0 {
 					fmt.Println("Progress: ", j)
 				}
-				//Benchmarks.SortedIntBenchmark(1, 1000, true, 8388608, 524288, 10)
+				//
 				kj = K[j]
 				rj = 0
 				for l, kl := range K {
