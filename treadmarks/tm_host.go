@@ -198,10 +198,10 @@ func (t *TreadMarks) Join(address string) error {
 	}
 	<-c
 	client.GetTransciever().(network.LoggableTransciever).SetLogFuncOnSend(func(message network.Message) {
-		//log.Printf("%s%d%s%+v", "host", t.ProcId, " sent message:", message)
+		log.Printf("%s%d%s%+v", "host", t.ProcId, " sent message:", message)
 	})
 	client.GetTransciever().(network.LoggableTransciever).SetLogFuncOnReceive(func(message network.Message) {
-		//log.Printf("%s%d%s%+v", "host", t.ProcId, " received message:", message)
+		log.Printf("%s%d%s%+v", "host", t.ProcId, " received message:", message)
 	})
 	client.GetTransciever().(network.LoggableTransciever).ShouldLog(true)
 
@@ -237,10 +237,10 @@ func (t *TreadMarks) Startup() error {
 	lman := NewLockManagerImp()
 	t.manager = *NewTM_Manager(conn, bman, lman, t)
 	t.manager.ITransciever.(network.LoggableTransciever).SetLogFuncOnSend(func(message network.Message) {
-		//log.Printf("%s%+v", "manager sent message:", message)
+		log.Printf("%s%+v", "manager sent message:", message)
 	})
 	t.manager.ITransciever.(network.LoggableTransciever).SetLogFuncOnReceive(func(message network.Message) {
-		//log.Printf("%s%+v", "manager received message:", message)
+		log.Printf("%s%+v", "manager received message:", message)
 	})
 	t.manager.ITransciever.(network.LoggableTransciever).ShouldLog(true)
 	return t.Join("localhost:2000")
