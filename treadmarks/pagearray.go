@@ -308,12 +308,12 @@ func (pe *PageArrayEntry1) GetMissingDiffTimestamps() []Pair {
 				continue
 			}
 			if ProcStartTS[i].IsAfter(ProcStartTS[j]) {
-				if ProcEndTS[i].Value == nil || ProcEndTS[i].IsAfter(ProcEndTS[j]) {
+				if ProcEndTS[j].Value != nil && (ProcEndTS[i].Value == nil || ProcEndTS[i].IsAfter(ProcEndTS[j])) {
 					ProcEndTS[i] = ProcEndTS[j]
 				}
 				ProcEndTS[j] = Vectorclock{}
 			} else if ProcStartTS[j].IsAfter(ProcStartTS[i]) {
-				if ProcEndTS[j].Value == nil || ProcEndTS[j].IsAfter(ProcEndTS[i]) {
+				if ProcEndTS[i].Value != nil && (ProcEndTS[j].Value == nil || ProcEndTS[j].IsAfter(ProcEndTS[i])) {
 					ProcEndTS[j] = ProcEndTS[i]
 				}
 				ProcEndTS[i] = Vectorclock{}

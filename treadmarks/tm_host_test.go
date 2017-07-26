@@ -487,37 +487,6 @@ func TestTreadMarks_HandleDiffRequest_OrderTest(t *testing.T) {
 	assert.Equal(t, expected, diffs.Diffs)
 }
 */
-/*func TestTreadMarks_Barrier(t *testing.T) {
-	tm := SetupHandleDiffRequest() //we have ProcId = 1, manager = 0
-	cm := NewClientMock()
-	tm.IClient = cm
-
-	//intervals from this process has same timestamp (0,3,0) as manager (0,3,0). expect no unseen intervals
-	tm.vc = *NewVectorclock(3)
-	tm.vc.SetTick(tm.ProcId, 2)
-	tm.Barrier(3)
-	msg := cm.messages[0]
-	testvc := *NewVectorclock(3)
-	testvc.SetTick(byte(1), 2)
-	assert.Equal(t, testvc, msg.VC)
-	assert.Equal(t, byte(1), msg.From)
-	assert.Len(t, msg.Intervals, 0)
-
-	//set latest manager timestamp to older than intervals from this process. Expect unseen intervals
-	vc := NewVectorclock(3)
-	vc.SetTick(byte(0), 2)
-	tm.GetIntervalRecordHead(byte(0)).Timestamp = *vc
-	tm.Barrier(2)
-	fmt.Println(cm.messages)
-	msg = cm.messages[1]
-	assert.Equal(t, BARRIER_REQUEST, msg.Type)
-	assert.Equal(t, byte(0), msg.To)
-	assert.Equal(t, tm.ProcId, msg.From)
-	assert.Equal(t, 2, msg.Id)
-	assert.Len(t, msg.Intervals, 1)
-	assert.Len(t, msg.Intervals[0].WriteNotices, len(tm.GetIntervalRecordHead(byte(1)).WriteNotices))
-}
-*/
 
 func SetupHandleDiffResponse() *TreadMarks {
 	vm := memory.NewVmem(128, 8)
