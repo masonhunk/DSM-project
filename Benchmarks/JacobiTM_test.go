@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"math"
 	"sync"
+	"testing"
+	"time"
 )
 
-/*
+
 func TestJacobiProgramTreadMarks(t *testing.T) {
 	//log.SetOutput(ioutil.Discard)
 	group := sync.WaitGroup{}
@@ -20,7 +22,7 @@ func TestJacobiProgramTreadMarks(t *testing.T) {
 		JacobiProgramTreadMarks(4, 2, false, group)
 	}()
 	group.Wait()
-}*/
+}
 
 func setupTreadMarksStruct(nrProcs, memsize, pagebytesize, nrlocks, nrbarriers int) *treadmarks.TreadMarks {
 	vm1 := memory.NewVmem(memsize, pagebytesize)
@@ -29,8 +31,8 @@ func setupTreadMarksStruct(nrProcs, memsize, pagebytesize, nrlocks, nrbarriers i
 }
 
 func JacobiProgramTreadMarks(nrIterations int, nrProcs int, isManager bool, group sync.WaitGroup) {
-	const M = 256
-	const N = 256
+	const M = 32
+	const N = 32
 	const float32_BYTE_LENGTH = 4 //32 bits
 	var privateArray [][]float32  //privateArray[M][N]
 	privateArray = make([][]float32, M)
@@ -39,13 +41,12 @@ func JacobiProgramTreadMarks(nrIterations int, nrProcs int, isManager bool, grou
 	}
 	gridAddr := func(m, n int) int {
 		if m >= M || n >= N || m < 0 || n < 0 {
-			//panic(fmt.Errorf("index out of bounds in scratch array:%v, %v", m, n))
 			return -1
 		}
 		return (m * N * float32_BYTE_LENGTH) + (n * float32_BYTE_LENGTH)
 	}
 
-	tm := setupTreadMarksStruct(nrProcs, M*N*float32_BYTE_LENGTH, 4096, 1, 3)
+	tm := setupTreadMarksStruct(nrProcs, M*N*float32_BYTE_LENGTH, 64, 1, 3)
 	if isManager {
 		tm.Startup()
 	} else {
@@ -69,10 +70,10 @@ func JacobiProgramTreadMarks(nrIterations int, nrProcs int, isManager bool, grou
 				r2 := gridAddr(i+1, j)
 				r3 := gridAddr(i, j-1)
 				r4 := gridAddr(i, j+1)
-				var g1 []byte = make([]byte, 8)
-				var g2 []byte = make([]byte, 8)
-				var g3 []byte = make([]byte, 8)
-				var g4 []byte = make([]byte, 8)
+				var g1 []byte = make([]byte, 4)
+				var g2 []byte = make([]byte, 4)
+				var g3 []byte = make([]byte, 4)
+				var g4 []byte = make([]byte, 4)
 				if r1 == -1 {
 					divisionAmount--
 				} else {
@@ -93,7 +94,7 @@ func JacobiProgramTreadMarks(nrIterations int, nrProcs int, isManager bool, grou
 				} else {
 					g4, _ = tm.ReadBytes(gridAddr(i, j+1), float32_BYTE_LENGTH)
 				}
-				privateArray[i][j] = (bytesToFloat32(g1) + bytesToFloat32(g2) + bytesToFloat32(g3) + bytesToFloat32(g4)) / 4
+				privateArray[i][j] = (bytesToFloat32(g1) + bytesToFloat32(g2) + bytesToFloat32(g3) + bytesToFloat32(g4)) /float32(divisionAmount)
 			}
 			tm.Barrier(1)
 			for i := begin; i < end; i++ {

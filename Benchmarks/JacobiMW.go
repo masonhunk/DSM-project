@@ -6,6 +6,8 @@ import (
 	"log"
 	"sync"
 	"time"
+	"math"
+	"encoding/binary"
 )
 
 var _ = log.Print
@@ -71,7 +73,6 @@ func JacobiProgramMultiView(nrIterations int, nrProcs int, isManager bool, pageB
 				}
 			}
 		}
-		log.Println("gridEntryAddresses at host 1:", gridEntryAddresses)
 
 	} else {
 		mw.Join(M*N*float32_BYTE_LENGTH, pageByteSize)
@@ -89,19 +90,16 @@ func JacobiProgramMultiView(nrIterations int, nrProcs int, isManager bool, pageB
 				mw.Read(vAddr)
 			}
 		}
-		log.Println("gridEntryAddresses at host 2:", gridEntryAddresses)
 	}
 	mw.Barrier(0)
 
 	length := M / nrProcs
 	begin := length * int(mw.Id-1)
 	end := length * int(mw.Id)
-	log.Println("begin, end:", begin, end)
 
 	mw.Barrier(1)
 
 	for iter := 1; iter <= nrIterations; iter++ {
-		log.Println("in iteration nr", iter, "at process", mw.Id)
 		for i := begin; i < end; i++ {
 			for j := 0; j < N; j++ {
 				var divisionAmount int = 4
@@ -170,7 +168,6 @@ func JacobiProgramMultiView(nrIterations int, nrProcs int, isManager bool, pageB
 			log.Println(resultMatrix)
 			mw.Release(0)
 			mw.Barrier(5)
-			time.Sleep(200 * time.Millisecond)
 			mw.Shutdown()
 			log.Println("arrived at shutdown")
 
@@ -190,9 +187,20 @@ func JacobiProgramMultiView(nrIterations int, nrProcs int, isManager bool, pageB
 			mw.Barrier(5)
 			mw.Leave()
 		}
-		log.Println("about to call done in process", mw.Id)
 		group.Done()
 		return
 	}()
 
+}
+func bytesToFloat32(bytes []byte) float32 {
+	bits := binary.LittleEndian.Uint32(bytes)
+	float := math.Float32frombits(bits)
+	return float
+}
+
+func float32ToBytes(float float32) []byte {
+	bits := math.Float32bits(float)
+	bytes := make([]byte, 4)
+	binary.LittleEndian.PutUint32(bytes, bits)
+	return bytes
 }
