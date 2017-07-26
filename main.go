@@ -3,10 +3,12 @@ package main
 import (
 	"DSM-project/Benchmarks"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"runtime"
 	"runtime/pprof"
+	"sync"
 )
 
 var cpuprofile = flag.String("cpuprofile", "", "write cpu profile `file`")
@@ -23,10 +25,20 @@ func main() {
 	}
 
 	defer pprof.StopCPUProfile()
-
+	fmt.Println(*benchmark)
 	switch *benchmark {
 	case "TSP":
 		//Run tsp algorithm
+	case "JacobiMW":
+		Benchmarks.TestJacobiProgramMultiView()
+	case "JacobiMW-manager":
+		wg := sync.WaitGroup{}
+		wg.Add(1)
+		Benchmarks.JacobiProgramMultiView(10, 2, true, 32, &wg)
+	case "JacobiMW-host":
+		wg := sync.WaitGroup{}
+		wg.Add(1)
+		Benchmarks.JacobiProgramMultiView(10, 2, false, 32, &wg)
 	default:
 
 	}

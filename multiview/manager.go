@@ -4,6 +4,7 @@ import (
 	"DSM-project/memory"
 	"DSM-project/network"
 	"DSM-project/treadmarks"
+	"fmt"
 	"log"
 	"sync"
 )
@@ -26,6 +27,7 @@ type Manager struct {
 	// the first vpage of this allocation. Used for freeing.
 	copies map[int][]byte        //A map of who has copies of what vpage
 	locks  map[int]*sync.RWMutex //A map of locks belonging to each vpage.
+	*sync.Mutex
 }
 
 // Returns the pointer to a manager object.
@@ -51,6 +53,7 @@ func NewUpdatedManager(vm memory.VirtualMemory, lm treadmarks.LockManager, bm tr
 		log:            make(map[int]int),
 		LockManager:    lm,
 		BarrierManager: bm,
+		Mutex:          new(sync.Mutex),
 	}
 	return &m
 }
@@ -109,14 +112,16 @@ func (m *Manager) HandleMessage(message network.MultiviewMessage) {
 // This translates a message, by adding more information to it. This is information
 // that only the manager knows, but which is important for the hosts.
 func (m *Manager) translate(message *network.MultiviewMessage) int {
+	m.Lock()
 	vpage := message.Fault_addr / m.vm.GetPageSize()
 	if _, ok := m.mpt[vpage]; ok == false {
-		log.Fatalln("Vpage[", vpage, "] did not exist.")
+		panic(fmt.Errorf("Vpage[%v] did not exist.", vpage))
 		return 0
 	}
 	message.Minipage_base = m.vm.GetPageAddr(message.Fault_addr) + m.mpt[vpage].offset
 	message.Minipage_size = m.mpt[vpage].length
 	message.Privbase = message.Minipage_base % m.vm.Size()
+	m.Unlock()
 	return vpage
 }
 
@@ -175,13 +180,15 @@ func (m *Manager) handleAck(message network.MultiviewMessage) int {
 		}
 	}
 	if !alreadyHas {
+		m.copyLock.Lock()
 		m.copies[vpage] = append(m.copies[vpage], message.From)
+		m.copyLock.Unlock()
 	}
 	return vpage
 }
 
 func (m *Manager) HandleAlloc(message network.MultiviewMessage) {
-
+	m.Lock()
 	size := message.Minipage_size
 	ptr, _ := m.vm.Malloc(size)
 
@@ -223,7 +230,9 @@ func (m *Manager) HandleAlloc(message network.MultiviewMessage) {
 		m.mpt[startpg+i] = mp
 		m.log[startpg+i] = startpg
 		m.locks[startpg+i] = new(sync.RWMutex)
+		m.copyLock.Lock()
 		m.copies[startpg+i] = []byte{message.From}
+		m.copyLock.Unlock()
 	}
 
 	//Send reply to alloc requester
@@ -232,8 +241,8 @@ func (m *Manager) HandleAlloc(message network.MultiviewMessage) {
 	message.Fault_addr = startpg*m.vm.GetPageSize() + m.mpt[startpg].offset
 	message.Type = MALLOC_REPLY
 
+	m.Unlock()
 	m.tr.Send(message)
-
 }
 
 func (m *Manager) HandleFree(message network.MultiviewMessage) {
@@ -247,7 +256,9 @@ func (m *Manager) HandleFree(message network.MultiviewMessage) {
 		m.locks[i].Lock()
 		delete(m.log, i)
 		delete(m.mpt, i)
+		m.copyLock.Lock()
 		delete(m.copies, i)
+		m.copyLock.Unlock()
 		delete(m.locks, i)
 	}
 	m.vm.Free(message.Fault_addr % m.vm.Size())
