@@ -6,7 +6,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
-	"runtime"
 )
 
 func setupTreadMarksStruct1(nrProcs, memsize, pagebytesize, nrlocks, nrbarriers int) *treadmarks.TreadMarks {
@@ -18,7 +17,6 @@ func setupTreadMarksStruct1(nrProcs, memsize, pagebytesize, nrlocks, nrbarriers 
 //Benchmarks.SortedIntBenchmark(1, 1000, true, 8388608, 524288, 10)
 func SortedIntTMBenchmark(nrProcs int, batchSize int, isManager bool, N int, Bmax int, Imax int) {
 	//First we do setup.
-	runtime.GOMAXPROCS(2)
 
 	rand := NewRandom()
 	tm := setupTreadMarksStruct1(nrProcs, N*8, 8, 2, 3)
