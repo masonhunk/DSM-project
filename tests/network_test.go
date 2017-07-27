@@ -60,7 +60,7 @@ func TestEndpointAndTranscieverConnectAndTalk(t *testing.T) {
 func TestServerCreationWithMultipleClients(t *testing.T) {
 	gob.Register(network.SimpleMessage{})
 	messages = []network.SimpleMessage{}
-	s, _ := network.NewServer(func(message network.Message) error { return nil }, "2000")
+	s, _ := network.NewServer(func(message network.Message) error { return nil }, "2000", network.CSVStructLogger{})
 	c1 := network.NewClient(messageHandler)
 	c1.Connect("localhost:2000")
 	c2 := network.NewClient(messageHandler)
@@ -85,7 +85,7 @@ func TestServerCreationWithMultipleClients(t *testing.T) {
 func TestMultiMessages(t *testing.T) {
 	gob.Register(network.SimpleMessage{})
 	messages = []network.SimpleMessage{}
-	s, _ := network.NewServer(messageHandler, "2000")
+	s, _ := network.NewServer(messageHandler, "2000", network.CSVStructLogger{})
 	c := network.NewClient(messageHandler)
 	c.Connect("localhost:2000")
 	time.Sleep(1000000000)
@@ -102,7 +102,7 @@ func TestMultiMessages(t *testing.T) {
 func TestServerSending(t *testing.T) {
 	gob.Register(network.SimpleMessage{})
 	messages = []network.SimpleMessage{}
-	s, _ := network.NewServer(func(message network.Message) error { return nil }, "2000")
+	s, _ := network.NewServer(func(message network.Message) error { return nil }, "2000", network.CSVStructLogger{})
 	c := network.NewClient(messageHandler)
 	c.Connect("localhost:2000")
 	for len(s.Clients) < 1 {
@@ -122,7 +122,7 @@ func TestClientToClient(t *testing.T) {
 	gob.Register(network.SimpleMessage{})
 	m1 := []network.SimpleMessage{}
 	m2 := []network.SimpleMessage{}
-	s, _ := network.NewServer(messageHandler, "2000")
+	s, _ := network.NewServer(messageHandler, "2000", network.CSVStructLogger{})
 	c1 := network.NewClient(func(message network.Message) error { m1 = append(m1, message.(network.SimpleMessage)); return nil })
 	c1.Connect("localhost:2000")
 	c2 := network.NewClient(func(message network.Message) error { m2 = append(m2, message.(network.SimpleMessage)); return nil })

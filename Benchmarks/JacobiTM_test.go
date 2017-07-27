@@ -3,9 +3,7 @@ package Benchmarks
 import (
 	"DSM-project/memory"
 	"DSM-project/treadmarks"
-	"encoding/binary"
 	"fmt"
-	"math"
 	"sync"
 	"testing"
 	"time"
@@ -121,15 +119,3 @@ func JacobiProgramTreadMarks(nrIterations int, nrProcs int, isManager bool, grou
 
 }
 
-func bytesToFloat32(bytes []byte) float32 {
-	bits := binary.LittleEndian.Uint32(bytes)
-	float := math.Float32frombits(bits)
-	return float
-}
-
-func float32ToBytes(float float32) []byte {
-	bits := math.Float32bits(float)
-	bytes := make([]byte, 4)
-	binary.LittleEndian.PutUint32(bytes, bits)
-	return bytes
-}

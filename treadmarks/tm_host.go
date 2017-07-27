@@ -11,6 +11,7 @@ import (
 	"net"
 	"sync"
 	"time"
+	"os"
 )
 
 //TODO remove when done. Is only there to make the compiler shut up.
@@ -223,8 +224,15 @@ func (t *TreadMarks) WriteInt(addr int, i int) {
 
 func (t *TreadMarks) Startup() error {
 	var err error
-	t.server, err = network.NewServer(func(message network.Message) error { return nil }, "2000")
+	f, err := os.Create("TreadMarksLog.csv")
 	if err != nil {
+		f.Close()
+		log.Fatal(err)
+	}
+	logger := network.NewCSVStructLogger(f)
+	t.server, err = network.NewServer(func(message network.Message) error { return nil }, "2000", *logger)
+	if err != nil {
+		logger.Close()
 		return err
 	}
 	log.Println("sucessfully started server")
