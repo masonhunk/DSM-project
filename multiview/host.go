@@ -162,16 +162,18 @@ func (t *Multiview) ReadInt(addr int) int {
 
 func (t *Multiview) WriteBytes(addr int, val []byte) error {
 	var err error = nil
-	for b := range val {
-		err = t.Write(addr+b, val[b])
+	for b, val := range val {
+		err = t.Write(addr+b, val)
 	}
 	return err
 }
 
-
 func (t *Multiview) WriteInt(addr int, i int) {
 	buff := make([]byte, 4)
 	_ = binary.PutVarint(buff, int64(i))
+	if len(buff) != 4 {
+		panic("wrong length of buffer! Expected 4, got" + string(len(buff)))
+	}
 	t.WriteBytes(addr, buff)
 }
 
@@ -245,7 +247,6 @@ func (m *Multiview) ReadBytes(addr, length int) ([]byte, error) {
 	return result, nil
 }
 
-
 /*
 func (m *Multiview) ReadBytes(addr, length int) ([]byte, error) {
 	result := make([]byte, length)
@@ -266,7 +267,6 @@ func (m *Multiview) Write(addr int, val byte) error {
 	}
 	return m.mem.vm.Write(m.mem.translateAddr(addr), val)
 }
-
 
 func (m *Multiview) Malloc(sizeInBytes int) (int, error) {
 	c := make(chan string)

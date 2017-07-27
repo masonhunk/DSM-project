@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"log"
 	"math/rand"
+	"runtime"
 	"sort"
 	"sync"
 	"testing"
@@ -14,24 +15,20 @@ import (
 )
 
 func TestMergeSortMW(t *testing.T) {
+	runtime.GOMAXPROCS(4) // or 2 or 4
 	log.SetOutput(ioutil.Discard)
 	group := sync.WaitGroup{}
-	group.Add(4)
 	start := time.Now()
-	arraySize := 4096 * 1000
-	go MergeSortMW(arraySize, 4, true, 4096, &group)
-	go func() {
-		time.Sleep(time.Millisecond * 200)
-		MergeSortMW(arraySize, 4, false, 4096, &group)
-	}()
-	go func() {
-		time.Sleep(time.Millisecond * 200)
-		MergeSortMW(arraySize, 4, false, 4096, &group)
-	}()
-	go func() {
-		time.Sleep(time.Millisecond * 200)
-		MergeSortMW(arraySize, 4, false, 4096, &group)
-	}()
+	arraySize := 4096 * 100
+	nrProcs := 8
+	group.Add(nrProcs)
+	go MergeSortMW(arraySize, nrProcs, true, 4096, &group)
+	for i := 0; i < nrProcs-1; i++ {
+		go func() {
+			time.Sleep(time.Millisecond * 200)
+			MergeSortMW(arraySize, nrProcs, false, 4096, &group)
+		}()
+	}
 	group.Wait()
 	end := time.Now()
 	diff := end.Sub(start)
@@ -43,11 +40,11 @@ func MergeSortMW(arraySize int, nrProcs int, isManager bool, pageByteSize int, g
 	const INT_BYTE_LENGTH = 4 //32 bits
 	var privateArray []int
 	privateArray = make([]int, ARRAY_SIZE/nrProcs)
-	fmt.Println("private array size:", len(privateArray))
+	log.Println("private array size:", len(privateArray))
 	cellByteSize := ARRAY_SIZE * INT_BYTE_LENGTH / nrProcs
 	arraySectionAddresses := make([]int, ARRAY_SIZE*INT_BYTE_LENGTH/cellByteSize)
-	fmt.Println("cell byte size:", cellByteSize)
-	fmt.Println("arraySectionAddresses length:", len(arraySectionAddresses))
+	log.Println("cell byte size:", cellByteSize)
+	log.Println("arraySectionAddresses length:", len(arraySectionAddresses))
 
 	mw := multiview.NewMultiView()
 	if isManager {
@@ -55,14 +52,14 @@ func MergeSortMW(arraySize int, nrProcs int, isManager bool, pageByteSize int, g
 		rand.Seed(time.Now().UnixNano())
 		for i := range arraySectionAddresses {
 			arraySectionAddresses[i], _ = mw.Malloc(cellByteSize)
-			fmt.Println("got addr from malloc:", arraySectionAddresses[i])
+			log.Println("got addr from malloc:", arraySectionAddresses[i])
 			//fill with random value
 			for j := 0; j < cellByteSize/INT_BYTE_LENGTH; j++ {
 				rn := rand.Intn(1000000)
 				mw.WriteInt(arraySectionAddresses[i]+j*INT_BYTE_LENGTH, rn)
 			}
 		}
-		fmt.Println("address array at manager:", arraySectionAddresses)
+		log.Println("address array at manager:", arraySectionAddresses)
 		mw.Barrier(0)
 
 	} else {
@@ -80,29 +77,32 @@ func MergeSortMW(arraySize int, nrProcs int, isManager bool, pageByteSize int, g
 			arraySectionAddresses[i] = vAddr
 			mw.ReadInt(vAddr)
 		}
+		log.Println("address array at host:", mw.Id, arraySectionAddresses)
+
 	}
-	mw.Barrier(1)
 	start := cellByteSize * (int(mw.Id) - 1)
 	startingAddr := arraySectionAddresses[int(mw.Id)-1]
 
 	mw.Lock(int(mw.Id))
-	mw.Barrier(2) //ensures everyone gets their first lock
+	mw.Barrier(1) //ensures everyone gets their first lock
 	//sort here
 	for i := range privateArray {
 		privateArray[i] = mw.ReadInt(startingAddr + i*INT_BYTE_LENGTH)
 	}
 	var sortableArray sort.IntSlice = privateArray
 	sort.Sort(sortableArray)
+	log.Println("sorted private array at host", mw.Id, privateArray)
 	mergeArrSize := cellByteSize * 2
 	level := 1
-	for mergeArrSize <= ARRAY_SIZE {
+
+	for mergeArrSize <= ARRAY_SIZE*INT_BYTE_LENGTH {
 		if start%mergeArrSize == 0 { //if I am the leftmost process in the subtree, I win and do the sorting
 			otherProcId := int(mw.Id) + level
 			mw.Lock(otherProcId)
 			//read losing processor's result into private array and sort locally
-			otherProcRes := make([]int, mergeArrSize/2)
-			for i := 0; i < mergeArrSize/2; i++ {
-				otherProcRes[i] = mw.ReadInt(arraySectionAddresses[otherProcId] + i*INT_BYTE_LENGTH)
+			otherProcRes := make([]int, mergeArrSize/(2*INT_BYTE_LENGTH))
+			for i := 0; i < mergeArrSize/(2*INT_BYTE_LENGTH); i++ {
+				otherProcRes[i] = mw.ReadInt(arraySectionAddresses[otherProcId-1] + i*INT_BYTE_LENGTH)
 			}
 			privateArray = mergeArrays(privateArray, otherProcRes)
 			level = level * 2
@@ -116,13 +116,14 @@ func MergeSortMW(arraySize int, nrProcs int, isManager bool, pageByteSize int, g
 		}
 	}
 	mw.Release(int(mw.Id))
-	mw.Barrier(3)
+	mw.Barrier(2)
 	log.Println("exiting algorithm at process", mw.Id, "...")
 	defer func() {
 		if isManager {
 			//fmt.Println("result array:",privateArray)
-			//var res sort.IntSlice = privateArray
-			//fmt.Println("isSorted:", sort.IsSorted(res))
+			fmt.Println("length:", len(privateArray))
+			var res sort.IntSlice = privateArray
+			fmt.Println("isSorted:", sort.IsSorted(res))
 			mw.Shutdown()
 		} else {
 			mw.Leave()

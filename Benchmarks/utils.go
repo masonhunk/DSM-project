@@ -1,9 +1,17 @@
 package Benchmarks
 
 import (
+	"DSM-project/memory"
+	"DSM-project/treadmarks"
 	"encoding/binary"
 	"math"
 )
+
+func setupTreadMarksStruct(nrProcs, memsize, pagebytesize, nrlocks, nrbarriers int) *treadmarks.TreadMarks {
+	vm1 := memory.NewVmem(memsize, pagebytesize)
+	tm1 := treadmarks.NewTreadMarks(vm1, nrProcs, nrlocks, nrbarriers)
+	return tm1
+}
 
 func bytesToFloat32(bytes []byte) float32 {
 	bits := binary.LittleEndian.Uint32(bytes)

@@ -1,16 +1,16 @@
 package Benchmarks
 
 import (
-	"DSM-project/memory"
-	"DSM-project/treadmarks"
 	"fmt"
+	"io/ioutil"
+	"log"
 	"sync"
 	"testing"
 	"time"
 )
 
 func TestJacobiProgramTreadMarks(t *testing.T) {
-	//log.SetOutput(ioutil.Discard)
+	log.SetOutput(ioutil.Discard)
 	group := sync.WaitGroup{}
 	group.Add(2)
 	go JacobiProgramTreadMarks(4, 2, true, group)
@@ -19,12 +19,6 @@ func TestJacobiProgramTreadMarks(t *testing.T) {
 		JacobiProgramTreadMarks(4, 2, false, group)
 	}()
 	group.Wait()
-}
-
-func setupTreadMarksStruct(nrProcs, memsize, pagebytesize, nrlocks, nrbarriers int) *treadmarks.TreadMarks {
-	vm1 := memory.NewVmem(memsize, pagebytesize)
-	tm1 := treadmarks.NewTreadMarks(vm1, nrProcs, nrlocks, nrbarriers)
-	return tm1
 }
 
 func JacobiProgramTreadMarks(nrIterations int, nrProcs int, isManager bool, group sync.WaitGroup) {

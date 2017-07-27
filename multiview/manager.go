@@ -58,6 +58,32 @@ func NewUpdatedManager(vm memory.VirtualMemory, lm treadmarks.LockManager, bm tr
 	return &m
 }
 
+func (m *Manager) getCopy(pageNr int) []byte {
+	m.copyLock.RLock()
+	defer m.copyLock.RUnlock()
+	return m.copies[pageNr]
+}
+
+func (m *Manager) setCopy(pageNr int, val []byte) {
+	m.copyLock.Lock()
+	defer m.copyLock.Unlock()
+	m.copies[pageNr] = val
+}
+
+func (m *Manager) deleteCopy(pageNr int) {
+	m.copyLock.Lock()
+	defer m.copyLock.Unlock()
+	delete(m.copies, pageNr)
+}
+
+func (m *Manager) doForAllCopies(f func(key int, bytes []byte)) {
+	m.copyLock.Lock()
+	defer m.copyLock.Unlock()
+	for i, bytes := range m.copies {
+		f(i, bytes)
+	}
+}
+
 func (m *Manager) Connect(address string) {
 	m.cl = network.NewClient(
 		func(message network.Message) error {
@@ -130,7 +156,7 @@ func (m *Manager) translate(message *network.MultiviewMessage) int {
 func (m *Manager) HandleReadReq(message network.MultiviewMessage) {
 	vpage := m.translate(&message)
 	m.locks[vpage].RLock()
-	p := m.copies[vpage][0]
+	p := m.getCopy(vpage)[0]
 	message.To = p
 	m.tr.Send(message)
 }
@@ -141,7 +167,7 @@ func (m *Manager) HandleWriteReq(message network.MultiviewMessage) {
 
 	m.locks[vpage].Lock()
 	message.Type = INVALIDATE_REQUEST
-	for _, p := range m.copies[vpage] {
+	for _, p := range m.getCopy(vpage) {
 		message.To = p
 		log.Println("Manager sending invalidate to ", p)
 		m.tr.Send(message)
@@ -150,16 +176,15 @@ func (m *Manager) HandleWriteReq(message network.MultiviewMessage) {
 
 func (m *Manager) HandleInvalidateReply(message network.MultiviewMessage) {
 	vpage := m.translate(&message)
-	m.copyLock.Lock()
-	if len(m.copies[vpage]) == 1 {
+
+	if len(m.getCopy(vpage)) == 1 {
 		message.Type = WRITE_REQUEST
-		message.To = m.copies[vpage][0]
+		message.To = m.getCopy(vpage)[0]
 		m.tr.Send(message)
-		m.copies[vpage] = []byte{}
+		m.setCopy(vpage, []byte{})
 	} else {
-		m.copies[vpage] = m.copies[vpage][1:]
+		m.setCopy(vpage, m.getCopy(vpage)[1:])
 	}
-	m.copyLock.Unlock()
 }
 
 func (m *Manager) HandleReadAck(message network.MultiviewMessage) {
@@ -175,15 +200,13 @@ func (m *Manager) HandleWriteAck(message network.MultiviewMessage) {
 func (m *Manager) handleAck(message network.MultiviewMessage) int {
 	vpage := m.translate(&message)
 	alreadyHas := false
-	for _, c := range m.copies[vpage] {
+	for _, c := range m.getCopy(vpage) {
 		if c == message.From {
 			alreadyHas = true
 		}
 	}
 	if !alreadyHas {
-		m.copyLock.Lock()
-		m.copies[vpage] = append(m.copies[vpage], message.From)
-		m.copyLock.Unlock()
+		m.setCopy(vpage, append(m.getCopy(vpage), message.From))
 	}
 	return vpage
 }
@@ -231,9 +254,7 @@ func (m *Manager) HandleAlloc(message network.MultiviewMessage) {
 		m.mpt[startpg+i] = mp
 		m.log[startpg+i] = startpg
 		m.locks[startpg+i] = new(sync.RWMutex)
-		m.copyLock.Lock()
-		m.copies[startpg+i] = []byte{message.From}
-		m.copyLock.Unlock()
+		m.setCopy(startpg+i, []byte{message.From})
 	}
 
 	//Send reply to alloc requester
@@ -257,9 +278,7 @@ func (m *Manager) HandleFree(message network.MultiviewMessage) {
 		m.locks[i].Lock()
 		delete(m.log, i)
 		delete(m.mpt, i)
-		m.copyLock.Lock()
-		delete(m.copies, i)
-		m.copyLock.Unlock()
+		m.deleteCopy(i)
 		delete(m.locks, i)
 	}
 	m.vm.Free(message.Fault_addr % m.vm.Size())
