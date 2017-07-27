@@ -210,7 +210,6 @@ func (t *TreadMarks) Join(address string) error {
 }
 
 func (t *TreadMarks) ReadInt(addr int) int {
-
 	b, _ := t.ReadBytes(addr, 4)
 	result, _ := binary.Varint(b)
 	return int(result)
@@ -219,7 +218,6 @@ func (t *TreadMarks) ReadInt(addr int) int {
 func (t *TreadMarks) WriteInt(addr int, i int) {
 	buff := make([]byte, 4)
 	_ = binary.PutVarint(buff, int64(i))
-
 	t.WriteBytes(addr, buff)
 }
 
