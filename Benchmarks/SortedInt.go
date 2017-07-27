@@ -47,15 +47,18 @@ func SortedIntMVBenchmark(nrProcs int, batchSize int, isManager bool, N int, Bma
 	}
 	mv.Barrier(0)
 	for i := 1; i <= Imax; i++ {
+		fmt.Println("Starting iteration ", i)
 		K[i] = int32(i)
 		K[i+Imax] = Bmax - int32(i)
 		//Calculate the order of every entry in the interval I am responsible for.
 		start := 0
 		var end int
 		for {
+			mv.Lock(0)
 			start = mv.ReadInt(prog)
 			end = Min(start+batchSize, N)
 			mv.WriteInt(prog, end)
+			mv.Release(0)
 			if start >= N {
 				break
 			}
