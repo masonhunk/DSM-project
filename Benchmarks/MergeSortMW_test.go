@@ -18,7 +18,7 @@ func TestMergeSortMW(t *testing.T) {
 	group := sync.WaitGroup{}
 	group.Add(4)
 	start := time.Now()
-	arraySize := 4096 * 10000
+	arraySize := 4096 * 1000
 	go MergeSortMW(arraySize, 4, true, 4096, &group)
 	go func() {
 		time.Sleep(time.Millisecond * 200)
