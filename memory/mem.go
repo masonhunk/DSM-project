@@ -155,9 +155,9 @@ func (m *Vmem) Read(addr int) (byte, error) {
 func (m *Vmem) ReadBytes(addr, length int) ([]byte, error) {
 
 	start := addr
-	end := addr + length - 1
+	end := addr + length
 	result := make([]byte, length)
-	copy(result, m.Stack[start:end+1])
+	copy(result, m.Stack[start:end])
 	if m.arDisabled {
 		return result, nil
 	}
@@ -210,6 +210,7 @@ func (m *Vmem) Write(addr int, val byte) error {
 func (m *Vmem) WriteBytes(addr int, val []byte) error {
 	var err error = nil
 	for b := range val {
+
 		err = m.Write(addr+b, val[b])
 	}
 	return err

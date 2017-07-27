@@ -345,6 +345,9 @@ func (pe *PageArrayEntry1) NewDiffIterator() *DiffIterator {
 	//First we populate the iterator.
 	di := new(DiffIterator)
 	di.index = make([]int, len(pe.writeNoticeArray))
+	for i := range di.index {
+		di.index[i] = len(pe.writeNoticeArray[i]) - 1
+	}
 	di.order = make([]byte, 0)
 	di.pageNr = pe.pageNr
 	di.lock = pe.RWMutex
@@ -352,7 +355,7 @@ func (pe *PageArrayEntry1) NewDiffIterator() *DiffIterator {
 
 	di.pe = pe
 	for i := range di.index {
-		di.Insert(byte(i))
+		di.Insert(byte(i + 1))
 	}
 	return di
 }
@@ -367,10 +370,10 @@ func (di *DiffIterator) Next() *Diff {
 	} else {
 		return nil
 	}
-	index := di.index[int(proc)]
-	wnrl := di.pe.writeNoticeArray[proc]
+	index := di.index[int(proc)-1]
+	wnrl := di.pe.writeNoticeArray[int(proc)-1]
 	wnr := wnrl[index]
-	di.index[int(proc)] = index + 1
+	di.index[int(proc)-1] = index - 1
 	di.Insert(proc)
 
 	return wnr.Diff
@@ -383,23 +386,25 @@ func (di *DiffIterator) Close() {
 func (di *DiffIterator) Insert(proc byte) {
 	var this *WriteNoticeRecord
 	var that *WriteNoticeRecord
-	i := int(proc)
-	if len(di.pe.writeNoticeArray[i]) < di.index[i]+1 {
+	i := int(proc) - 1
+	if di.index[i] < 0 {
 		// This proc dont have any writenotices.
 		return
 	}
+	length := len(di.order)
 	this = di.pe.writeNoticeArray[i][0]
 	for j := range di.index {
-		if j == len(di.order) {
+		if j == length {
 			//If we are at the end of the order array, we append and break.
-			di.order = append(di.order, byte(i))
+			di.order = append(di.order, proc)
+			length++
 			break
 		}
-		if len(di.pe.writeNoticeArray[di.order[j]]) < di.index[j]+1 {
+		if len(di.pe.writeNoticeArray[di.order[j]]) < di.index[di.order[j]]+1 {
 			//If that in the order array doesnt have any writenotices, we will insert this before that.
 			di.order = append(di.order, byte(0))
 			copy(di.order[j+1:], di.order[j:])
-			di.order[j] = byte(i)
+			di.order[j] = proc
 			break
 		}
 		that = di.pe.writeNoticeArray[di.order[j]][di.index[di.order[j]]]
@@ -407,14 +412,14 @@ func (di *DiffIterator) Insert(proc byte) {
 			// If this timestamp is before that, we insert this before that.
 			di.order = append(di.order, byte(0))
 			copy(di.order[j+1:], di.order[j:])
-			di.order[j] = byte(i)
+			di.order[j] = proc
 			break
 		}
 		if !this.GetTimestamp().IsAfter(*that.GetTimestamp()) && proc < di.order[j] {
-			// If this timestamp is before that, we insert this before that.
+			// If this timestamp is not after that, and this proc is smaller than that proc, we insert it before that.
 			di.order = append(di.order, byte(0))
 			copy(di.order[j+1:], di.order[j:])
-			di.order[j] = byte(i)
+			di.order[j] = proc
 			break
 		}
 	}
