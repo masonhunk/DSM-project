@@ -3,9 +3,7 @@ package Benchmarks
 import (
 	"DSM-project/memory"
 	"DSM-project/treadmarks"
-	"encoding/binary"
 	"fmt"
-	"math"
 )
 
 func setupTreadMarksStruct1(nrProcs, memsize, pagebytesize, nrlocks, nrbarriers int) *treadmarks.TreadMarks {
@@ -99,38 +97,4 @@ func SortedIntTMBenchmark(nrProcs int, batchSize int, isManager bool, N int, Bma
 		}
 	}
 
-}
-
-func intToBytes(i uint32) []byte {
-	result := make([]byte, binary.Size(i))
-	binary.PutUvarint(result, uint64(i))
-	return result
-}
-
-func bytesToInt(bytes []byte) uint32 {
-	n, _ := binary.Uvarint(bytes)
-	return uint32(n)
-}
-
-type Random struct {
-	x float64
-}
-
-func NewRandom() *Random {
-	r := Random{x: 314159265}
-	return &r
-}
-
-func (r *Random) Next() float64 {
-	result := r.x * math.Pow(2, -46)
-	r.x = math.Mod(r.x*1220703125, 70368744177664)
-	return result
-}
-
-// Here is some utility stuff
-func Min(x, y int) int {
-	if x < y {
-		return x
-	}
-	return y
 }

@@ -115,6 +115,7 @@ func (m *Manager) translate(message *network.MultiviewMessage) int {
 	m.Lock()
 	vpage := message.Fault_addr / m.vm.GetPageSize()
 	if _, ok := m.mpt[vpage]; ok == false {
+		log.Println("vpages in manager before crash:", m.mpt)
 		panic(fmt.Errorf("Vpage[%v] did not exist.", vpage))
 		return 0
 	}

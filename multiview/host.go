@@ -4,13 +4,14 @@ import (
 	"DSM-project/memory"
 	"DSM-project/network"
 	"DSM-project/treadmarks"
+	"encoding/binary"
 	"encoding/gob"
 	"errors"
 	"log"
+	"os"
 	"strconv"
 	"sync"
 	"time"
-	"os"
 )
 
 const (
@@ -152,6 +153,27 @@ func (m *Multiview) StartAndConnect(memSize, pageByteSize int, client network.IC
 	return nil
 }
 
+func (t *Multiview) ReadInt(addr int) int {
+
+	b, _ := t.ReadBytes(addr, 4)
+	result, _ := binary.Varint(b)
+	return int(result)
+}
+
+func (t *Multiview) WriteBytes(addr int, val []byte) error {
+	var err error = nil
+	for b := range val {
+		err = t.Write(addr+b, val[b])
+	}
+	return err
+}
+
+func (t *Multiview) WriteInt(addr int, i int) {
+	buff := make([]byte, 4)
+	_ = binary.PutVarint(buff, int64(i))
+	t.WriteBytes(addr, buff)
+}
+
 func (m *Multiview) Lock(id int) {
 	c := make(chan string)
 	m.sequenceNumber++
@@ -289,6 +311,10 @@ func (m *Multiview) Free(pointer, length int) error {
 
 func (m *Multiview) GetPageSize() int {
 	return m.mem.vm.GetPageSize()
+}
+
+func (m *Multiview) GetMemoryByteSize() int {
+	return m.mem.vm.Size()
 }
 
 func (m *hostMem) addFaultListener(l memory.FaultListener) {

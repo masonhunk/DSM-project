@@ -9,9 +9,9 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"os"
 	"sync"
 	"time"
-	"os"
 )
 
 //TODO remove when done. Is only there to make the compiler shut up.

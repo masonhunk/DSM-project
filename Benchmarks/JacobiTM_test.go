@@ -9,7 +9,6 @@ import (
 	"time"
 )
 
-
 func TestJacobiProgramTreadMarks(t *testing.T) {
 	//log.SetOutput(ioutil.Discard)
 	group := sync.WaitGroup{}
@@ -92,7 +91,7 @@ func JacobiProgramTreadMarks(nrIterations int, nrProcs int, isManager bool, grou
 				} else {
 					g4, _ = tm.ReadBytes(gridAddr(i, j+1), float32_BYTE_LENGTH)
 				}
-				privateArray[i][j] = (bytesToFloat32(g1) + bytesToFloat32(g2) + bytesToFloat32(g3) + bytesToFloat32(g4)) /float32(divisionAmount)
+				privateArray[i][j] = (bytesToFloat32(g1) + bytesToFloat32(g2) + bytesToFloat32(g3) + bytesToFloat32(g4)) / float32(divisionAmount)
 			}
 			tm.Barrier(1)
 			for i := begin; i < end; i++ {
@@ -118,4 +117,3 @@ func JacobiProgramTreadMarks(nrIterations int, nrProcs int, isManager bool, grou
 	}()
 
 }
-
