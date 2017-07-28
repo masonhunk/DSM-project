@@ -301,6 +301,7 @@ func (t *TreadMarks) RequestAndApplyDiffs(pageNr int) {
 	for _, msg := range messages {
 		t.Send(msg)
 	}
+
 	group.Wait()
 	//all responses have been received. Now apply them
 
@@ -308,7 +309,7 @@ func (t *TreadMarks) RequestAndApplyDiffs(pageNr int) {
 	for {
 		diff := di.Next()
 		if diff == nil {
-			di.Close()
+
 			break
 		}
 		t.ApplyDiff(pageNr, diff)

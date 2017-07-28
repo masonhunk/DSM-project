@@ -1,6 +1,7 @@
 package treadmarks
 
 import (
+	"debug/pe"
 	"errors"
 	"fmt"
 	"sync"
@@ -20,6 +21,10 @@ type PageArrayInterface1 interface {
 	SetHasCopy(pageNr int, b bool)
 	NewDiffIterator(pageNr int) *DiffIterator
 	GetMissingDiffTimestamps(pageNr int) []Pair
+	LockPage(pageNr int)
+	UnlockPage(pageNr int)
+	RLockPage(pageNr int)
+	RUnlockPage(pageNr int)
 }
 
 type PageArrayEntryInterface1 interface {
@@ -84,16 +89,26 @@ func NewPageArray1(procId *byte, nrProcs int) *PageArray1 {
 
 func (p *PageArray1) AddWriteNoticeRecord(procId byte, pageNr int, wnr *WriteNoticeRecord) {
 	pe := p.getEntry(pageNr)
-	pe.Lock()
 	pe.AddWritenoticeRecord(procId, wnr)
-	pe.Unlock()
+}
+
+func (p *PageArray1) LockPage(pageNr int) {
+	p.getEntry(pageNr).Lock()
+}
+func (p *PageArray1) UnlockPage(pageNr int) {
+	p.getEntry(pageNr).Unlock()
+}
+func (p *PageArray1) RLockPage(pageNr int) {
+	p.getEntry(pageNr).RLock()
+
+}
+func (p *PageArray1) RUnlockPage(pageNr int) {
+	p.getEntry(pageNr).RUnlock()
 }
 
 func (p *PageArray1) SetHasCopy(pageNr int, b bool) {
 	pe := p.getEntry(pageNr)
-	pe.Lock()
 	pe.SetHasCopy(b)
-	pe.Unlock()
 }
 
 func (p *PageArray1) CreateNewWritenoticeRecord(procId byte, pageNr int, int *IntervalRecord) *WriteNoticeRecord {
@@ -110,31 +125,24 @@ func (p *PageArray1) CreateNewWritenoticeRecord(procId byte, pageNr int, int *In
 
 func (p *PageArray1) GetWritenoticeRecords(procId byte, pageNr int) []*WriteNoticeRecord {
 	pe := p.getEntry(pageNr)
-	pe.RLock()
 	wnrs := pe.writeNoticeArray[int(procId)-1]
-	pe.RUnlock()
 	return wnrs
 }
 
 func (p *PageArray1) GetWritenoticeRecord(procId byte, pageNr int, timestamp Vectorclock) *WriteNoticeRecord {
 	pe := p.getEntry(pageNr)
-	pe.RLock()
 	wnr := pe.GetWriteNoticeRecord(procId, timestamp)
-	pe.RUnlock()
 	return wnr
 }
 
 func (p *PageArray1) SetDiff(pageNr int, diff DiffDescription) {
 	pe := p.getEntry(pageNr)
-	pe.RLock()
 	wnr := pe.GetWriteNoticeRecord(diff.ProcId, diff.Timestamp)
-	pe.RUnlock()
 	wnr.Diff = &diff.Diff
 }
 
 func (p *PageArray1) SetDiffs(pageNr int, diffs []DiffDescription) {
 	pe := p.getEntry(pageNr)
-	pe.RLock()
 	for _, diff := range diffs {
 		wnr := pe.GetWriteNoticeRecord(diff.ProcId, diff.Timestamp)
 		newDiff := diff.Diff
@@ -143,16 +151,13 @@ func (p *PageArray1) SetDiffs(pageNr int, diffs []DiffDescription) {
 		}
 		wnr.Diff = &newDiff
 	}
-	pe.RUnlock()
 }
 
 func (p *PageArray1) MapWriteNotices(f func(wn *WriteNoticeRecord), pageNr int, procNr byte) {
 	pe := p.getEntry(pageNr)
-	pe.RLock()
 	for _, wnr := range pe.writeNoticeArray[procNr] {
 		f(wnr)
 	}
-	pe.RUnlock()
 }
 
 func (p *PageArray1) GetCopyset(pageNr int) []byte {
@@ -162,45 +167,31 @@ func (p *PageArray1) GetCopyset(pageNr int) []byte {
 
 func (p *PageArray1) AddToCopyset(procId byte, pageNr int) {
 	pe := p.getEntry(pageNr)
-	pe.Lock()
 	pe.copySet = append(pe.copySet, procId)
-	pe.Unlock()
 }
 
 func (p *PageArray1) getEntry(pageNr int) *PageArrayEntry1 {
-	p.Lock()
+	p.RWMutex.Lock()
 	pe, ok := p.array[pageNr]
 	if !ok {
 		pe = NewPageArrayEntry1(p.procId, p.nrProcs, pageNr)
 		p.array[pageNr] = pe
 	}
-	p.Unlock()
+	p.RWMutex.Unlock()
 	return pe
 }
 
 func (p *PageArray1) HasCopy(pageNr int) bool {
-	p.Lock()
-	pe, ok := p.array[pageNr]
-	if !ok {
-		pe = NewPageArrayEntry1(p.procId, p.nrProcs, pageNr)
-		p.array[pageNr] = pe
-	}
-	p.Unlock()
-	pe.RLock()
-	result := pe.HasCopy()
-	pe.RUnlock()
-	return result
+	return p.getEntry(pageNr).HasCopy()
 }
 
 func (p *PageArray1) GetMissingDiffTimestamps(pageNr int) []Pair {
 	pe := p.getEntry(pageNr)
-	pe.RLock()
-	defer pe.RUnlock()
 	return pe.GetMissingDiffTimestamps()
 }
 
 func (p *PageArray1) NewDiffIterator(pageNr int) *DiffIterator {
-	return p.getEntry(pageNr).NewDiffIterator()
+	return NewDiffIterator(p.getEntry(pageNr))
 }
 
 type PageArrayEntry1 struct {
@@ -280,8 +271,6 @@ func (pe *PageArrayEntry1) SetDiffs(diffs []DiffDescription) {
 func (pe *PageArrayEntry1) GetMissingDiffTimestamps() []Pair {
 	//First we check if we have the page already or need to request a copy.
 	//First we find the start timestamps
-	pe.RLock()
-	defer pe.RUnlock()
 	ProcStartTS := make([]Vectorclock, pe.nrProcs)
 	ProcEndTS := make([]Vectorclock, pe.nrProcs)
 	for i := 0; i < pe.nrProcs; i++ {
@@ -334,14 +323,12 @@ func (pe *PageArrayEntry1) GetMissingDiffTimestamps() []Pair {
 }
 
 type DiffIterator struct {
-	index  []int
-	order  []byte
-	pageNr int
-	lock   *sync.RWMutex
-	pe     *PageArrayEntry1
+	index []int
+	order []byte
+	pe    *PageArrayEntry1
 }
 
-func (pe *PageArrayEntry1) NewDiffIterator() *DiffIterator {
+func NewDiffIterator(pe *PageArrayEntry1) *DiffIterator {
 	//First we populate the iterator.
 	di := new(DiffIterator)
 	di.index = make([]int, len(pe.writeNoticeArray))
@@ -349,9 +336,6 @@ func (pe *PageArrayEntry1) NewDiffIterator() *DiffIterator {
 		di.index[i] = len(pe.writeNoticeArray[i]) - 1
 	}
 	di.order = make([]byte, 0)
-	di.pageNr = pe.pageNr
-	di.lock = pe.RWMutex
-	di.lock.Lock()
 
 	di.pe = pe
 	for i := range di.index {
@@ -377,10 +361,6 @@ func (di *DiffIterator) Next() *Diff {
 	di.Insert(proc)
 
 	return wnr.Diff
-}
-
-func (di *DiffIterator) Close() {
-	di.lock.Unlock()
 }
 
 func (di *DiffIterator) Insert(proc byte) {
