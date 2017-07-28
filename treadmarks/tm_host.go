@@ -298,7 +298,7 @@ func (t *TreadMarks) updateDatastructures() {
 
 func (t *TreadMarks) RequestAndApplyDiffs(pageNr int) {
 	group := new(sync.WaitGroup)
-
+	t.RLockPage(pageNr)
 	messages := t.GenerateDiffRequests(pageNr, group)
 	if len(messages) <= 0 {
 		return
@@ -307,10 +307,10 @@ func (t *TreadMarks) RequestAndApplyDiffs(pageNr int) {
 	for _, msg := range messages {
 		t.Send(msg)
 	}
-
+	t.RUnlockPage(pageNr)
 	group.Wait()
 	//all responses have been received. Now apply them
-
+	t.LockPage(pageNr)
 	di := t.NewDiffIterator(pageNr)
 	for {
 		diff := di.Next()
@@ -320,6 +320,7 @@ func (t *TreadMarks) RequestAndApplyDiffs(pageNr int) {
 		}
 		t.ApplyDiff(pageNr, diff)
 	}
+	t.UnlockPage(pageNr)
 }
 
 func (t *TreadMarks) GenerateDiffRequests(pageNr int, group *sync.WaitGroup) []TM_Message {
@@ -358,6 +359,7 @@ func (t *TreadMarks) HandleDiffRequest(message TM_Message) TM_Message {
 	//First we populate a list of pairs with all the relevant diffs.
 	vc := message.VC
 	pageNr := message.PageNr
+	t.LockPage(pageNr)
 	mwnl := t.GetWritenoticeRecords(t.ProcId, pageNr)
 	if len(mwnl) > 0 {
 		if mwnl[0].Diff == nil {
@@ -368,6 +370,8 @@ func (t *TreadMarks) HandleDiffRequest(message TM_Message) TM_Message {
 			t.SetRights(pageNr*t.GetPageSize(), memory.READ_ONLY)
 		}
 	}
+	t.UnlockPage(pageNr)
+	t.RLockPage(pageNr)
 	diffDescriptions := make([]DiffDescription, 0)
 	for proc := byte(1); proc <= byte(t.nrProcs); proc = proc + byte(1) {
 		for _, wnr := range t.GetWritenoticeRecords(proc, pageNr) {
@@ -380,6 +384,7 @@ func (t *TreadMarks) HandleDiffRequest(message TM_Message) TM_Message {
 			}
 		}
 	}
+	t.RUnlockPage(pageNr)
 	message.To = message.From
 	message.From = t.ProcId
 	message.Diffs = diffDescriptions
@@ -389,8 +394,10 @@ func (t *TreadMarks) HandleDiffRequest(message TM_Message) TM_Message {
 }
 
 func (t *TreadMarks) HandleDiffResponse(message TM_Message) {
+	t.LockPage(message.PageNr)
 	t.SetDiffs(message.PageNr, message.Diffs)
 	t.waitgroupMap[message.Event].Done()
+	t.UnlockPage(message.PageNr)
 }
 
 func (t *TreadMarks) Shutdown() {
@@ -446,6 +453,7 @@ func (t *TreadMarks) Barrier(id int) {
 	t.eventchanMap[t.eventNumber] = c
 	//t.vc.Increment(t.ProcId)
 	t.updateDatastructures()
+
 	msg := TM_Message{
 		Type:      BARRIER_REQUEST,
 		To:        0,
