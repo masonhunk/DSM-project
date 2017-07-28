@@ -2,37 +2,40 @@ package Benchmarks
 
 import (
 	"DSM-project/multiview"
-	"io/ioutil"
 	"log"
 	"sync"
 	"time"
+	"testing"
 )
 
 var _ = log.Print
 var _ = log.Print
 
-func TestJacobiProgramMultiView() {
-	log.SetOutput(ioutil.Discard)
+
+
+func TestJacobiProgramMultiView(t *testing.T) {
+	//log.SetOutput(ioutil.Discard)
 	group := sync.WaitGroup{}
 	group.Add(4)
-	go JacobiProgramMultiView(14, 4, true, 32, &group)
+	iterations := 2
+	go JacobiProgramMultiView(iterations, 4, true, 4096, &group)
 	go func() {
 		time.Sleep(time.Millisecond * 200)
-		JacobiProgramMultiView(14, 4, false, 32, &group)
+		JacobiProgramMultiView(iterations, 4, false, 4096, &group)
 	}()
 	go func() {
 		time.Sleep(time.Millisecond * 200)
-		JacobiProgramMultiView(14, 4, false, 32, &group)
+		JacobiProgramMultiView(iterations, 4, false, 4096, &group)
 	}()
 	go func() {
 		time.Sleep(time.Millisecond * 200)
-		JacobiProgramMultiView(14, 4, false, 32, &group)
+		JacobiProgramMultiView(iterations, 4, false, 4096, &group)
 	}()
 	group.Wait()
 }
 
 func JacobiProgramMultiView(nrIterations int, nrProcs int, isManager bool, pageByteSize int, group *sync.WaitGroup) {
-	testMatrix := [][]int{
+	/*testMatrix := [][]int{
 		{5, 6, 6, 2, 5, 6, 9, 2},
 		{6, 5, 9, 5, 5, 6, 3, 7},
 		{6, 9, 7, 8, 4, 4, 6, 2},
@@ -41,9 +44,9 @@ func JacobiProgramMultiView(nrIterations int, nrProcs int, isManager bool, pageB
 		{6, 6, 4, 7, 5, 8, 3, 5},
 		{9, 3, 6, 8, 3, 3, 4, 5},
 		{2, 7, 2, 3, 2, 5, 5, 7},
-	}
-	const M = 8
-	const N = 8
+	}*/
+	const M = 64
+	const N = 64
 	const float32_BYTE_LENGTH = 4 //32 bits
 	var privateArray [][]float32  //privateArray[M][N]
 	privateArray = make([][]float32, M)
@@ -65,17 +68,18 @@ func JacobiProgramMultiView(nrIterations int, nrProcs int, isManager bool, pageB
 			for j := range row {
 				gridEntryAddresses[i][j], _ = mw.Malloc(float32_BYTE_LENGTH)
 				//placeholder value
-				var valAsBytes []byte = float32ToBytes(float32(testMatrix[i][j]))
+				var valAsBytes []byte = float32ToBytes(20.0)
 				for r, b := range valAsBytes {
 					mw.Write(gridEntryAddresses[i][j]+r, b)
 				}
 			}
 		}
-
+		log.Println("manager done writing to grid entry")
+	mw.Barrier(6)
 	} else {
 		mw.Join(M*N*float32_BYTE_LENGTH, pageByteSize)
 		//calculate the addresses of the pointers allocated by the manager host
-
+		mw.Barrier(6)
 		for i := range gridEntryAddresses {
 			row := gridEntryAddresses[i]
 			for j := range row {

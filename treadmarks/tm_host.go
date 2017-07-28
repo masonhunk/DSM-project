@@ -112,7 +112,7 @@ func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarri
 	}
 	tm.Mutex = new(sync.Mutex)
 	ds := NewDataStructure(&tm.ProcId, nrProcs)
-	tm.DataStructureInterface = *ds
+	tm.DataStructureInterface = ds
 
 	for i := range tm.locks {
 		tm.locks[i] = new(sync.Mutex)

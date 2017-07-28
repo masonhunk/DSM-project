@@ -3,19 +3,21 @@ package network
 import (
 	"log"
 	"net"
+	"github.com/orcaman/concurrent-map"
 )
 
 type Server struct {
 	port    string
-	Clients map[byte]*Transciever
+	Clients cmap.ConcurrentMap
+	//Clients map[byte]*Transciever
 	nonce   byte
 	ep      Endpoint
 	handler func(Message) error
-	logger 	CSVStructLogger
+	logger  CSVStructLogger
 }
 
 func NewServer(handler func(Message) error, port string, logger CSVStructLogger) (Server, error) {
-	s := Server{port, make(map[byte]*Transciever), byte(0), Endpoint{}, handler, logger}
+	s := Server{port, cmap.New(), byte(0), Endpoint{}, handler, logger}
 	var err error
 	s.ep, err = NewEndpoint(port, s.handleConnection)
 	if err != nil {
@@ -26,16 +28,20 @@ func NewServer(handler func(Message) error, port string, logger CSVStructLogger)
 }
 
 func (s *Server) StopServer() {
-	for _, v := range s.Clients {
-		v.Close()
+	for _, v := range s.Clients.Items() {
+		(v.(*Transciever)).Close()
 	}
 	defer s.logger.Close()
 	defer s.ep.Close()
 }
 
 func (s *Server) Send(message Message) {
-	t := s.Clients[message.GetTo()]
-	t.Send(message)
+	t, ok := s.Clients.Get(string(message.GetTo()))
+	if ok {
+		t.(*Transciever).Send(message)
+	} else {
+		panic("unable to send message at server")
+	}
 }
 
 func (s *Server) handleMessage(message Message) error {
@@ -51,6 +57,6 @@ func (s *Server) handleMessage(message Message) error {
 func (s *Server) handleConnection(conn net.Conn) {
 	t := NewTransciever(conn, s.handleMessage)
 	t.Send(SimpleMessage{From: 255, To: s.nonce, Type: "WELC"})
-	s.Clients[s.nonce] = t
+	s.Clients.Set(string(s.nonce),t)
 	s.nonce += byte(1)
 }
