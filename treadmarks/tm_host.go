@@ -85,7 +85,7 @@ type TreadMarks struct {
 	lastVCFromManager Vectorclock
 	waitgroupMap      map[byte]*sync.WaitGroup
 	haveLock          map[int]bool
-	locks             map[int]*sync.Mutex
+	locks             []*sync.Mutex
 	*sync.Mutex
 }
 
@@ -107,12 +107,16 @@ func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarri
 		eventNumber:       byte(0),
 		lastVCFromManager: *NewVectorclock(nrProcs),
 		eventLock:         new(sync.RWMutex),
-		locks:             make(map[int]*sync.Mutex),
+		locks:             make([]*sync.Mutex, nrLocks),
 		haveLock:          make(map[int]bool),
 	}
 	tm.Mutex = new(sync.Mutex)
 	ds := NewDataStructure(&tm.ProcId, nrProcs)
 	tm.DataStructureInterface = *ds
+
+	for i := range tm.locks {
+		tm.locks[i] = new(sync.Mutex)
+	}
 
 	tm.VirtualMemory.AddFaultListener(func(addr int, faultType byte, accessType string, value byte) {
 		//do fancy protocol stuff here
@@ -272,12 +276,14 @@ func (t *TreadMarks) HandleLockAcquireRequest(msg *TM_Message) TM_Message {
 	msg.From, msg.To = msg.To, msg.From
 	msg.Type = LOCK_ACQUIRE_RESPONSE
 	msg.VC = t.vc
+
 	t.Send(msg)
 	return *msg
 }
 
 func (t *TreadMarks) updateDatastructures() {
-
+	t.LockDatastructure()
+	defer t.UnlockDatastructure()
 	if len(t.twinMap) > 0 {
 		t.vc.Increment(t.ProcId)
 		interval := t.CreateNewInterval(t.ProcId, t.vc)
@@ -397,15 +403,10 @@ func (t *TreadMarks) Shutdown() {
 }
 
 func (t *TreadMarks) AcquireLock(id int) {
-	t.Lock()
-	defer t.Unlock()
-	lock := new(sync.Mutex)
-	lock.Lock()
-	t.locks[id] = lock
 	if t.haveLock[id] == true {
+		t.locks[id].Lock()
 		return
 	}
-
 	c := make(chan string)
 	t.eventchanMap[t.eventNumber] = c
 	msg := TM_Message{
@@ -425,8 +426,6 @@ func (t *TreadMarks) AcquireLock(id int) {
 }
 
 func (t *TreadMarks) ReleaseLock(id int) {
-	t.Lock()
-	defer t.Unlock()
 	t.locks[id].Unlock()
 	if t.haveLock[id] {
 		return
