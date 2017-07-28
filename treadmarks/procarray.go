@@ -47,7 +47,6 @@ type ProcArray1 struct {
 	managerTimestamp Vectorclock
 	locks            []*sync.RWMutex
 	dict             map[string]*IntervalRecord
-
 }
 
 func (po *ProcArray1) Lock(procId byte) {
@@ -56,7 +55,6 @@ func (po *ProcArray1) Lock(procId byte) {
 	}
 	po.locks[int(procId)-1].Lock()
 }
-
 
 func (po *ProcArray1) RLock(procId byte) {
 	if po.locks[int(procId)-1] == nil {
@@ -77,7 +75,6 @@ func (po *ProcArray1) RUnlock(procId byte) {
 	}
 	po.locks[int(procId)-1].RUnlock()
 }
-
 
 func NewProcArray(nrProcs int) *ProcArray1 {
 	po := new(ProcArray1)
@@ -150,7 +147,6 @@ func (po *ProcArray1) GetUnseenIntervalsAtProc(procId byte, ts Vectorclock) []In
 	}
 	return result
 }
-
 
 func (po *ProcArray1) MapIntervalRecords(procId byte, f func(ir *IntervalRecord)) {
 	for _, int := range po.array[int(procId)-1] {

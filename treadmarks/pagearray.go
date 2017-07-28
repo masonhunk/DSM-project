@@ -1,7 +1,6 @@
 package treadmarks
 
 import (
-	"debug/pe"
 	"errors"
 	"fmt"
 	"sync"
@@ -74,8 +73,8 @@ func (wnr *WriteNoticeRecord) GetTimestamp() *Vectorclock {
 type PageArray1 struct {
 	nrProcs int
 	array   map[int]*PageArrayEntry1
-	*sync.RWMutex
-	procId *byte
+	mutex   *sync.RWMutex
+	procId  *byte
 }
 
 func NewPageArray1(procId *byte, nrProcs int) *PageArray1 {
@@ -83,7 +82,7 @@ func NewPageArray1(procId *byte, nrProcs int) *PageArray1 {
 	p.nrProcs = nrProcs
 	p.procId = procId
 	p.array = make(map[int]*PageArrayEntry1)
-	p.RWMutex = new(sync.RWMutex)
+	p.mutex = new(sync.RWMutex)
 	return p
 }
 
@@ -171,13 +170,13 @@ func (p *PageArray1) AddToCopyset(procId byte, pageNr int) {
 }
 
 func (p *PageArray1) getEntry(pageNr int) *PageArrayEntry1 {
-	p.RWMutex.Lock()
+	p.mutex.Lock()
 	pe, ok := p.array[pageNr]
 	if !ok {
 		pe = NewPageArrayEntry1(p.procId, p.nrProcs, pageNr)
 		p.array[pageNr] = pe
 	}
-	p.RWMutex.Unlock()
+	p.mutex.Unlock()
 	return pe
 }
 
