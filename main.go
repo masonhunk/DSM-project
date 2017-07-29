@@ -32,15 +32,15 @@ func main() {
 	case "TSP":
 		//Run tsp algorithm
 	case "JacobiMW":
-		Benchmarks.TestJacobiProgramMultiView()
+		//Benchmarks.TestJacobiProgramMultiView()
 	case "JacobiMW-manager":
-		wg := sync.WaitGroup{}
-		wg.Add(1)
-		Benchmarks.JacobiProgramMultiView(10, 2, true, 32, &wg)
+		//wg := sync.WaitGroup{}
+		//wg.Add(1)
+		//Benchmarks.JacobiProgramMultiView(10, 2, true, 32, &wg)
 	case "JacobiMW-host":
 		wg := sync.WaitGroup{}
 		wg.Add(1)
-		Benchmarks.JacobiProgramMultiView(10, 2, false, 32, &wg)
+		//Benchmarks.JacobiProgramMultiView(10, 2, false, 32, &wg)
 	case "SortedIntTM":
 		Benchmarks.SortedIntTMBenchmark(*nrprocs, 1000, *manager, 8388608, 524288, 10)
 	default:

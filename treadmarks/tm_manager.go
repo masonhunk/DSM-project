@@ -7,6 +7,7 @@ import (
 	"net"
 	"strconv"
 	"sync"
+	"log"
 )
 
 var _ = fmt.Print //TODO: remove when done
@@ -43,9 +44,10 @@ func (lm *LockManagerImp) HandleLockAcquire(id int) byte {
 		lock = new(sync.Mutex)
 		lm.locks[id] = lock
 	}
+	lastId := lm.last[id]
 	lm.Unlock()
 	lock.Lock()
-	return lm.last[id]
+	return lastId
 }
 
 func (lm *LockManagerImp) HandleLockRelease(id int, newOwner byte) error {
@@ -86,6 +88,7 @@ func (bm *BarrierManagerImp) HandleBarrier(id int, f func()) *sync.WaitGroup {
 	f()
 	barrier.Done()
 	bm.Unlock()
+	log.Println("process arrived at barrier", id)
 	barrier.Wait()
 	bm.Lock()
 	if bm.barriers[id] != nil {

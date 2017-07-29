@@ -4,7 +4,6 @@ import (
 	"DSM-project/multiview"
 	"fmt"
 	"github.com/stretchr/testify/assert"
-	"io/ioutil"
 	"log"
 	"math/rand"
 	"runtime"
@@ -12,6 +11,7 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"io/ioutil"
 )
 
 func TestMergeSortMW(t *testing.T) {
@@ -19,8 +19,8 @@ func TestMergeSortMW(t *testing.T) {
 	log.SetOutput(ioutil.Discard)
 	group := sync.WaitGroup{}
 	start := time.Now()
-	arraySize := 4096 * 100
-	nrProcs := 8
+	arraySize := 4096 * 10
+	nrProcs := 16
 	group.Add(nrProcs)
 	go MergeSortMW(arraySize, nrProcs, true, 4096, &group)
 	for i := 0; i < nrProcs-1; i++ {
