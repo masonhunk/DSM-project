@@ -98,7 +98,7 @@ func (p ProcArray) GetUnseenIntervalsAtProc(ts Vectorclock, procNr byte) []Inter
 	}
 	for _, iRecord := range p[int(procNr)] {
 		// if this record has older ts than the requester, break
-		if iRecord.Timestamp.IsBefore(ts) || iRecord.Timestamp.Equals(ts) {
+		if iRecord.Timestamp.IsBefore(&ts) || iRecord.Timestamp.Equals(&ts) {
 			break
 		}
 		i := Interval{
@@ -179,12 +179,12 @@ func (pe *PageArrayEntry) OrderedDiffChannel() chan *Diff {
 					done--
 					continue
 				}
-				ts1 := wnra[i][index[i]].Interval.Timestamp
+				ts1 := &wnra[i][index[i]].Interval.Timestamp
 				for j := 0; j < procNr; j++ {
 					if index[j] < 0 {
 						continue
 					}
-					ts2 := wnra[j][index[j]].Interval.Timestamp
+					ts2 := &wnra[j][index[j]].Interval.Timestamp
 					if ts2.IsBefore(ts1) {
 						smallest = false
 						break

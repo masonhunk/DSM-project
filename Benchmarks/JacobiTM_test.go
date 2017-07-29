@@ -2,16 +2,14 @@ package Benchmarks
 
 import (
 	"fmt"
-	"io/ioutil"
-	"log"
 	"sync"
 	"testing"
 	"time"
 )
 
 func TestJacobiProgramTreadMarks(t *testing.T) {
-	log.SetOutput(ioutil.Discard)
-	group := sync.WaitGroup{}
+	//log.SetOutput(ioutil.Discard)
+	group := new(sync.WaitGroup)
 	group.Add(2)
 	go JacobiProgramTreadMarks(4, 2, true, group)
 	go func() {
@@ -21,7 +19,7 @@ func TestJacobiProgramTreadMarks(t *testing.T) {
 	group.Wait()
 }
 
-func JacobiProgramTreadMarks(nrIterations int, nrProcs int, isManager bool, group sync.WaitGroup) {
+func JacobiProgramTreadMarks(nrIterations int, nrProcs int, isManager bool, group *sync.WaitGroup) {
 	const M = 32
 	const N = 32
 	const float32_BYTE_LENGTH = 4 //32 bits
@@ -108,6 +106,7 @@ func JacobiProgramTreadMarks(nrIterations int, nrProcs int, isManager bool, grou
 		}
 		fmt.Println("exiting algorithm...")
 		group.Done()
+
 	}()
 
 }

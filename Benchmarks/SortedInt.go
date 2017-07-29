@@ -2,17 +2,46 @@ package Benchmarks
 
 import (
 	"DSM-project/memory"
+	"DSM-project/multiview"
 	"DSM-project/treadmarks"
 	"fmt"
-	"DSM-project/multiview"
 	"io/ioutil"
 	"log"
+	"sync"
+	"time"
 )
 
 func setupTreadMarksStruct1(nrProcs, memsize, pagebytesize, nrlocks, nrbarriers int) *treadmarks.TreadMarks {
 	vm1 := memory.NewVmem(memsize, pagebytesize)
 	tm1 := treadmarks.NewTreadMarks(vm1, nrProcs, nrlocks, nrbarriers)
 	return tm1
+}
+
+func TestMultipleSortedIntTM() {
+	//log.SetOutput(ioutil.Discard)
+	nrProcs := 3
+	batchsize := 1000
+	N := 100
+	Bmax := int32(10)
+	Imax := 10
+	group := new(sync.WaitGroup)
+	group.Add(nrProcs)
+
+	go func() {
+		SortedIntTMBenchmark(nrProcs, batchsize, true, N, Bmax, Imax)
+		group.Done()
+	}()
+	go func() {
+		time.Sleep(time.Millisecond * 200)
+		SortedIntTMBenchmark(nrProcs, batchsize, false, N, Bmax, Imax)
+		group.Done()
+	}()
+	go func() {
+		time.Sleep(time.Millisecond * 200)
+		SortedIntTMBenchmark(nrProcs, batchsize, false, N, Bmax, Imax)
+		group.Done()
+	}()
+	group.Wait()
 }
 
 func SortedIntMVBenchmark(nrProcs int, batchSize int, isManager bool, N int, Bmax int32, Imax int) {
@@ -112,7 +141,7 @@ func SortedIntMVBenchmark(nrProcs int, batchSize int, isManager bool, N int, Bma
 //Benchmarks.SortedIntBenchmark(1, 1000, true, 8388608, 524288, 10)
 func SortedIntTMBenchmark(nrProcs int, batchSize int, isManager bool, N int, Bmax int32, Imax int) {
 	//First we do setup.
-	log.SetOutput(ioutil.Discard)
+	//log.SetOutput(ioutil.Discard)
 	rand := NewRandom()
 	pagebytesize := 8
 	tm := setupTreadMarksStruct1(nrProcs, (((N+1)*4)/pagebytesize+1)*pagebytesize, 8, 2, 3)
@@ -132,6 +161,7 @@ func SortedIntTMBenchmark(nrProcs int, batchSize int, isManager bool, N int, Bma
 	for i := 0; i < N; i++ {
 		K[i] = int32(float64(Bmax) * ((rand.Next() + rand.Next() + rand.Next() + rand.Next()) / 4))
 	}
+	tm.Barrier(0)
 	for i := 1; i <= Imax; i++ {
 		fmt.Println("Starting iteration: ", i)
 		K[i] = int32(i)

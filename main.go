@@ -44,7 +44,7 @@ func main() {
 	case "SortedIntTM":
 		Benchmarks.SortedIntTMBenchmark(*nrprocs, 1000, *manager, 8388608, 524288, 10)
 	default:
-
+		Benchmarks.TestMultipleSortedIntTM()
 	}
 
 	if *memprofile == "" {

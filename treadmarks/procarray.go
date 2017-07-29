@@ -50,29 +50,17 @@ type ProcArray1 struct {
 }
 
 func (po *ProcArray1) LockProcArray(procId byte) {
-	if po.locks[int(procId)-1] == nil {
-		po.locks[int(procId)-1] = new(sync.RWMutex)
-	}
 	po.locks[int(procId)-1].Lock()
 }
 
 func (po *ProcArray1) RLockProcArray(procId byte) {
-	if po.locks[int(procId)-1] == nil {
-		po.locks[int(procId)-1] = new(sync.RWMutex)
-	}
 	po.locks[int(procId)-1].RLock()
 }
 
 func (po *ProcArray1) UnlockProcArray(procId byte) {
-	if po.locks[int(procId)-1] == nil {
-		po.locks[int(procId)-1] = new(sync.RWMutex)
-	}
 	po.locks[int(procId)-1].Unlock()
 }
 func (po *ProcArray1) RUnlockProcArray(procId byte) {
-	if po.locks[int(procId)-1] == nil {
-		po.locks[int(procId)-1] = new(sync.RWMutex)
-	}
 	po.locks[int(procId)-1].RUnlock()
 }
 
@@ -123,18 +111,23 @@ func (po *ProcArray1) GetAllUnseenIntervals(ts Vectorclock) []Interval {
 }
 
 func (po *ProcArray1) GetUnseenIntervalsAtProc(procId byte, ts Vectorclock) []Interval {
+	fmt.Println("We are trying to get unseen intervals.")
 	result := make([]Interval, 0)
+	fmt.Println("Trying to lock proc array.")
+	po.RLockProcArray(procId)
+	fmt.Println("Got lock.")
 	array := po.array[int(procId)-1]
 	var thisTs Vectorclock
 	for i := len(array) - 1; i >= 0; i-- {
 		thisTs = array[i].Timestamp
-		if thisTs.Equals(ts) {
+		if thisTs.Equals(&ts) {
 			break
-		} else if thisTs.IsBefore(ts) {
+		} else if thisTs.IsBefore(&ts) {
 			break
 		}
-		wns := make([]WriteNotice, len(array[i].WriteNotices))
 		wnrs := array[i].WriteNotices
+		wns := make([]WriteNotice, len(wnrs))
+
 		for i, wnr := range wnrs {
 			wns[i] = WriteNotice{PageNr: wnr.pageNr}
 		}
@@ -145,6 +138,9 @@ func (po *ProcArray1) GetUnseenIntervalsAtProc(procId byte, ts Vectorclock) []In
 		}
 		result = append(result, interval)
 	}
+	fmt.Println("Releasing lock for proc array")
+	po.RUnlockProcArray(procId)
+	fmt.Println("Returning from get unseen intervals at proc.")
 	return result
 }
 
