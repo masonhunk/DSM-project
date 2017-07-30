@@ -213,9 +213,10 @@ func (m *Manager) handleAck(message network.MultiviewMessage) int {
 
 func (m *Manager) HandleAlloc(message network.MultiviewMessage) {
 	m.Lock()
-	size := message.Minipage_size
-	ptr, _ := m.vm.Malloc(size)
 
+	size := message.Minipage_size
+	ptr, err := m.vm.Malloc(size)
+	panicOnErr(err)
 	//generate minipages
 	sizeLeft := size
 	i := ptr

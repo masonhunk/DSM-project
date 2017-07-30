@@ -11,22 +11,22 @@ import (
 	"sync"
 	"testing"
 	"time"
-	"io/ioutil"
 )
 
 func TestMergeSortMW(t *testing.T) {
 	runtime.GOMAXPROCS(4) // or 2 or 4
-	log.SetOutput(ioutil.Discard)
+	//log.SetOutput(ioutil.Discard)
 	group := sync.WaitGroup{}
 	start := time.Now()
-	arraySize := 4096 * 10
+	pageSize := 4096
+	arraySize := 4096*80
 	nrProcs := 16
 	group.Add(nrProcs)
-	go MergeSortMW(arraySize, nrProcs, true, 4096, &group)
+	go MergeSortMW(arraySize, nrProcs, true, pageSize, &group)
 	for i := 0; i < nrProcs-1; i++ {
 		go func() {
-			time.Sleep(time.Millisecond * 200)
-			MergeSortMW(arraySize, nrProcs, false, 4096, &group)
+			time.Sleep(150*time.Millisecond)
+			MergeSortMW(arraySize, nrProcs, false, pageSize, &group)
 		}()
 	}
 	group.Wait()
@@ -49,6 +49,7 @@ func MergeSortMW(arraySize int, nrProcs int, isManager bool, pageByteSize int, g
 	mw := multiview.NewMultiView()
 	if isManager {
 		mw.Initialize(INT_BYTE_LENGTH*ARRAY_SIZE, pageByteSize, nrProcs)
+		mw.Barrier(0)
 		rand.Seed(time.Now().UnixNano())
 		for i := range arraySectionAddresses {
 			arraySectionAddresses[i], _ = mw.Malloc(cellByteSize)
@@ -59,12 +60,12 @@ func MergeSortMW(arraySize int, nrProcs int, isManager bool, pageByteSize int, g
 				mw.WriteInt(arraySectionAddresses[i]+j*INT_BYTE_LENGTH, rn)
 			}
 		}
-		log.Println("address array at manager:", arraySectionAddresses)
-		mw.Barrier(0)
+		mw.Barrier(3)
 
 	} else {
 		mw.Join(ARRAY_SIZE*INT_BYTE_LENGTH, pageByteSize)
 		mw.Barrier(0)
+		mw.Barrier(3)
 		//calculate the addresses of the pointers allocated by the manager host
 		for i, _ := range arraySectionAddresses {
 			k := cellByteSize * i

@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 	"testing"
+	"fmt"
 )
 
 var _ = log.Print
@@ -17,21 +18,22 @@ func TestJacobiProgramMultiView(t *testing.T) {
 	//log.SetOutput(ioutil.Discard)
 	group := sync.WaitGroup{}
 	group.Add(4)
-	iterations := 2
-	go JacobiProgramMultiView(iterations, 4, true, 4096, &group)
-	go func() {
-		time.Sleep(time.Millisecond * 200)
-		JacobiProgramMultiView(iterations, 4, false, 4096, &group)
-	}()
-	go func() {
-		time.Sleep(time.Millisecond * 200)
-		JacobiProgramMultiView(iterations, 4, false, 4096, &group)
-	}()
-	go func() {
-		time.Sleep(time.Millisecond * 200)
-		JacobiProgramMultiView(iterations, 4, false, 4096, &group)
-	}()
+	start := time.Now()
+	pageSize := 4096
+	nrIterations := 4096*80
+	nrProcs := 16
+	group.Add(nrProcs)
+	go JacobiProgramMultiView(nrIterations,nrProcs,true,pageSize,&group)
+	for i := 0; i < nrProcs-1; i++ {
+		go func() {
+			time.Sleep(150*time.Millisecond)
+			go JacobiProgramMultiView(nrIterations,nrProcs,false,pageSize,&group)
+		}()
+	}
 	group.Wait()
+	end := time.Now()
+	diff := end.Sub(start)
+	fmt.Println("execution time:", diff.String())
 }
 
 func JacobiProgramMultiView(nrIterations int, nrProcs int, isManager bool, pageByteSize int, group *sync.WaitGroup) {
