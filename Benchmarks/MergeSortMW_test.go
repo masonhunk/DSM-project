@@ -19,13 +19,13 @@ func TestMergeSortMW(t *testing.T) {
 	group := sync.WaitGroup{}
 	start := time.Now()
 	pageSize := 4096
-	arraySize := 4096*80
+	arraySize := 4096 * 80
 	nrProcs := 16
 	group.Add(nrProcs)
 	go MergeSortMW(arraySize, nrProcs, true, pageSize, &group)
 	for i := 0; i < nrProcs-1; i++ {
 		go func() {
-			time.Sleep(150*time.Millisecond)
+			time.Sleep(150 * time.Millisecond)
 			MergeSortMW(arraySize, nrProcs, false, pageSize, &group)
 		}()
 	}

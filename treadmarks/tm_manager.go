@@ -7,7 +7,6 @@ import (
 	"net"
 	"strconv"
 	"sync"
-	"log"
 )
 
 var _ = fmt.Print //TODO: remove when done
@@ -88,7 +87,6 @@ func (bm *BarrierManagerImp) HandleBarrier(id int, f func()) *sync.WaitGroup {
 	f()
 	barrier.Done()
 	bm.Unlock()
-	log.Println("process arrived at barrier", id)
 	barrier.Wait()
 	bm.Lock()
 	if bm.barriers[id] != nil {

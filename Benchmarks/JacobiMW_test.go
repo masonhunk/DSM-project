@@ -2,32 +2,30 @@ package Benchmarks
 
 import (
 	"DSM-project/multiview"
+	"fmt"
 	"log"
 	"sync"
-	"time"
 	"testing"
-	"fmt"
+	"time"
 )
 
 var _ = log.Print
 var _ = log.Print
 
-
-
 func TestJacobiProgramMultiView(t *testing.T) {
 	//log.SetOutput(ioutil.Discard)
 	group := sync.WaitGroup{}
-	group.Add(4)
 	start := time.Now()
 	pageSize := 4096
-	nrIterations := 4096*80
-	nrProcs := 16
+	nrIterations := 5
+	nrProcs := 8
 	group.Add(nrProcs)
-	go JacobiProgramMultiView(nrIterations,nrProcs,true,pageSize,&group)
+	group.Add(nrProcs)
+	go JacobiProgramMultiView(nrIterations, nrProcs, true, pageSize, &group)
 	for i := 0; i < nrProcs-1; i++ {
 		go func() {
-			time.Sleep(150*time.Millisecond)
-			go JacobiProgramMultiView(nrIterations,nrProcs,false,pageSize,&group)
+			time.Sleep(150 * time.Millisecond)
+			go JacobiProgramMultiView(nrIterations, nrProcs, false, pageSize, &group)
 		}()
 	}
 	group.Wait()
@@ -47,8 +45,8 @@ func JacobiProgramMultiView(nrIterations int, nrProcs int, isManager bool, pageB
 		{9, 3, 6, 8, 3, 3, 4, 5},
 		{2, 7, 2, 3, 2, 5, 5, 7},
 	}*/
-	const M = 64
-	const N = 64
+	const M = 16
+	const N = 16
 	const float32_BYTE_LENGTH = 4 //32 bits
 	var privateArray [][]float32  //privateArray[M][N]
 	privateArray = make([][]float32, M)
@@ -76,12 +74,12 @@ func JacobiProgramMultiView(nrIterations int, nrProcs int, isManager bool, pageB
 				}
 			}
 		}
-		log.Println("manager done writing to grid entry")
-	mw.Barrier(6)
+		log.Println("manager done writing to grid entry with result:", gridEntryAddresses)
+		mw.Barrier(0)
 	} else {
 		mw.Join(M*N*float32_BYTE_LENGTH, pageByteSize)
 		//calculate the addresses of the pointers allocated by the manager host
-		mw.Barrier(6)
+		mw.Barrier(0)
 		for i := range gridEntryAddresses {
 			row := gridEntryAddresses[i]
 			for j := range row {
@@ -95,12 +93,13 @@ func JacobiProgramMultiView(nrIterations int, nrProcs int, isManager bool, pageB
 			}
 		}
 	}
-	mw.Barrier(0)
 
 	length := M / nrProcs
 	begin := length * int(mw.Id-1)
 	end := length * int(mw.Id)
-
+	if end <= begin {
+		panic("begin is larger than end")
+	}
 	mw.Barrier(1)
 
 	for iter := 1; iter <= nrIterations; iter++ {
@@ -142,9 +141,7 @@ func JacobiProgramMultiView(nrIterations int, nrProcs int, isManager bool, pageB
 				for j := 0; j < N; j++ {
 					addr := gridEntryAddresses[i][j]
 					var valAsBytes []byte = float32ToBytes(privateArray[i][j])
-					for r, b := range valAsBytes {
-						mw.Write(addr+r, b)
-					}
+					mw.WriteBytes(addr, valAsBytes)
 				}
 			}
 			mw.Barrier(3)
@@ -161,7 +158,6 @@ func JacobiProgramMultiView(nrIterations int, nrProcs int, isManager bool, pageB
 
 		if isManager {
 			mw.Lock(0)
-			log.Println("result at host 1:")
 			for i := range resultMatrix {
 				row := resultMatrix[i]
 				for j := range row {
@@ -169,7 +165,7 @@ func JacobiProgramMultiView(nrIterations int, nrProcs int, isManager bool, pageB
 					resultMatrix[i][j] = bytesToFloat32(res)
 				}
 			}
-			log.Println(resultMatrix)
+			log.Println("result at host", mw.Id, ":", resultMatrix)
 			mw.Release(0)
 			mw.Barrier(5)
 			mw.Shutdown()
@@ -177,7 +173,6 @@ func JacobiProgramMultiView(nrIterations int, nrProcs int, isManager bool, pageB
 
 		} else {
 			mw.Lock(0)
-			log.Println("result at host 2:")
 			for i := range resultMatrix {
 				row := resultMatrix[i]
 				for j := range row {
@@ -185,7 +180,7 @@ func JacobiProgramMultiView(nrIterations int, nrProcs int, isManager bool, pageB
 					resultMatrix[i][j] = bytesToFloat32(res)
 				}
 			}
-			log.Println(resultMatrix)
+			log.Println("result at host", mw.Id, ":", resultMatrix)
 
 			mw.Release(0)
 			mw.Barrier(5)
