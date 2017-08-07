@@ -7,7 +7,6 @@ import (
 	"net"
 	"strconv"
 	"sync"
-	"log"
 )
 
 var _ = fmt.Print //TODO: remove when done

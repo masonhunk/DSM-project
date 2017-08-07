@@ -228,3 +228,28 @@ func TestConsecutiveWritesAndReads(t *testing.T) {
 	mw2.Leave()
 	mw1.Shutdown()
 }
+
+func TestReacquireLock(t *testing.T) {
+	mw1 := NewMultiView()
+	mw2 := NewMultiView()
+	mw1.Initialize(1024, 32, 2)
+	mw2.Join(1024, 32)
+	started := make(chan bool)
+	done := make(chan bool)
+	mw1.Lock(1)
+	go func() {
+		started <- true
+		mw2.Lock(1)
+		done <- true
+	}()
+
+	mw1.Lock(1)
+	<- started
+	mw1.Release(1)
+	<- done
+	mw2.Release(1)
+
+	time.Sleep(100 * time.Millisecond)
+	mw2.Leave()
+	mw1.Shutdown()
+}

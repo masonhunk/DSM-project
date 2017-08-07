@@ -1,9 +1,9 @@
 package network
 
 import (
+	"github.com/orcaman/concurrent-map"
 	"log"
 	"net"
-	"github.com/orcaman/concurrent-map"
 )
 
 type Server struct {
@@ -57,6 +57,6 @@ func (s *Server) handleMessage(message Message) error {
 func (s *Server) handleConnection(conn net.Conn) {
 	t := NewTransciever(conn, s.handleMessage)
 	t.Send(SimpleMessage{From: 255, To: s.nonce, Type: "WELC"})
-	s.Clients.Set(string(s.nonce),t)
+	s.Clients.Set(string(s.nonce), t)
 	s.nonce += byte(1)
 }

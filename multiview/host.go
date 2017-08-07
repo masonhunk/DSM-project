@@ -42,6 +42,7 @@ type Multiview struct {
 	server         network.Server
 	chanMap        map[byte]chan string
 	sequenceNumber byte
+	hasLock		   map[int]bool
 }
 
 type hostMem struct {
@@ -69,6 +70,7 @@ func NewMultiView() *Multiview {
 	gob.Register(network.SimpleMessage{})
 	m := new(Multiview)
 	m.chanMap = make(map[byte]chan string)
+	m.hasLock = make(map[int]bool)
 	return m
 }
 
@@ -138,7 +140,7 @@ func (m *Multiview) Initialize(memSize, pageByteSize int, nrProcs int) error {
 func (m *Multiview) StartAndConnect(memSize, pageByteSize int, client network.IClient) error {
 	vm := memory.NewVmem(memSize, pageByteSize)
 	m.mem = NewHostMem(vm)
-	for i := 0; i < memSize/pageByteSize; i++ {
+	for i := 0; i < max(memSize, pageByteSize)/pageByteSize; i++ {
 		m.setInAccessMap(i, memory.READ_WRITE)
 	}
 	m.conn = client
@@ -178,6 +180,10 @@ func (t *Multiview) WriteInt(addr int, i int) {
 }
 
 func (m *Multiview) Lock(id int) {
+	//only send lock request if I don't already have it.
+	if m.hasLock[id] {
+		return
+	}
 	c := make(chan string)
 	m.sequenceNumber++
 	i := m.sequenceNumber
@@ -191,6 +197,7 @@ func (m *Multiview) Lock(id int) {
 	}
 	m.conn.Send(msg)
 	<-c
+	m.hasLock[id] = true
 	m.chanMap[i] = nil
 }
 
@@ -201,6 +208,7 @@ func (m *Multiview) Release(id int) {
 		To:   byte(0),
 		Id:   id,
 	}
+	m.hasLock[id] = false
 	m.conn.Send(msg)
 }
 
@@ -241,7 +249,7 @@ func (m *Multiview) Read(addr int) (byte, error) {
 
 func (m *Multiview) ReadBytes(addr, length int) ([]byte, error) {
 	result := make([]byte, length)
-	for i := 0; i < length; i++ {
+	for i := range result {
 		result[i], _ = m.Read(addr + i)
 	}
 	return result, nil
@@ -285,7 +293,7 @@ func (m *Multiview) Malloc(sizeInBytes int) (int, error) {
 	m.chanMap[i] = nil
 	res, err := strconv.Atoi(s)
 	if err != nil {
-		return 0, errors.New(s)
+		return -1, errors.New(s)
 	}
 	return res, nil
 }
