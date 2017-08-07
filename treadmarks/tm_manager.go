@@ -78,6 +78,7 @@ func NewBarrierManagerImp(nodes int) *BarrierManagerImp {
 }
 
 func (bm *BarrierManagerImp) HandleBarrier(id int, f func()) *sync.WaitGroup {
+	fmt.Println("Barrier manager is trying to handle barrier request.")
 	bm.Lock()
 	barrier, ok := bm.barriers[id]
 	if !ok {
@@ -85,11 +86,15 @@ func (bm *BarrierManagerImp) HandleBarrier(id int, f func()) *sync.WaitGroup {
 		barrier.Add(bm.nodes)
 		bm.barriers[id] = barrier
 	}
+	fmt.Println("Barrier manager is doing function.")
 	f()
+	fmt.Println("Barrier manager is done with function.")
 	barrier.Done()
 	bm.Unlock()
 	log.Println("process arrived at barrier", id)
+	fmt.Println("Barrier manager is waiting for other hosts.")
 	barrier.Wait()
+	fmt.Println("Barrier manager is done waiting for other hosts.")
 	bm.Lock()
 	if bm.barriers[id] != nil {
 		delete(bm.barriers, id)
@@ -188,15 +193,19 @@ func (m *tm_Manager) handleLockReleaseRequest(message *TM_Message) error {
 }
 
 func (m *tm_Manager) handleBarrierRequest(message *TM_Message) *TM_Message {
+	fmt.Println("Manager got barrier request: ", message)
 	m.doOnce = new(sync.Once)
+	fmt.Println("Manager is saving information about message")
 	var msg TM_Message = *message
 	id := message.Id
+	fmt.Println("Manager is handling barrier request.")
 	m.HandleBarrier(id, func() {
+		fmt.Println("Manager trying to incorporate intervals from ", message.From, " into datastructure.")
 		if m.tm != nil {
 			m.tm.incorporateIntervalsIntoDatastructures(message)
 			m.vc = *m.vc.Merge(message.VC)
-
 		}
+		fmt.Println("Manager done incorporating intervals form ", message.From, " into datastructure")
 	})
 	//barrier over
 

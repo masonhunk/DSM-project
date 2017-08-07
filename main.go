@@ -34,7 +34,6 @@ func main() {
 	case "JacobiMW":
 		//Benchmarks.TestJacobiProgramMultiView()
 	case "JacobiMW-manager":
-		//wg := sync.WaitGroup{}
 		//wg.Add(1)
 		//Benchmarks.JacobiProgramMultiView(10, 2, true, 32, &wg)
 	case "JacobiMW-host":

@@ -60,11 +60,11 @@ func (wnr *WriteNoticeRecord) GetId() int {
 	return wnr.Id
 }
 
-func (wnr *WriteNoticeRecord) GetTimestamp() *Vectorclock {
+func (wnr *WriteNoticeRecord) GetTimestamp() Vectorclock {
 	if wnr.Interval != nil {
-		return &wnr.Interval.Timestamp
+		return wnr.Interval.Timestamp
 	}
-	return &Vectorclock{}
+	return Vectorclock{}
 }
 
 type PageArray1 struct {
@@ -89,16 +89,20 @@ func (p *PageArray1) AddWriteNoticeRecord(procId byte, pageNr int, wnr *WriteNot
 }
 
 func (p *PageArray1) LockPage(pageNr int) {
+	fmt.Println(p.procId, " ---- Locking page ", pageNr)
 	p.getEntry(pageNr).Lock()
 }
 func (p *PageArray1) UnlockPage(pageNr int) {
+	fmt.Println(p.procId, " ----- Unlokcing page ", pageNr)
 	p.getEntry(pageNr).Unlock()
 }
 func (p *PageArray1) RLockPage(pageNr int) {
+	fmt.Println(p.procId, " ---- RLocking page ", pageNr)
 	p.getEntry(pageNr).RLock()
 
 }
 func (p *PageArray1) RUnlockPage(pageNr int) {
+	fmt.Println(p.procId, " ---- RUnlocking page ", pageNr)
 	p.getEntry(pageNr).RUnlock()
 }
 
@@ -242,10 +246,8 @@ func (pe *PageArrayEntry1) GetWriteNoticeRecord(procId byte, timestamp Vectorclo
 
 func (pe *PageArrayEntry1) SetDiff(diffDesc DiffDescription) {
 	newDiff := diffDesc.Diff
-	fmt.Println(*pe.procId, " --- Tried to set diff.")
-	fmt.Println(*pe.procId, " --- Made lookup with timestamp: ", diffDesc.Timestamp, " and procid: ", diffDesc.ProcId)
 	if pe.GetWriteNoticeRecord(diffDesc.ProcId, diffDesc.Timestamp) == nil {
-		fmt.Println(pe.procId, " --- That writenoticerecord did not exist.")
+		return
 	}
 	pe.GetWriteNoticeRecord(diffDesc.ProcId, diffDesc.Timestamp).Diff = &newDiff
 }
@@ -253,41 +255,41 @@ func (pe *PageArrayEntry1) SetDiff(diffDesc DiffDescription) {
 func (pe *PageArrayEntry1) GetMissingDiffTimestamps() []Pair {
 	//First we check if we have the page already or need to request a copy.
 	//First we find the start timestamps
-	ProcStartTS := make([]*Vectorclock, pe.nrProcs)
-	ProcEndTS := make([]*Vectorclock, pe.nrProcs)
+	ProcStartTS := make([]Vectorclock, pe.nrProcs)
+	ProcEndTS := make([]Vectorclock, pe.nrProcs)
 	for i := 0; i < pe.nrProcs; i++ {
 		wnrl := pe.writeNoticeArray[byte(i)]
 		if len(wnrl) < 1 {
 			continue
 		}
 		ProcStartTS[i] = wnrl[0].GetTimestamp()
-		for i := 1; i < len(wnrl); i++ {
-			if wnrl[i].Diff != nil {
+		for j := 1; j < len(wnrl); j++ {
+			if wnrl[j].Diff != nil {
 				break
 			}
-			ProcEndTS[i] = &wnrl[i].Interval.Timestamp
+			ProcEndTS[i] = wnrl[j].Interval.Timestamp
 		}
 	}
 
 	//Then we "merge" the different intervals
 	for i := 0; i < pe.nrProcs; i++ {
-		if ProcStartTS[i] == nil {
+		if ProcStartTS[i].Value == nil {
 			continue
 		}
 		for j := i; j < pe.nrProcs; j++ {
-			if ProcStartTS[j] == nil {
+			if ProcStartTS[j].Value == nil {
 				continue
 			}
 			if ProcStartTS[i].IsAfter(ProcStartTS[j]) {
-				if ProcEndTS[j] != nil && (ProcEndTS[i] == nil || ProcEndTS[i].IsAfter(ProcEndTS[j])) {
+				if ProcEndTS[j].Value != nil && (ProcEndTS[i].Value == nil || ProcEndTS[i].IsAfter(ProcEndTS[j])) {
 					ProcEndTS[i] = ProcEndTS[j]
 				}
-				ProcEndTS[j] = nil
+				ProcEndTS[j].Value = nil
 			} else if ProcStartTS[j].IsAfter(ProcStartTS[i]) {
-				if ProcEndTS[i] != nil && (ProcEndTS[j] == nil || ProcEndTS[j].IsAfter(ProcEndTS[i])) {
+				if ProcEndTS[i].Value != nil && (ProcEndTS[j].Value == nil || ProcEndTS[j].IsAfter(ProcEndTS[i])) {
 					ProcEndTS[j] = ProcEndTS[i]
 				}
-				ProcEndTS[i] = nil
+				ProcEndTS[i].Value = nil
 			}
 		}
 	}
@@ -295,7 +297,7 @@ func (pe *PageArrayEntry1) GetMissingDiffTimestamps() []Pair {
 	pairs := make([]Pair, pe.nrProcs)
 
 	for i := 0; i < pe.nrProcs; i++ {
-		if ProcStartTS[i] == nil || ProcEndTS[i] == nil {
+		if ProcStartTS[i].Value == nil || ProcEndTS[i].Value == nil {
 			continue
 		}
 		pairs[i] = Pair{ProcStartTS[i], ProcEndTS[i]}
@@ -377,7 +379,7 @@ func (di *DiffIterator) Insert(proc byte) {
 			di.order[j] = proc
 			break
 		}
-		if !this.GetTimestamp().IsAfter(that.GetTimestamp()) && proc < di.order[j] {
+		if !((this.GetTimestamp())).IsAfter(that.GetTimestamp()) && proc < di.order[j] {
 			// If this timestamp is not after that, and this proc is smaller than that proc, we insert it before that.
 			di.order = append(di.order, byte(0))
 			copy(di.order[j+1:], di.order[j:])
