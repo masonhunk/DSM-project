@@ -42,7 +42,7 @@ type Multiview struct {
 	server         network.Server
 	chanMap        map[byte]chan string
 	sequenceNumber byte
-	hasLock		   map[int]bool
+	hasLock        map[int]bool
 }
 
 type hostMem struct {
@@ -162,6 +162,13 @@ func (t *Multiview) ReadInt(addr int) int {
 	return int(result)
 }
 
+func (t *Multiview) ReadInt64(addr int) int {
+
+	b, _ := t.ReadBytes(addr, 8)
+	result, _ := binary.Varint(b)
+	return int(result)
+}
+
 func (t *Multiview) WriteBytes(addr int, val []byte) error {
 	var err error = nil
 	for b, val := range val {
@@ -174,6 +181,15 @@ func (t *Multiview) WriteInt(addr int, i int) {
 	buff := make([]byte, 4)
 	_ = binary.PutVarint(buff, int64(i))
 	if len(buff) != 4 {
+		panic("wrong length of buffer! Expected 4, got" + string(len(buff)))
+	}
+	t.WriteBytes(addr, buff)
+}
+
+func (t *Multiview) WriteInt64(addr int, i int) {
+	buff := make([]byte, 8)
+	_ = binary.PutVarint(buff, int64(i))
+	if len(buff) != 8 {
 		panic("wrong length of buffer! Expected 4, got" + string(len(buff)))
 	}
 	t.WriteBytes(addr, buff)
@@ -252,6 +268,12 @@ func (m *Multiview) ReadBytes(addr, length int) ([]byte, error) {
 	for i := range result {
 		result[i], _ = m.Read(addr + i)
 	}
+	return result, nil
+}
+
+func (m *Multiview) privilegedRead(addr, length int) ([]byte, error) {
+	result := make([]byte, length)
+	result = m.mem.vm.PrivilegedRead(addr, length)
 	return result, nil
 }
 
@@ -409,7 +431,9 @@ func (m *Multiview) messageHandler(msg network.MultiviewMessage, c chan bool) er
 		}
 		//send reply back to requester including data
 		msg.To = msg.From
+		log.Println("about to do priv read at priv base", msg.Privbase)
 		res, err := m.ReadBytes(msg.Privbase, msg.Minipage_size)
+		log.Println("completed priv read")
 		panicOnErr(err)
 		msg.Data = res
 		m.conn.Send(msg)

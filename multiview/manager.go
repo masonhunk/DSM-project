@@ -148,6 +148,7 @@ func (m *Manager) translate(message *network.MultiviewMessage) int {
 	message.Minipage_base = m.vm.GetPageAddr(message.Fault_addr) + m.mpt[vpage].offset
 	message.Minipage_size = m.mpt[vpage].length
 	message.Privbase = message.Minipage_base % m.vm.Size()
+	log.Println("privbase:", message.Privbase, "given fault address", message.Fault_addr)
 	m.Unlock()
 	return vpage
 }
@@ -155,7 +156,9 @@ func (m *Manager) translate(message *network.MultiviewMessage) int {
 // This handles read requests.
 func (m *Manager) HandleReadReq(message network.MultiviewMessage) {
 	vpage := m.translate(&message)
+	log.Println("before read lock")
 	m.locks[vpage].RLock()
+	log.Println("after read lock")
 	p := m.getCopies(vpage)[0]
 	message.To = p
 	m.tr.Send(message)

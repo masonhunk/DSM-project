@@ -4,6 +4,7 @@ import (
 	"DSM-project/multiview"
 	"fmt"
 	"github.com/stretchr/testify/assert"
+	"io/ioutil"
 	"log"
 	"math/rand"
 	"runtime"
@@ -15,11 +16,11 @@ import (
 
 func TestMergeSortMW(t *testing.T) {
 	runtime.GOMAXPROCS(4) // or 2 or 4
-	//log.SetOutput(ioutil.Discard)
+	log.SetOutput(ioutil.Discard)
 	group := sync.WaitGroup{}
 	start := time.Now()
 	pageSize := 4096
-	arraySize := 4096 * 80
+	arraySize := 4096
 	nrProcs := 16
 	group.Add(nrProcs)
 	go MergeSortMW(arraySize, nrProcs, true, pageSize, &group)
@@ -121,9 +122,9 @@ func MergeSortMW(arraySize int, nrProcs int, isManager bool, pageByteSize int, g
 	log.Println("exiting algorithm at process", mw.Id, "...")
 	defer func() {
 		if isManager {
-			//fmt.Println("result array:",privateArray)
-			fmt.Println("length:", len(privateArray))
 			var res sort.IntSlice = privateArray
+			fmt.Println("result array:", privateArray)
+			fmt.Println("length:", len(privateArray))
 			fmt.Println("isSorted:", sort.IsSorted(res))
 			mw.Shutdown()
 		} else {
