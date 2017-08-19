@@ -1,5 +1,5 @@
 package treadmarks
-
+/*
 import (
 	"DSM-project/memory"
 	"DSM-project/network"
@@ -228,6 +228,7 @@ func TestApplyingIntervalsToDataStructure(t *testing.T) {
 
 }
 */
+/*
 func TestShouldRequestCopyIfNoCopy(t *testing.T) {
 	tm := NewTreadMarks(memory.NewVmem(128, 8), 4, 1, 1)
 	tm.vc = *NewVectorclock(4)
@@ -487,7 +488,7 @@ func TestTreadMarks_HandleDiffRequest_OrderTest(t *testing.T) {
 	assert.Equal(t, expected, diffs.Diffs)
 }
 */
-
+/*
 func SetupHandleDiffResponse() *TreadMarks {
 	vm := memory.NewVmem(128, 8)
 	tm := NewTreadMarks(vm, 2, 1, 1)
@@ -671,3 +672,4 @@ func TestTreadMarks_ApplyDiff_multidifunordered(t *testing.T) {
 	tm.ApplyDiff(0, diff)
 	assert.Equal(t, tm.PrivilegedRead(0, 8), []byte{byte(0), byte(1), byte(2), byte(3), byte(4), byte(5), byte(6), byte(7)})
 }
+*/
