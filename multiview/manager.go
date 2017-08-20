@@ -160,7 +160,7 @@ func (m *Manager) HandleReadReq(message network.MultiviewMessage) {
 	m.locksLock.RLock()
 	m.locks[vpage].RLock()
 	m.locksLock.RUnlock()
-	log.Println("RLocked vpage", vpage)
+	//log.Println("RLocked vpage", vpage)
 	p := m.getCopies(vpage)[0]
 	message.To = p
 	m.tr.Send(message)
@@ -187,7 +187,8 @@ func (m *Manager) HandleWriteReq(message network.MultiviewMessage) {
 
 func (m *Manager) HandleInvalidateReply(message network.MultiviewMessage) {
 	vpage := m.translate(&message)
-	log.Println("copyset", m.getCopies(vpage))
+	m.Lock()
+	defer m.Unlock()
 	if len(m.getCopies(vpage)) == 1 {
 		message.Type = WRITE_REQUEST
 		message.To = m.getCopies(vpage)[0]
@@ -205,7 +206,7 @@ func (m *Manager) HandleReadAck(message network.MultiviewMessage) {
 	m.locksLock.RLock()
 	m.locks[vpage].RUnlock()
 	m.locksLock.RUnlock()
-	log.Println("RUnlocked vpage", vpage)
+	//log.Println("RUnlocked vpage", vpage)
 }
 
 func (m *Manager) HandleWriteAck(message network.MultiviewMessage) {
@@ -213,7 +214,7 @@ func (m *Manager) HandleWriteAck(message network.MultiviewMessage) {
 	m.locksLock.RLock()
 	m.locks[vpage].Unlock()
 	m.locksLock.RUnlock()
-	log.Println("Unlocked vpage", vpage)
+	//log.Println("Unlocked vpage", vpage)
 }
 
 func (m *Manager) handleAck(message network.MultiviewMessage) int {
@@ -234,10 +235,20 @@ func (m *Manager) handleAck(message network.MultiviewMessage) int {
 
 func (m *Manager) HandleAlloc(message network.MultiviewMessage) {
 	m.Lock()
+	defer func() {
+		m.Unlock()
+		message.To = message.From
+		message.From = 0
+		message.Type = MALLOC_REPLY
+		m.tr.Send(message)
+	}()
 
 	size := message.Minipage_size
 	ptr, err := m.vm.Malloc(size)
-	panicOnErr(err)
+	if err != nil {
+		message.Err = err.Error()
+		return
+	}
 	//generate minipages
 	sizeLeft := size
 	i := ptr
@@ -286,13 +297,7 @@ func (m *Manager) HandleAlloc(message network.MultiviewMessage) {
 	m.locksLock.Unlock()
 
 	//Send reply to alloc requester
-	message.To = message.From
-	message.From = 0
 	message.Fault_addr = startpg*m.vm.GetPageSize() + m.mpt[startpg].offset
-	message.Type = MALLOC_REPLY
-
-	m.Unlock()
-	m.tr.Send(message)
 }
 
 func (m *Manager) HandleFree(message network.MultiviewMessage) {

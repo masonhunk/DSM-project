@@ -3,9 +3,11 @@ package Benchmarks
 import (
 	"DSM-project/multiview"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"runtime"
+	"runtime/pprof"
 	"sync"
 	"testing"
 	"time"
@@ -24,17 +26,17 @@ func TestJacobiProgramMultiView(t *testing.T) {
 	runtime.GOMAXPROCS(nrProcs) // or 2 or 4
 	group.Add(nrProcs)
 	matrixsize := 64
-	go JacobiProgramMultiView(matrixsize, nrIterations, nrProcs, true, pageSize, &group)
+	go JacobiProgramMultiView(matrixsize, nrIterations, nrProcs, true, pageSize, &group, nil)
 	for i := 0; i < nrProcs-1; i++ {
 		go func() {
 			time.Sleep(190 * time.Millisecond)
-			go JacobiProgramMultiView(matrixsize, nrIterations, nrProcs, false, pageSize, &group)
+			go JacobiProgramMultiView(matrixsize, nrIterations, nrProcs, false, pageSize, &group, nil)
 		}()
 	}
 	group.Wait()
 }
 
-func JacobiProgramMultiView(matrixSize int, nrIterations int, nrProcs int, isManager bool, pageByteSize int, group *sync.WaitGroup) {
+func JacobiProgramMultiView(matrixSize int, nrIterations int, nrProcs int, isManager bool, pageByteSize int, group *sync.WaitGroup, pprofFile io.Writer) {
 	/*testMatrix := [][]int{
 		{5, 6, 6, 2, 5, 6, 9, 2},
 		{6, 5, 9, 5, 5, 6, 3, 7},
@@ -74,7 +76,6 @@ func JacobiProgramMultiView(matrixSize int, nrIterations int, nrProcs int, isMan
 				}
 			}
 		}
-		log.Println("manager done writing to grid entry with result:", gridEntryAddresses)
 		mw.Barrier(0)
 	} else {
 		mw.Join(M*N*float32_BYTE_LENGTH, pageByteSize)
@@ -97,7 +98,11 @@ func JacobiProgramMultiView(matrixSize int, nrIterations int, nrProcs int, isMan
 	if mw.Id == 1 {
 		startTime = time.Now()
 	}
-
+	if pprofFile != nil {
+		if err := pprof.StartCPUProfile(pprofFile); err != nil {
+			log.Fatal("could not start CPU profile: ", err)
+		}
+	}
 	length := M / nrProcs
 	begin := length * int(mw.Id-1)
 	end := length * int(mw.Id)
@@ -142,18 +147,18 @@ func JacobiProgramMultiView(matrixSize int, nrIterations int, nrProcs int, isMan
 				}
 				privateArray[i][j] = (bytesToFloat32(g1) + bytesToFloat32(g2) + bytesToFloat32(g3) + bytesToFloat32(g4)) / float32(divisionAmount)
 			}
-			mw.Barrier(2)
-			//fmt.Println("after barrier 2 at host", mw.Id)
-			for i := begin; i < end; i++ {
-				for j := 0; j < N; j++ {
-					addr := gridEntryAddresses[i][j]
-					var valAsBytes []byte = float32ToBytes(privateArray[i][j])
-					mw.WriteBytes(addr, valAsBytes)
-				}
-			}
-			mw.Barrier(3)
-
 		}
+		mw.Barrier(2)
+		//fmt.Println("after barrier 2 at host", mw.Id)
+		for i := begin; i < end; i++ {
+			for j := 0; j < N; j++ {
+				addr := gridEntryAddresses[i][j]
+				var valAsBytes []byte = float32ToBytes(privateArray[i][j])
+				mw.WriteBytes(addr, valAsBytes)
+			}
+		}
+		mw.Barrier(3)
+		log.Println("done with iteration", iter)
 	}
 	mw.Barrier(4)
 	log.Println("exiting algorithm at process", mw.Id, "...")
@@ -187,14 +192,14 @@ func JacobiProgramMultiView(matrixSize int, nrIterations int, nrProcs int, isMan
 		} else {
 			//fmt.Println("result at host", mw.Id)
 			mw.Lock(0)
-			for i := range resultMatrix {
+			/*for i := range resultMatrix {
 				row := resultMatrix[i]
 				for j := range row {
 					res, _ := mw.ReadBytes(gridEntryAddresses[i][j], float32_BYTE_LENGTH)
 					resultMatrix[i][j] = bytesToFloat32(res)
 				}
 				//fmt.Println(row)
-			}
+			}*/
 
 			mw.Release(0)
 			mw.Barrier(5)

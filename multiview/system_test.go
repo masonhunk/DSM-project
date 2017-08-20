@@ -264,13 +264,20 @@ func TestMemoryMalloc(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, 2*4096, addr)
 
+	mw1.Shutdown()
 	//try alloc'ing more memory than available
 	mw1 = NewMultiView()
 	mw1.Initialize(2*4096, 4096, 1)
 	addr, err = mw1.Malloc(2 * 4096)
 	assert.Nil(t, err)
 	assert.Equal(t, 2*4096, addr)
-	_, err1 := mw1.Malloc(2)
+	addr1, err1 := mw1.Malloc(2)
+	assert.Equal(t, -1, addr1)
 	assert.NotNil(t, err1)
 
+	mw1.Free(addr, 2*4096)
+	addr1, err1 = mw1.Malloc(4096)
+	assert.Nil(t, err1)
+	assert.Equal(t, 2*4096, addr1)
+	mw1.Shutdown()
 }

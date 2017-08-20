@@ -62,13 +62,13 @@ func main() {
 	case "JacobiMW-manager":
 		wg := sync.WaitGroup{}
 		wg.Add(1)
-		matrixsize := 128
-		Benchmarks.JacobiProgramMultiView(matrixsize, 10, 1, true, 4096, &wg)
+		matrixsize := 1024
+		Benchmarks.JacobiProgramMultiView(matrixsize, 4, 4, true, 4096, &wg, cpuprofFile)
 	case "JacobiMW-host":
 		wg := sync.WaitGroup{}
 		wg.Add(1)
-		matrixsize := 128
-		Benchmarks.JacobiProgramMultiView(matrixsize, 10, 1, false, 4096, &wg)
+		matrixsize := 1024
+		Benchmarks.JacobiProgramMultiView(matrixsize, 4, 4, false, 4096, &wg, cpuprofFile)
 	case "SortedIntTM":
 		Benchmarks.SortedIntTMBenchmark(*nrprocs, 1000, *manager, 8388608, 524288, 10)
 	default:
