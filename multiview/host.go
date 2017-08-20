@@ -431,9 +431,7 @@ func (m *Multiview) messageHandler(msg network.MultiviewMessage, c chan bool) er
 		}
 		//send reply back to requester including data
 		msg.To = msg.From
-		log.Println("about to do priv read at priv base", msg.Privbase)
 		res, err := m.ReadBytes(msg.Privbase, msg.Minipage_size)
-		log.Println("completed priv read")
 		panicOnErr(err)
 		msg.Data = res
 		m.conn.Send(msg)

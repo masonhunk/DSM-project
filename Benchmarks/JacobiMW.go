@@ -3,7 +3,9 @@ package Benchmarks
 import (
 	"DSM-project/multiview"
 	"fmt"
+	"io/ioutil"
 	"log"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -13,28 +15,26 @@ var _ = log.Print
 var _ = log.Print
 
 func TestJacobiProgramMultiView(t *testing.T) {
-	//log.SetOutput(ioutil.Discard)
+	log.SetOutput(ioutil.Discard)
 	group := sync.WaitGroup{}
-	start := time.Now()
 	pageSize := 4096
-	nrIterations := 5
-	nrProcs := 8
+	//decent results with N,M = 64, iterations = 10-24
+	nrIterations := 20
+	nrProcs := 4
+	runtime.GOMAXPROCS(nrProcs) // or 2 or 4
 	group.Add(nrProcs)
-	group.Add(nrProcs)
-	go JacobiProgramMultiView(nrIterations, nrProcs, true, pageSize, &group)
+	matrixsize := 64
+	go JacobiProgramMultiView(matrixsize, nrIterations, nrProcs, true, pageSize, &group)
 	for i := 0; i < nrProcs-1; i++ {
 		go func() {
-			time.Sleep(150 * time.Millisecond)
-			go JacobiProgramMultiView(nrIterations, nrProcs, false, pageSize, &group)
+			time.Sleep(190 * time.Millisecond)
+			go JacobiProgramMultiView(matrixsize, nrIterations, nrProcs, false, pageSize, &group)
 		}()
 	}
 	group.Wait()
-	end := time.Now()
-	diff := end.Sub(start)
-	fmt.Println("execution time:", diff.String())
 }
 
-func JacobiProgramMultiView(nrIterations int, nrProcs int, isManager bool, pageByteSize int, group *sync.WaitGroup) {
+func JacobiProgramMultiView(matrixSize int, nrIterations int, nrProcs int, isManager bool, pageByteSize int, group *sync.WaitGroup) {
 	/*testMatrix := [][]int{
 		{5, 6, 6, 2, 5, 6, 9, 2},
 		{6, 5, 9, 5, 5, 6, 3, 7},
@@ -45,8 +45,8 @@ func JacobiProgramMultiView(nrIterations int, nrProcs int, isManager bool, pageB
 		{9, 3, 6, 8, 3, 3, 4, 5},
 		{2, 7, 2, 3, 2, 5, 5, 7},
 	}*/
-	const M = 16
-	const N = 16
+	var M = matrixSize
+	var N = matrixSize
 	const float32_BYTE_LENGTH = 4 //32 bits
 	var privateArray [][]float32  //privateArray[M][N]
 	privateArray = make([][]float32, M)
@@ -93,6 +93,10 @@ func JacobiProgramMultiView(nrIterations int, nrProcs int, isManager bool, pageB
 			}
 		}
 	}
+	var startTime time.Time
+	if mw.Id == 1 {
+		startTime = time.Now()
+	}
 
 	length := M / nrProcs
 	begin := length * int(mw.Id-1)
@@ -100,9 +104,11 @@ func JacobiProgramMultiView(nrIterations int, nrProcs int, isManager bool, pageB
 	if end <= begin {
 		panic("begin is larger than end")
 	}
+	//fmt.Println("at barrier 1")
 	mw.Barrier(1)
 
 	for iter := 1; iter <= nrIterations; iter++ {
+		//fmt.Println("startinig iteration", iter, "at host", mw.Id)
 		for i := begin; i < end; i++ {
 			for j := 0; j < N; j++ {
 				var divisionAmount int = 4
@@ -118,7 +124,7 @@ func JacobiProgramMultiView(nrIterations int, nrProcs int, isManager bool, pageB
 				}
 				if i < M-1 {
 					if i+1 == end {
-						log.Println("about to read to shared variable with i+1, j values:", i+1, j, "and address", gridEntryAddresses[i+1][j])
+						//log.Println("about to read to shared variable with i+1, j values:", i+1, j, "and address", gridEntryAddresses[i+1][j])
 					}
 					g2, _ = mw.ReadBytes(gridEntryAddresses[i+1][j], float32_BYTE_LENGTH)
 				} else {
@@ -137,6 +143,7 @@ func JacobiProgramMultiView(nrIterations int, nrProcs int, isManager bool, pageB
 				privateArray[i][j] = (bytesToFloat32(g1) + bytesToFloat32(g2) + bytesToFloat32(g3) + bytesToFloat32(g4)) / float32(divisionAmount)
 			}
 			mw.Barrier(2)
+			//fmt.Println("after barrier 2 at host", mw.Id)
 			for i := begin; i < end; i++ {
 				for j := 0; j < N; j++ {
 					addr := gridEntryAddresses[i][j]
@@ -157,21 +164,28 @@ func JacobiProgramMultiView(nrIterations int, nrProcs int, isManager bool, pageB
 		}
 
 		if isManager {
+			end := time.Now()
+			diff := end.Sub(startTime)
+			fmt.Println("execution time:", diff.String())
+
 			mw.Lock(0)
+			//fmt.Println("result at manager:")
 			for i := range resultMatrix {
 				row := resultMatrix[i]
 				for j := range row {
 					res, _ := mw.ReadBytes(gridEntryAddresses[i][j], float32_BYTE_LENGTH)
 					resultMatrix[i][j] = bytesToFloat32(res)
 				}
+				//fmt.Println(row)
 			}
-			log.Println("result at host", mw.Id, ":", resultMatrix)
+			//fmt.Println("result at host", mw.Id, ":", resultMatrix)
 			mw.Release(0)
 			mw.Barrier(5)
 			mw.Shutdown()
 			log.Println("arrived at shutdown")
 
 		} else {
+			//fmt.Println("result at host", mw.Id)
 			mw.Lock(0)
 			for i := range resultMatrix {
 				row := resultMatrix[i]
@@ -179,8 +193,8 @@ func JacobiProgramMultiView(nrIterations int, nrProcs int, isManager bool, pageB
 					res, _ := mw.ReadBytes(gridEntryAddresses[i][j], float32_BYTE_LENGTH)
 					resultMatrix[i][j] = bytesToFloat32(res)
 				}
+				//fmt.Println(row)
 			}
-			log.Println("result at host", mw.Id, ":", resultMatrix)
 
 			mw.Release(0)
 			mw.Barrier(5)

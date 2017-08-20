@@ -3,10 +3,12 @@ package Benchmarks
 import (
 	"DSM-project/multiview"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"math/rand"
 	"runtime"
+	"runtime/pprof"
 	"sync"
 	"testing"
 	"time"
@@ -17,22 +19,22 @@ func TestParallelSum(t *testing.T) {
 	log.SetOutput(ioutil.Discard)
 	group := sync.WaitGroup{}
 	pageSize := 4096
-	nrOfInts := 4096 * 4000000
+	nrOfInts := 4096 * 1000000
 	batchSize := 10000 * 4096 // nr of ints in batch
 	nrProcs := 4
 	group.Add(nrProcs)
-	go ParallelSumMW(batchSize, nrOfInts, nrProcs, true, pageSize, &group)
+	go ParallelSumMW(batchSize, nrOfInts, nrProcs, true, pageSize, &group, nil)
 	for i := 0; i < nrProcs-1; i++ {
 		go func() {
 			time.Sleep(150 * time.Millisecond)
-			ParallelSumMW(batchSize, nrOfInts, nrProcs, false, pageSize, &group)
+			ParallelSumMW(batchSize, nrOfInts, nrProcs, false, pageSize, &group, nil)
 		}()
 	}
 	group.Wait()
 
 }
 
-func ParallelSumMW(batchSize int, nrOfInts int, nrProcs int, isManager bool, pageByteSize int, group *sync.WaitGroup) {
+func ParallelSumMW(batchSize int, nrOfInts int, nrProcs int, isManager bool, pageByteSize int, group *sync.WaitGroup, cpuProfFile io.Writer) {
 	const INT_BYTE_LENGTH = 8 //64 bits
 	var sharedSumAddr int
 	var currBatchNrAddr int
@@ -65,6 +67,11 @@ func ParallelSumMW(batchSize int, nrOfInts int, nrProcs int, isManager bool, pag
 		startTime = time.Now()
 	}
 
+	if cpuProfFile != nil {
+		if err := pprof.StartCPUProfile(cpuProfFile); err != nil {
+			log.Fatal("could not start CPU profile: ", err)
+		}
+	}
 	mw.Barrier(1) //ensures everyone gets their first lock
 
 	localSum := 1
