@@ -72,9 +72,9 @@ func main() {
 	case "SortedIntTM":
 		Benchmarks.SortedIntTMBenchmark(*nrprocs, 1000, *manager, 8388608, 524288, 10)
 	case "SyncOpsCostMW":
-		Benchmarks.TestSynchronizedWritesMW(*nrprocs,10000,cpuprofFile)
+		Benchmarks.TestSynchronizedWritesMW(*nrprocs, 10000, cpuprofFile)
 	case "NonSyncOpsCostMW":
-		Benchmarks.TestNonSynchronizedReadWritesMW(200000000,cpuprofFile)
+		Benchmarks.TestNonSynchronizedReadWritesMW(200000000, cpuprofFile)
 	case "barrMW":
 		Benchmarks.TestBarrierTimeMW(100000, *nrprocs, nil)
 	case "locksMW":
@@ -93,7 +93,7 @@ func main() {
 }
 
 func setupCPUProf(filename string) io.Writer {
-	filename = "BenchmarkResults/"+filename
+	filename = "BenchmarkResults/" + filename
 	i := 0
 	for {
 		_, err := os.Stat(fmt.Sprintf("%s%s%d%s", filename, "_", i, ".prof"))
@@ -110,7 +110,7 @@ func setupCPUProf(filename string) io.Writer {
 }
 
 func setupMemProf(filename string) {
-	filename = "BenchmarkResults/"+filename
+	filename = "BenchmarkResults/" + filename
 	i := 0
 	for {
 		_, err := os.Stat(fmt.Sprintf("%s%s%d%s", filename, "_", i, ".mprof"))

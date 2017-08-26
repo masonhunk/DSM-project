@@ -2,11 +2,11 @@ package Benchmarks
 
 import (
 	"DSM-project/multiview"
-	"time"
-	"log"
 	"fmt"
 	"io"
+	"log"
 	"runtime/pprof"
+	"time"
 )
 
 func TestBarrierTimeMW(nrTimes, nrhosts int, pprofFile io.Writer) {
@@ -19,7 +19,7 @@ func TestBarrierTimeMW(nrTimes, nrhosts int, pprofFile io.Writer) {
 			log.Fatal("could not start CPU profile: ", err)
 		}
 	}
-	for i:= 0; i < nrTimes; i++ {
+	for i := 0; i < nrTimes; i++ {
 		for _, mw := range mws {
 			go mw.Barrier(0)
 		}
@@ -30,7 +30,7 @@ func TestBarrierTimeMW(nrTimes, nrhosts int, pprofFile io.Writer) {
 	end := time.Now()
 	diff := end.Sub(startTime)
 	fmt.Println("execution time:", diff.String())
-	for _,mw := range mws {
+	for _, mw := range mws {
 		mw.Leave()
 	}
 	mw1.Shutdown()
@@ -55,7 +55,7 @@ func TestLockMW(nrTimes int, pprofFile io.Writer) {
 	end := time.Now()
 	diff := end.Sub(startTime)
 	fmt.Println("execution time:", diff.String())
-	for _,mw := range mws {
+	for _, mw := range mws {
 		mw.Leave()
 	}
 	mw1.Shutdown()
@@ -82,13 +82,13 @@ func TestSynchronizedWritesMW(nrhosts, nrRounds int, pprofFile io.Writer) {
 	end := time.Now()
 	diff := end.Sub(startTime)
 	fmt.Println("execution time:", diff.String())
-	for _,mw := range mws {
+	for _, mw := range mws {
 		mw.Leave()
 	}
 	mw1.Shutdown()
 }
 
-func TestNonSynchronizedReadWritesMW(nrRounds int, pprofFile io.Writer)  {
+func TestNonSynchronizedReadWritesMW(nrRounds int, pprofFile io.Writer) {
 	mw1, _ := setupHosts(1, 4096, 4096)
 	addr, _ := mw1.Malloc(1)
 	mw1.Write(addr, byte(1))
