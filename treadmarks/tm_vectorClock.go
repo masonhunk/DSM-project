@@ -4,7 +4,7 @@ type Vectorclock struct {
 	Value []uint
 }
 
-func (v *Vectorclock) Compare(other *Vectorclock) int {
+func (v *Vectorclock) Compare(other Vectorclock) int {
 	isBefore := 0
 	isAfter := 0
 	for i := 0; i < len(v.Value); i++ {
@@ -37,12 +37,12 @@ func (v *Vectorclock) Increment(id byte) {
 }
 
 //Returns true of v is before o causally.
-func (v *Vectorclock) IsBefore(o *Vectorclock) bool {
+func (v Vectorclock) IsBefore(o Vectorclock) bool {
 	return v.Compare(o) == -1
 }
 
 //Returns true if v is after o causally.
-func (v *Vectorclock) IsAfter(o *Vectorclock) bool {
+func (v Vectorclock) IsAfter(o Vectorclock) bool {
 	return v.Compare(o) == 1
 }
 
@@ -55,7 +55,7 @@ func (v *Vectorclock) SetTick(id byte, tick uint) {
 }
 
 //Returns true if every entry in v is equal to the matching entry in o
-func (v *Vectorclock) Equals(o *Vectorclock) bool {
+func (v *Vectorclock) Equals(o Vectorclock) bool {
 	if len(v.Value) == len(o.Value) {
 		for i := range v.Value {
 			if v.Value[i] != o.Value[i] {

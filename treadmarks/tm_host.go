@@ -138,10 +138,11 @@ func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarri
 			tm.SetRights(addr, memory.READ_ONLY)
 		case "WRITE":
 			//create a twin
+			tm.twinLock.Lock()
 			tm.LockPage(pageNr)
 			val := tm.PrivilegedRead(tm.GetPageAddr(addr), tm.GetPageSize())
-			tm.twinLock.Lock()
-			fmt.Println("We are creating a twin: ", val)
+
+			fmt.Println(tm.ProcId, "We are creating a twin: ", val)
 			if _, ok := tm.twinMap[pageNr]; ok {
 				fmt.Println("But we already had a twin!")
 			}
@@ -199,12 +200,10 @@ func (t *TreadMarks) Join(address string) error {
 			panicOnErr(err)
 		case COPY_RESPONSE:
 			t.LockPage(msg.PageNr)
-			fmt.Println(t.ProcId, " ---- Is handling copy response.")
 			t.PrivilegedWrite(msg.PageNr*t.GetPageSize(), msg.Data)
 			t.SetHasCopy(msg.PageNr, true)
 			t.eventchanMap[msg.Event] <- "continue"
 			t.UnlockPage(msg.PageNr)
-			fmt.Println(t.ProcId, " ----- Done handling copy response.")
 		default:
 			return errors.New("unrecognized message type value at host: " + msg.Type)
 		}
@@ -275,78 +274,75 @@ func (t *TreadMarks) Startup() error {
 }
 
 func (t *TreadMarks) HandleLockAcquireResponse(message *TM_Message) {
-
+	fmt.Println(t.ProcId, " --- Got lock acquire response: ", message)
 	//Here we need to add the incoming intervals to the correct write notices.
 	t.incorporateIntervalsIntoDatastructures(message)
 	t.vc = t.vc.Merge(message.VC)
 }
 
 func (t *TreadMarks) HandleLockAcquireRequest(msg *TM_Message) TM_Message {
-	fmt.Println(t.ProcId, "  ----- Handling lock acquire request.")
+	fmt.Println(t.ProcId, " ---- Got Lock acquire request: ", msg)
 	t.locks[msg.Id].Lock()
-	fmt.Println(t.ProcId, "  ----- Got the lock in lock acquire request handling.")
 	t.haveLock[msg.Id] = false
 	t.locks[msg.Id].Unlock()
 	//send write notices back and stuff
 	//start by incrementing vc
 	//create new interval and make write notices for all twinned pages since last sync
-	fmt.Println(t.ProcId, " ---- trying to update datastructure in lock acquire request")
 	t.updateDatastructures()
-	fmt.Println(t.ProcId, " ---- done updating datastructure in lock acquire request")
 	//find all the write notices to send
-	fmt.Println(t.ProcId, " ---- trying to get unseen intervals in lock acquire request")
 	msg.Intervals = t.GetAllUnseenIntervals(msg.VC)
-	fmt.Println(t.ProcId, " ---- got unseen intervals in lock acquire request")
 	msg.From, msg.To = msg.To, msg.From
 	msg.Type = LOCK_ACQUIRE_RESPONSE
 	msg.VC = *t.vc
-
+	fmt.Println(t.ProcId, " ---- Sent lock acquire response: ", msg)
 	t.Send(msg)
-	fmt.Println(t.ProcId, "Returning from handling lock acquire request.")
 	return *msg
 }
 
 func (t *TreadMarks) updateDatastructures() {
-	fmt.Println(t.ProcId, " --- is calling updateDatastructures")
 	t.LockDatastructure()
-
+	fmt.Println(t.ProcId, " --- Updating datastructure.")
 	t.twinLock.Lock()
+	fmt.Println(t.ProcId, " ---- Had the following twins:")
+	for k, v := range t.twinMap{
+		fmt.Println(t.ProcId, " ---- key: ", k, " value: ", v)
+	}
 	if len(t.twinMap) > 0 {
 		interval := t.CreateNewInterval(t.ProcId, *t.vc)
 		t.LockProcArray(t.ProcId)
+		defer t.UnlockProcArray(t.ProcId)
 		for pageNr := range t.twinMap {
+			fmt.Println(t.ProcId, " ----- Looking at twin for page ", pageNr)
 			t.LockPage(pageNr)
+			defer t.UnlockPage(pageNr)
 			wnrl := t.GetWritenoticeRecords(t.ProcId, pageNr)
-			if len(wnrl) > 0 && wnrl[0].Diff != nil {
-				wnrl[0] = t.CreateNewWritenoticeRecord(t.ProcId, pageNr, interval)
-				interval.WriteNotices = append(interval.WriteNotices, wnrl[0])
-				t.AddWriteNoticeRecord(t.ProcId, pageNr, wnrl[0])
+			fmt.Println(t.ProcId, " ---- We had the following writenotices:")
+			fmt.Println(t.ProcId, wnrl)
+			if (len(wnrl) > 0 && wnrl[0].Diff != nil) || len(wnrl) == 0 {
+				fmt.Println(t.ProcId, " ---- Writenotice for this page didnt have a diff, so we shouldnt add a new writenotice.")
+				wnr := t.CreateNewWritenoticeRecord(t.ProcId, pageNr, interval)
+				t.AddWriteNoticeRecord(t.ProcId, pageNr, wnr)
+				fmt.Println(t.ProcId, " ---- After adding we had the following writenotices: ", t.GetWritenoticeRecords(t.ProcId, pageNr))
+			} else {
+				fmt.Println(t.ProcId, " ----- Either we had no writenotices, or we had already made writenotices.")
 			}
 		}
 		if len(interval.WriteNotices) > 0 {
 			t.AddIntervalRecord(t.ProcId, interval)
 
 		}
-		for pageNr := range t.twinMap {
-			t.UnlockPage(pageNr)
-		}
 		t.vc.Increment(t.ProcId)
 	}
 	t.twinLock.Unlock()
 	t.UnlockDatastructure()
-	fmt.Println(t.ProcId, " --- is returning from updateDatastructures")
 }
 
 func (t *TreadMarks) RequestAndApplyDiffs(pageNr int) {
-	fmt.Println(t.ProcId, " --- Is calling RequestAndApplyDiffs for pagnr ", pageNr)
 	group := new(sync.WaitGroup)
 	t.RLockPage(pageNr)
-	fmt.Println(t.ProcId, " ------ Got the lock for pagenr ", pageNr, " in RequestAndApplyDiffs call.")
 	messages := t.GenerateDiffRequests(pageNr, group)
-	fmt.Println(t.ProcId, " ----- Done generating diff requests.")
 	t.RUnlockPage(pageNr)
 	if len(messages) <= 0 {
-		fmt.Println(t.ProcId, " ---- No messages, so just returning.")
 		return
 	}
 	group.Add(len(messages))
@@ -354,26 +350,22 @@ func (t *TreadMarks) RequestAndApplyDiffs(pageNr int) {
 		t.Send(msg)
 	}
 
-	fmt.Println(t.ProcId, " ----- is waiting for ", len(messages), " responses on diff requests.")
 	group.Wait()
-	fmt.Println(t.ProcId, " ----- Got all the responses.")
 	//all responses have been received. Now apply them
-	fmt.Println(t.ProcId, " ---- Tries to apply the new diffs")
 	t.LockPage(pageNr)
-	fmt.Println(t.ProcId, " ----- Got the pagelock for applying diffs.")
 	di := t.NewDiffIterator(pageNr)
-	fmt.Println(t.ProcId, " Created diff iterator.")
+	fmt.Println(t.ProcId, " ---------- Applying diffs")
 	for {
 		diff := di.Next()
+		fmt.Println(t.ProcId, " ----------- First dif was ", diff)
 		if diff == nil {
-
 			break
 		}
+		fmt.Println(t.ProcId, " ------------ Data before diff applied: ", t.VirtualMemory.PrivilegedRead(pageNr * t.GetPageSize(), t.GetPageSize()))
 		t.ApplyDiff(pageNr, diff)
+		fmt.Println(t.ProcId, " ------------ Data after diff applied: ", t.VirtualMemory.PrivilegedRead(pageNr * t.GetPageSize(), t.GetPageSize()))
 	}
-	fmt.Println(t.ProcId, " done applying, releasing lock.")
 	t.UnlockPage(pageNr)
-	fmt.Println(t.ProcId, " --- Is return from RequestAndApplyDiffs for pagnr ", pageNr)
 }
 
 func (t *TreadMarks) GenerateDiffRequests(pageNr int, group *sync.WaitGroup) []TM_Message {
@@ -408,10 +400,11 @@ func (t *TreadMarks) GenerateDiffRequests(pageNr int, group *sync.WaitGroup) []T
 }
 
 func (t *TreadMarks) HandleDiffRequest(message TM_Message) TM_Message {
-
+	fmt.Println(t.ProcId, " ---- Got diff request: ", message)
 	//First we populate a list of pairs with all the relevant diffs.
 	vc := message.VC
 	pageNr := message.PageNr
+	t.twinLock.Lock()
 	t.LockPage(pageNr)
 	mwnl := t.GetWritenoticeRecords(t.ProcId, pageNr)
 	if len(mwnl) > 0 {
@@ -423,22 +416,27 @@ func (t *TreadMarks) HandleDiffRequest(message TM_Message) TM_Message {
 			fmt.Println("We created a dif, from ", t.twinMap[pageNr], " and ", pageVal, "\n"+
 				"which was ", diff)
 
-			t.twinLock.Lock()
+
+			fmt.Println("Deleting twin ", pageNr)
 			delete(t.twinMap, pageNr)
-			t.twinLock.Unlock()
+			fmt.Println("Deleted twin ", pageNr)
+
 			t.SetRights(pageNr*t.GetPageSize(), memory.READ_ONLY)
 		}
 	}
+	t.twinLock.Unlock()
 	t.UnlockPage(pageNr)
 	t.RLockPage(pageNr)
 	diffDescriptions := make([]DiffDescription, 0)
 	for proc := byte(1); proc <= byte(t.nrProcs); proc = proc + byte(1) {
 		for _, wnr := range t.GetWritenoticeRecords(proc, pageNr) {
-			if wnr.Interval.Timestamp.Compare(&vc) < 0 {
+			if wnr.Interval.Timestamp.Compare(vc) < 0 {
 				break
 			}
 			if wnr.Diff != nil {
-				description := DiffDescription{ProcId: proc, Timestamp: *wnr.GetTimestamp(), Diff: *wnr.Diff}
+
+				description := DiffDescription{ProcId: proc, Timestamp: wnr.GetTimestamp(), Diff: *wnr.Diff}
+				fmt.Println(t.ProcId, " ---- Adding diff description: ", description)
 				diffDescriptions = append(diffDescriptions, description)
 			}
 		}
@@ -449,25 +447,21 @@ func (t *TreadMarks) HandleDiffRequest(message TM_Message) TM_Message {
 	message.Diffs = diffDescriptions
 	message.VC = *t.vc
 	message.Type = DIFF_RESPONSE
+	fmt.Println(t.ProcId, " ---- Answered diff request with ", message)
 	return message
 }
 
 func (t *TreadMarks) HandleDiffResponse(message TM_Message) {
+	fmt.Println(t.ProcId, " ---- Got diff response: ", message)
 	t.LockPage(message.PageNr)
 	for _, diff := range message.Diffs {
-		if !diff.Timestamp.IsAfter(t.vc) {
-			fmt.Println(t.ProcId, " --- Tried to add diff ", diff, " while we had timestamp ", t.vc)
-			fmt.Println(t.ProcId, " --- Writenotices he had for this proc was :")
-			for _, wn := range t.GetWritenoticeRecords(diff.ProcId, message.PageNr) {
-				fmt.Println("  ------ ", wn, " with timestamp ", wn.GetTimestamp())
-			}
+		if !diff.Timestamp.IsAfter(*t.vc) {
 			t.SetDiff(message.PageNr, diff)
-		} else {
-			fmt.Println(t.ProcId, " --- Got diff that was newer than needed.")
 		}
 	}
 	t.waitgroupMap[message.Event].Done()
 	t.UnlockPage(message.PageNr)
+
 }
 
 func (t *TreadMarks) Shutdown() {
@@ -541,48 +535,79 @@ func (t *TreadMarks) Barrier(id int) {
 }
 
 func (t *TreadMarks) incorporateIntervalsIntoDatastructures(msg *TM_Message) {
+	fmt.Println(t.ProcId, " ----- Trying to incorporate intervals into datastructure.")
+	fmt.Println(t.ProcId, " ----- Trying to lock datastructure.")
 	t.LockDatastructure()
+	fmt.Println(t.ProcId, " ----- Locked datastructure.")
+	t.twinLock.Lock()
 	for i := 0; i < len(msg.Intervals); i++ {
+
 		interval := msg.Intervals[i]
+		fmt.Println(t.ProcId, " ---- Incoroporating interval: ", interval)
 		if t.GetIntervalRecord(interval.Proc, interval.Vt) != nil {
+			fmt.Println(t.ProcId, " ----- Already had interval record.")
 			continue
 		}
+		fmt.Println(t.ProcId, " ---- Trying to lock proc array")
 		t.LockProcArray(interval.Proc)
+		fmt.Println(t.ProcId, " ---- Locked proc array")
 		for _, wn := range interval.WriteNotices {
+			fmt.Println(t.ProcId, " ---- Trying to lock page ", wn.PageNr)
 			t.LockPage(wn.PageNr)
+
+			fmt.Println(t.ProcId, " ---- Locked page ", wn.PageNr)
 		}
+		fmt.Println(t.ProcId, " ---- Creating a new interval.")
 		ir := t.CreateNewInterval(interval.Proc, interval.Vt)
 		for _, wn := range interval.WriteNotices {
+			fmt.Println(t.ProcId, " ----- adding writenotice ", wn)
 			t.AddToCopyset(msg.From, wn.PageNr)
 			if len(t.GetWritenoticeRecords(t.ProcId, wn.PageNr)) > 0 {
-
+				fmt.Println(t.ProcId, " ----- We already had some writenotices for this page.")
 				if myWn := t.GetWritenoticeRecords(t.ProcId, wn.PageNr)[0]; myWn != nil {
+					fmt.Println(t.ProcId, " ----- We had a writenotice for this page, which we made ourselves.")
 					if myWn.Diff == nil {
+						fmt.Println(t.ProcId, " ---- Our writenotice didnt have a diff, so we make the diff.")
 						pageVal := t.PrivilegedRead(wn.PageNr*t.GetPageSize(), t.GetPageSize())
-						t.twinLock.Lock()
+						fmt.Println(t.ProcId, " ----- Locking twinMap")
+
+						fmt.Println(t.ProcId, " ---- Making diff and applying it to our writenotice.")
 						diff := CreateDiff(t.twinMap[wn.PageNr], pageVal)
 						delete(t.twinMap, wn.PageNr)
-						t.twinLock.Unlock()
+						fmt.Println(t.ProcId, " ---- Unlocking twinmap.")
+
 						myWn.Diff = &diff
 					}
 				}
 			}
+
+
+			fmt.Println(t.ProcId, " ----- Creating and adding the writenotice we got from the interval.")
 			//prepend to write notice list and update pointers
 			res := t.CreateNewWritenoticeRecord(interval.Proc, wn.PageNr, ir)
 			t.AddWriteNoticeRecord(interval.Proc, wn.PageNr, res)
 			//check if I have a write notice for this page with no diff at head of list. If so, create diff.
-
+			fmt.Println(t.ProcId, " ---- Setting correct access rights.")
 			//finally invalidate the page
 			t.SetRights(wn.PageNr*t.GetPageSize(), memory.NO_ACCESS)
 		}
-		t.AddIntervalRecord(interval.Proc, ir)
 		for _, wn := range interval.WriteNotices {
+			fmt.Println(t.ProcId, " ---- Trying to Unlock page ", wn.PageNr)
 			t.UnlockPage(wn.PageNr)
+
+			fmt.Println(t.ProcId, " ---- Unlocked page ", wn.PageNr)
 		}
+		fmt.Println(t.ProcId, " ----- Adding interval record")
+		t.AddIntervalRecord(interval.Proc, ir)
+		fmt.Println(t.ProcId, " ----- Unlocking proc array")
 		t.UnlockProcArray(interval.Proc)
 	}
+	fmt.Println(t.ProcId, " ---- updating vectorclock")
 	t.vc = t.vc.Merge(msg.VC)
+	fmt.Println(t.ProcId, " ---- Unlocking datastructure.")
 	t.UnlockDatastructure()
+	t.twinLock.Unlock()
+	fmt.Println(t.ProcId, " ----- Done incorporating into datastructure.")
 }
 
 func (t *TreadMarks) sendCopyRequest(pageNr int, procNr byte) {

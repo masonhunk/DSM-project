@@ -144,7 +144,7 @@ func SortedIntTMBenchmark(nrProcs int, batchSize int, isManager bool, N int, Bma
 	//log.SetOutput(ioutil.Discard)
 	rand := NewRandom()
 	pagebytesize := 8
-	tm := setupTreadMarksStruct1(nrProcs, (((N+1)*4)/pagebytesize+1)*pagebytesize, 8, 2, 3)
+	tm := setupTreadMarksStruct1(nrProcs, (((N+1)*4)/pagebytesize+1)*pagebytesize, 8, 2, 4)
 	defer tm.Shutdown()
 	key := func(i int) int { return (i + 1) * 4 }
 
@@ -212,6 +212,7 @@ func SortedIntTMBenchmark(nrProcs int, batchSize int, isManager bool, N int, Bma
 		tm.Barrier(2)
 
 	}
+	tm.Barrier(3)
 	sorted := make([]int32, N)
 	for i := 0; i < N; i++ {
 		sorted[tm.ReadInt(key(i))] = K[i]

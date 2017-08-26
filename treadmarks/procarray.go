@@ -111,24 +111,29 @@ func (po *ProcArray1) GetAllUnseenIntervals(ts Vectorclock) []Interval {
 }
 
 func (po *ProcArray1) GetUnseenIntervalsAtProc(procId byte, ts Vectorclock) []Interval {
-	fmt.Println("We are trying to get unseen intervals.")
+	fmt.Println("Getting unseen intervals at proc ", procId, " after vc ", ts)
 	result := make([]Interval, 0)
-	fmt.Println("Trying to lock proc array.")
 	po.RLockProcArray(procId)
-	fmt.Println("Got lock.")
 	array := po.array[int(procId)-1]
 	var thisTs Vectorclock
+	fmt.Println("Iterating over all intervals.")
 	for i := len(array) - 1; i >= 0; i-- {
+
 		thisTs = array[i].Timestamp
-		if thisTs.Equals(&ts) {
+		fmt.Println("Looking at interval ", array[i])
+		if thisTs.Equals(ts) {
+			fmt.Println("Interval timestamp was equal to searching timestamp, so we break.")
 			break
-		} else if thisTs.IsBefore(&ts) {
+		} else if thisTs.IsBefore(ts) {
+			fmt.Println("Interval timestamp was before searching timestamp, so we break")
 			break
 		}
 		wnrs := array[i].WriteNotices
 		wns := make([]WriteNotice, len(wnrs))
-
+		fmt.Println("Now we look at all the writenotice records")
+		fmt.Println(wnrs)
 		for i, wnr := range wnrs {
+			fmt.Println(" ---- Added writenotice for page ", wnr.pageNr)
 			wns[i] = WriteNotice{PageNr: wnr.pageNr}
 		}
 		interval := Interval{
@@ -136,11 +141,10 @@ func (po *ProcArray1) GetUnseenIntervalsAtProc(procId byte, ts Vectorclock) []In
 			Vt:           thisTs,
 			WriteNotices: wns,
 		}
+		fmt.Println("Final interval is ", interval)
 		result = append(result, interval)
 	}
-	fmt.Println("Releasing lock for proc array")
 	po.RUnlockProcArray(procId)
-	fmt.Println("Returning from get unseen intervals at proc.")
 	return result
 }
 
