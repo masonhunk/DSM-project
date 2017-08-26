@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"sync"
 	"time"
+	"strings"
 )
 
 const (
@@ -68,6 +69,7 @@ func NewMultiView() *Multiview {
 	gob.Register(network.MultiviewMessage{})
 	gob.Register(network.SimpleMessage{})
 	m := new(Multiview)
+	m.sequenceNumber = 0
 	m.chanMap = make(map[byte]chan string)
 	m.hasLock = make(map[int]bool)
 	return m
@@ -116,7 +118,7 @@ func (m *Multiview) Join(memSize, pageByteSize int) error {
 
 func (m *Multiview) Initialize(memSize, pageByteSize int, nrProcs int) error {
 	var err error
-	f, err := os.Create("multivewLog.csv")
+	f, err := os.Create("BenchmarkResults/multivewLog" + time.Now().String() + ".csv")
 	if err != nil {
 		f.Close()
 		log.Fatal(err)

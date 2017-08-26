@@ -62,15 +62,23 @@ func main() {
 	case "JacobiMW-manager":
 		wg := sync.WaitGroup{}
 		wg.Add(1)
-		matrixsize := 1024
-		Benchmarks.JacobiProgramMultiView(matrixsize, 4, 4, true, 4096, &wg, cpuprofFile)
+		matrixsize := 512
+		Benchmarks.JacobiProgramMultiView(matrixsize, 4, *nrprocs, true, 4096, &wg, cpuprofFile)
 	case "JacobiMW-host":
 		wg := sync.WaitGroup{}
 		wg.Add(1)
-		matrixsize := 1024
-		Benchmarks.JacobiProgramMultiView(matrixsize, 4, 4, false, 4096, &wg, cpuprofFile)
+		matrixsize := 512
+		Benchmarks.JacobiProgramMultiView(matrixsize, 4, *nrprocs, false, 4096, &wg, cpuprofFile)
 	case "SortedIntTM":
 		Benchmarks.SortedIntTMBenchmark(*nrprocs, 1000, *manager, 8388608, 524288, 10)
+	case "SyncOpsCostMW":
+		Benchmarks.TestSynchronizedWritesMW(*nrprocs,10000,cpuprofFile)
+	case "NonSyncOpsCostMW":
+		Benchmarks.TestNonSynchronizedReadWritesMW(200000000,cpuprofFile)
+	case "barrMW":
+		Benchmarks.TestBarrierTimeMW(100000, *nrprocs, nil)
+	case "locksMW":
+		Benchmarks.TestLockMW(100000, cpuprofFile)
 	default:
 		//Benchmarks.TestMultipleSortedIntTM()
 	}
@@ -85,6 +93,7 @@ func main() {
 }
 
 func setupCPUProf(filename string) io.Writer {
+	filename = "BenchmarkResults/"+filename
 	i := 0
 	for {
 		_, err := os.Stat(fmt.Sprintf("%s%s%d%s", filename, "_", i, ".prof"))
@@ -101,6 +110,7 @@ func setupCPUProf(filename string) io.Writer {
 }
 
 func setupMemProf(filename string) {
+	filename = "BenchmarkResults/"+filename
 	i := 0
 	for {
 		_, err := os.Stat(fmt.Sprintf("%s%s%d%s", filename, "_", i, ".mprof"))
