@@ -23,7 +23,7 @@ type CSVStructLogger struct {
 	consumerChan chan []string
 }
 
-type MessageEncoder struct {}
+type MessageEncoder struct{}
 
 func (MessageEncoder) GetHeaders(s interface{}) []string {
 	return []string{"From", "To", "Type"}
@@ -36,7 +36,7 @@ func (MessageEncoder) GetValues(s interface{}) []string {
 
 func NewCSVStructLogger(writer io.Writer) *CSVStructLogger {
 	res := CSVStructLogger{
-		Writer: csv.NewWriter(writer),
+		Writer:       csv.NewWriter(writer),
 		consumerChan: make(chan []string, 30),
 	}
 	go func(c *chan []string) {
@@ -51,6 +51,11 @@ func NewCSVStructLogger(writer io.Writer) *CSVStructLogger {
 }
 
 func (l *CSVStructLogger) Log(s interface{}, encoder StructEncoder) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Println("recovered from", r)
+		}
+	}()
 	res := append(encoder.GetValues(s), time.Now().Format(time.StampMilli))
 	l.consumerChan <- res
 }

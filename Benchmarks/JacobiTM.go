@@ -11,17 +11,18 @@ func TestJacobiProgramTreadMarks(t *testing.T) {
 	//log.SetOutput(ioutil.Discard)
 	group := new(sync.WaitGroup)
 	group.Add(2)
-	go JacobiProgramTreadMarks(4, 2, true, group)
+	matrixsize := 64
+	go JacobiProgramTreadMarks(matrixsize, 4, 2, true, group)
 	go func() {
 		time.Sleep(time.Millisecond * 200)
-		JacobiProgramTreadMarks(4, 2, false, group)
+		JacobiProgramTreadMarks(matrixsize, 4, 2, false, group)
 	}()
 	group.Wait()
 }
 
-func JacobiProgramTreadMarks(nrIterations int, nrProcs int, isManager bool, group *sync.WaitGroup) {
-	const M = 32
-	const N = 32
+func JacobiProgramTreadMarks(matrixsize int, nrIterations int, nrProcs int, isManager bool, group *sync.WaitGroup) {
+	var M = matrixsize
+	var N = matrixsize
 	const float32_BYTE_LENGTH = 4 //32 bits
 	var privateArray [][]float32  //privateArray[M][N]
 	privateArray = make([][]float32, M)

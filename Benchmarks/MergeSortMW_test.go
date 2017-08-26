@@ -4,6 +4,7 @@ import (
 	"DSM-project/multiview"
 	"fmt"
 	"github.com/stretchr/testify/assert"
+	"io/ioutil"
 	"log"
 	"math/rand"
 	"runtime"
@@ -15,12 +16,11 @@ import (
 
 func TestMergeSortMW(t *testing.T) {
 	runtime.GOMAXPROCS(4) // or 2 or 4
-	//log.SetOutput(ioutil.Discard)
+	log.SetOutput(ioutil.Discard)
 	group := sync.WaitGroup{}
-	start := time.Now()
 	pageSize := 4096
-	arraySize := 4096 * 80
-	nrProcs := 16
+	arraySize := 4096 * 1000
+	nrProcs := 1
 	group.Add(nrProcs)
 	go MergeSortMW(arraySize, nrProcs, true, pageSize, &group)
 	for i := 0; i < nrProcs-1; i++ {
@@ -30,9 +30,7 @@ func TestMergeSortMW(t *testing.T) {
 		}()
 	}
 	group.Wait()
-	end := time.Now()
-	diff := end.Sub(start)
-	fmt.Println("execution time:", diff.String())
+
 }
 
 func MergeSortMW(arraySize int, nrProcs int, isManager bool, pageByteSize int, group *sync.WaitGroup) {
@@ -53,7 +51,7 @@ func MergeSortMW(arraySize int, nrProcs int, isManager bool, pageByteSize int, g
 		rand.Seed(time.Now().UnixNano())
 		for i := range arraySectionAddresses {
 			arraySectionAddresses[i], _ = mw.Malloc(cellByteSize)
-			log.Println("got addr from malloc:", arraySectionAddresses[i])
+			//log.Println("got addr from malloc:", arraySectionAddresses[i])
 			//fill with random value
 			for j := 0; j < cellByteSize/INT_BYTE_LENGTH; j++ {
 				rn := rand.Intn(1000000)
@@ -81,6 +79,11 @@ func MergeSortMW(arraySize int, nrProcs int, isManager bool, pageByteSize int, g
 		log.Println("address array at host:", mw.Id, arraySectionAddresses)
 
 	}
+	var startTime time.Time
+	if mw.Id == 1 {
+		startTime = time.Now()
+	}
+
 	start := cellByteSize * (int(mw.Id) - 1)
 	startingAddr := arraySectionAddresses[int(mw.Id)-1]
 
@@ -121,10 +124,13 @@ func MergeSortMW(arraySize int, nrProcs int, isManager bool, pageByteSize int, g
 	log.Println("exiting algorithm at process", mw.Id, "...")
 	defer func() {
 		if isManager {
-			//fmt.Println("result array:",privateArray)
-			fmt.Println("length:", len(privateArray))
-			var res sort.IntSlice = privateArray
-			fmt.Println("isSorted:", sort.IsSorted(res))
+			//var res sort.IntSlice = privateArray
+			//fmt.Println("result array:", privateArray)
+			//fmt.Println("length:", len(privateArray))
+			//fmt.Println("isSorted:", sort.IsSorted(res))
+			end := time.Now()
+			diff := end.Sub(startTime)
+			fmt.Println("execution time:", diff.String())
 			mw.Shutdown()
 		} else {
 			mw.Leave()

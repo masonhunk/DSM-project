@@ -1,6 +1,7 @@
 package multiview
 
 import (
+	"fmt"
 	"github.com/stretchr/testify/assert"
 	"io/ioutil"
 	"log"
@@ -218,7 +219,9 @@ func TestConsecutiveWritesAndReads(t *testing.T) {
 	mw1.Read(ptr)
 	mw2.Read(ptr)
 
-	mw1.Write(ptr, byte(10))
+	fmt.Println(mw1.Write(ptr, byte(10)))
+	val, _ := mw1.Read(ptr)
+	assert.Equal(t, byte(10), val)
 	res, _ := mw2.Read(ptr)
 	assert.Equal(t, byte(10), res)
 	mw1.Write(ptr, byte(12))
@@ -244,12 +247,37 @@ func TestReacquireLock(t *testing.T) {
 	}()
 
 	mw1.Lock(1)
-	<- started
+	<-started
 	mw1.Release(1)
-	<- done
+	<-done
 	mw2.Release(1)
 
 	time.Sleep(100 * time.Millisecond)
 	mw2.Leave()
+	mw1.Shutdown()
+}
+
+func TestMemoryMalloc(t *testing.T) {
+	mw1 := NewMultiView()
+	mw1.Initialize(4104, 4096, 1)
+	addr, err := mw1.Malloc(4)
+	assert.Nil(t, err)
+	assert.Equal(t, 2*4096, addr)
+
+	mw1.Shutdown()
+	//try alloc'ing more memory than available
+	mw1 = NewMultiView()
+	mw1.Initialize(2*4096, 4096, 1)
+	addr, err = mw1.Malloc(2 * 4096)
+	assert.Nil(t, err)
+	assert.Equal(t, 2*4096, addr)
+	addr1, err1 := mw1.Malloc(2)
+	assert.Equal(t, -1, addr1)
+	assert.NotNil(t, err1)
+
+	mw1.Free(addr, 2*4096)
+	addr1, err1 = mw1.Malloc(4096)
+	assert.Nil(t, err1)
+	assert.Equal(t, 2*4096, addr1)
 	mw1.Shutdown()
 }

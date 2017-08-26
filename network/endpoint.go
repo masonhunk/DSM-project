@@ -32,7 +32,7 @@ type MultiviewMessage struct {
 	Minipage_base int // addrress in the vpage address space
 	Privbase      int //address in the privileged view
 	EventId       byte
-	Err           error
+	Err           string
 	Data          []byte //Data of the message
 	Id            int
 }

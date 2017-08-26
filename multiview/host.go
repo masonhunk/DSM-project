@@ -42,20 +42,19 @@ type Multiview struct {
 	server         network.Server
 	chanMap        map[byte]chan string
 	sequenceNumber byte
-	hasLock		   map[int]bool
+	hasLock        map[int]bool
 }
 
 type hostMem struct {
-	vm             memory.VirtualMemory
-	accessMap      map[int]byte //key = vpage number, value, access right
+	vm        memory.VirtualMemory
+	accessMap []byte
+	//accessMap      map[int]byte //key = vpage number, value, access right
 	faultListeners []memory.FaultListener
 	*sync.RWMutex
 }
 
 func (m *Multiview) getInAccessMap(vpageNr int) byte {
-	m.mem.RLock()
 	res := m.mem.accessMap[vpageNr]
-	m.mem.RUnlock()
 	return res
 }
 
@@ -77,7 +76,8 @@ func NewMultiView() *Multiview {
 func NewHostMem(virtualMemory memory.VirtualMemory) *hostMem {
 	m := new(hostMem)
 	m.vm = virtualMemory
-	m.accessMap = make(map[int]byte)
+	nrPages := virtualMemory.Size()
+	m.accessMap = make([]byte, nrPages)
 	m.faultListeners = make([]memory.FaultListener, 0)
 	m.vm.AccessRightsDisabled(true)
 	m.RWMutex = &sync.RWMutex{}
@@ -162,6 +162,13 @@ func (t *Multiview) ReadInt(addr int) int {
 	return int(result)
 }
 
+func (t *Multiview) ReadInt64(addr int) int {
+
+	b, _ := t.ReadBytes(addr, 8)
+	result, _ := binary.Varint(b)
+	return int(result)
+}
+
 func (t *Multiview) WriteBytes(addr int, val []byte) error {
 	var err error = nil
 	for b, val := range val {
@@ -174,6 +181,15 @@ func (t *Multiview) WriteInt(addr int, i int) {
 	buff := make([]byte, 4)
 	_ = binary.PutVarint(buff, int64(i))
 	if len(buff) != 4 {
+		panic("wrong length of buffer! Expected 4, got" + string(len(buff)))
+	}
+	t.WriteBytes(addr, buff)
+}
+
+func (t *Multiview) WriteInt64(addr int, i int) {
+	buff := make([]byte, 8)
+	_ = binary.PutVarint(buff, int64(i))
+	if len(buff) != 8 {
 		panic("wrong length of buffer! Expected 4, got" + string(len(buff)))
 	}
 	t.WriteBytes(addr, buff)
@@ -252,6 +268,12 @@ func (m *Multiview) ReadBytes(addr, length int) ([]byte, error) {
 	for i := range result {
 		result[i], _ = m.Read(addr + i)
 	}
+	return result, nil
+}
+
+func (m *Multiview) privilegedRead(addr, length int) ([]byte, error) {
+	result := make([]byte, length)
+	result = m.mem.vm.PrivilegedRead(addr, length)
 	return result, nil
 }
 
@@ -371,7 +393,7 @@ func (m *Multiview) onFault(addr int, faultType byte, accessType string, value b
 }
 
 func (m *Multiview) messageHandler(msg network.MultiviewMessage, c chan bool) error {
-	log.Println("received message at host", m.Id, "with type:", msg.Type)
+	log.Println("received message at host", m.Id, msg)
 	switch msg.Type {
 	case WELCOME_MESSAGE:
 		m.Id = msg.To
@@ -420,15 +442,15 @@ func (m *Multiview) messageHandler(msg network.MultiviewMessage, c chan bool) er
 		msg.To = byte(0)
 		m.conn.Send(msg)
 	case MALLOC_REPLY:
-		if msg.Err != nil {
-			m.chanMap[msg.EventId] <- msg.Err.Error()
+		if msg.Err != "" {
+			m.chanMap[msg.EventId] <- msg.Err
 		} else {
 			s := msg.Fault_addr
 			m.chanMap[msg.EventId] <- strconv.Itoa(s)
 		}
 	case FREE_REPLY:
-		if msg.Err != nil {
-			m.chanMap[msg.EventId] <- msg.Err.Error()
+		if msg.Err != "" {
+			m.chanMap[msg.EventId] <- msg.Err
 		} else {
 			m.chanMap[msg.EventId] <- "ok"
 		}
