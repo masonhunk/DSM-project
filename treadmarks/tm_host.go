@@ -251,7 +251,7 @@ func (t *TreadMarks) Startup() error {
 		log.Fatal(err)
 	}
 	logger := network.NewCSVStructLogger(f)
-	t.server, err = network.NewServer(func(message network.Message) error { return nil }, "2000", *logger)
+	t.server, err = network.NewServer(func(message network.Message) error { return nil }, "2000", logger)
 	if err != nil {
 		logger.Close()
 		return err
@@ -304,7 +304,7 @@ func (t *TreadMarks) updateDatastructures() {
 	fmt.Println(t.ProcId, " --- Updating datastructure.")
 	t.twinLock.Lock()
 	fmt.Println(t.ProcId, " ---- Had the following twins:")
-	for k, v := range t.twinMap{
+	for k, v := range t.twinMap {
 		fmt.Println(t.ProcId, " ---- key: ", k, " value: ", v)
 	}
 	if len(t.twinMap) > 0 {
@@ -361,9 +361,9 @@ func (t *TreadMarks) RequestAndApplyDiffs(pageNr int) {
 		if diff == nil {
 			break
 		}
-		fmt.Println(t.ProcId, " ------------ Data before diff applied: ", t.VirtualMemory.PrivilegedRead(pageNr * t.GetPageSize(), t.GetPageSize()))
+		fmt.Println(t.ProcId, " ------------ Data before diff applied: ", t.VirtualMemory.PrivilegedRead(pageNr*t.GetPageSize(), t.GetPageSize()))
 		t.ApplyDiff(pageNr, diff)
-		fmt.Println(t.ProcId, " ------------ Data after diff applied: ", t.VirtualMemory.PrivilegedRead(pageNr * t.GetPageSize(), t.GetPageSize()))
+		fmt.Println(t.ProcId, " ------------ Data after diff applied: ", t.VirtualMemory.PrivilegedRead(pageNr*t.GetPageSize(), t.GetPageSize()))
 	}
 	t.UnlockPage(pageNr)
 }
@@ -415,7 +415,6 @@ func (t *TreadMarks) HandleDiffRequest(message TM_Message) TM_Message {
 
 			fmt.Println("We created a dif, from ", t.twinMap[pageNr], " and ", pageVal, "\n"+
 				"which was ", diff)
-
 
 			fmt.Println("Deleting twin ", pageNr)
 			delete(t.twinMap, pageNr)
@@ -580,7 +579,6 @@ func (t *TreadMarks) incorporateIntervalsIntoDatastructures(msg *TM_Message) {
 					}
 				}
 			}
-
 
 			fmt.Println(t.ProcId, " ----- Creating and adding the writenotice we got from the interval.")
 			//prepend to write notice list and update pointers

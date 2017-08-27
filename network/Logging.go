@@ -10,6 +10,8 @@ import (
 
 type CSVLogger interface {
 	Log(s interface{})
+	Disable()
+	Enable()
 	Close()
 }
 
@@ -21,6 +23,7 @@ type StructEncoder interface {
 type CSVStructLogger struct {
 	*csv.Writer
 	consumerChan chan []string
+	isEnabled    bool
 }
 
 type MessageEncoder struct{}
@@ -38,6 +41,7 @@ func NewCSVStructLogger(writer io.Writer) *CSVStructLogger {
 	res := CSVStructLogger{
 		Writer:       csv.NewWriter(writer),
 		consumerChan: make(chan []string, 30),
+		isEnabled:    true,
 	}
 	go func(c *chan []string) {
 		for data := range *c {
@@ -56,8 +60,18 @@ func (l *CSVStructLogger) Log(s interface{}, encoder StructEncoder) {
 			log.Println("recovered from", r)
 		}
 	}()
-	res := append(encoder.GetValues(s), time.Now().Format(time.StampMilli))
-	l.consumerChan <- res
+	if l.isEnabled {
+		res := append(encoder.GetValues(s), time.Now().Format(time.StampMilli))
+		l.consumerChan <- res
+	}
+}
+
+func (l *CSVStructLogger) Disable() {
+	l.isEnabled = false
+}
+
+func (l *CSVStructLogger) Enable() {
+	l.isEnabled = true
 }
 
 func (l *CSVStructLogger) Close() {

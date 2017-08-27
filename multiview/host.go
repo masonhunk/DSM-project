@@ -10,7 +10,6 @@ import (
 	"log"
 	"os"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 )
@@ -44,6 +43,7 @@ type Multiview struct {
 	chanMap        map[byte]chan string
 	sequenceNumber byte
 	hasLock        map[int]bool
+	csvLogger      *network.CSVStructLogger
 }
 
 type hostMem struct {
@@ -123,10 +123,10 @@ func (m *Multiview) Initialize(memSize, pageByteSize int, nrProcs int) error {
 		f.Close()
 		log.Fatal(err)
 	}
-	logger := network.NewCSVStructLogger(f)
-	m.server, err = network.NewServer(func(message network.Message) error { return nil }, "2000", *logger)
+	m.csvLogger = network.NewCSVStructLogger(f)
+	m.server, err = network.NewServer(func(message network.Message) error { return nil }, "2000", m.csvLogger)
 	if err != nil {
-		logger.Close()
+		m.csvLogger.Close()
 		return err
 	}
 	log.Println("sucessfully started server")
@@ -462,6 +462,14 @@ func (m *Multiview) messageHandler(msg network.MultiviewMessage, c chan bool) er
 		m.chanMap[msg.EventId] <- "ok"
 	}
 	return nil
+}
+
+func (m *Multiview) CSVLoggingIsEnabled(b bool) {
+	if b == true {
+		m.csvLogger.Enable()
+	} else {
+		m.csvLogger.Disable()
+	}
 }
 
 func panicOnErr(err error) {

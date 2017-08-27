@@ -33,42 +33,23 @@ func main() {
 	fmt.Println(*benchmark)
 	log.SetOutput(ioutil.Discard)
 	switch *benchmark {
-	case "ModuloMult-manager":
+	case "ModuloMultMW":
 		wg := sync.WaitGroup{}
 		wg.Add(1)
 		pageSize := 4096
 		nrOfInts := 4096 * 1000000
 		batchSize := 10000 * 4096 // nr of ints in batch
-		nrProcs := 4
-		Benchmarks.ParallelSumMW(batchSize, nrOfInts, nrProcs, true, pageSize, &wg, cpuprofFile)
-	case "ModuloMult-host":
-		wg := sync.WaitGroup{}
-		wg.Add(1)
-		pageSize := 4096
-		nrOfInts := 4096 * 1000000
-		batchSize := 100 * 4096 // nr of ints in batch
-		nrProcs := 4
-		Benchmarks.ParallelSumMW(batchSize, nrOfInts, nrProcs, false, pageSize, &wg, nil)
-	case "JacobiTM-manager":
+		Benchmarks.ParallelSumMW(batchSize, nrOfInts, *nrprocs, *manager, pageSize, &wg, cpuprofFile)
+	case "JacobiTM":
 		wg := sync.WaitGroup{}
 		wg.Add(1)
 		matrixsize := 64
-		Benchmarks.JacobiProgramTreadMarks(matrixsize, 8, 1, true, &wg)
-	case "JacobiTM-host":
+		Benchmarks.JacobiProgramTreadMarks(matrixsize, 8, *nrprocs, *manager, &wg)
+	case "JacobiMW":
 		wg := sync.WaitGroup{}
 		wg.Add(1)
-		matrixsize := 64
-		Benchmarks.JacobiProgramTreadMarks(matrixsize, 8, 1, false, &wg)
-	case "JacobiMW-manager":
-		wg := sync.WaitGroup{}
-		wg.Add(1)
-		matrixsize := 512
-		Benchmarks.JacobiProgramMultiView(matrixsize, 4, *nrprocs, true, 4096, &wg, cpuprofFile)
-	case "JacobiMW-host":
-		wg := sync.WaitGroup{}
-		wg.Add(1)
-		matrixsize := 512
-		Benchmarks.JacobiProgramMultiView(matrixsize, 4, *nrprocs, false, 4096, &wg, cpuprofFile)
+		matrixsize := 1536
+		Benchmarks.JacobiProgramMultiView(matrixsize, 20, *nrprocs, *manager, 4096, &wg, cpuprofFile)
 	case "SortedIntTM":
 		Benchmarks.SortedIntTMBenchmark(*nrprocs, 1000, *manager, 8388608, 524288, 10)
 	case "SyncOpsCostMW":

@@ -13,10 +13,10 @@ type Server struct {
 	nonce   byte
 	ep      Endpoint
 	handler func(Message) error
-	logger  CSVStructLogger
+	logger  *CSVStructLogger
 }
 
-func NewServer(handler func(Message) error, port string, logger CSVStructLogger) (Server, error) {
+func NewServer(handler func(Message) error, port string, logger *CSVStructLogger) (Server, error) {
 	s := Server{port, cmap.New(), byte(0), Endpoint{}, handler, logger}
 	var err error
 	s.ep, err = NewEndpoint(port, s.handleConnection)

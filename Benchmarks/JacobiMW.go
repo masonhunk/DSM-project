@@ -63,19 +63,23 @@ func JacobiProgramMultiView(matrixSize int, nrIterations int, nrProcs int, isMan
 	}
 	mw := multiview.NewMultiView()
 	if isManager {
+		var setupStart time.Time = time.Now()
+
 		mw.Initialize(N*M*float32_BYTE_LENGTH, pageByteSize, nrProcs)
+		mw.CSVLoggingIsEnabled(false)
 
 		for i := range gridEntryAddresses {
 			row := gridEntryAddresses[i]
 			for j := range row {
 				gridEntryAddresses[i][j], _ = mw.Malloc(float32_BYTE_LENGTH)
 				//placeholder value
-				var valAsBytes []byte = float32ToBytes(20.0)
+				/*var valAsBytes []byte = float32ToBytes(20.0)
 				for r, b := range valAsBytes {
 					mw.Write(gridEntryAddresses[i][j]+r, b)
-				}
+				}*/
 			}
 		}
+		fmt.Println("Manager done with setup after", time.Now().Sub(setupStart))
 		mw.Barrier(0)
 	} else {
 		mw.Join(M*N*float32_BYTE_LENGTH, pageByteSize)
@@ -90,7 +94,6 @@ func JacobiProgramMultiView(matrixSize int, nrIterations int, nrProcs int, isMan
 				memsize := M * N * float32_BYTE_LENGTH
 				vAddr := (q+1)*memsize + l
 				gridEntryAddresses[i][j] = vAddr
-				mw.Read(vAddr)
 			}
 		}
 	}
@@ -103,6 +106,9 @@ func JacobiProgramMultiView(matrixSize int, nrIterations int, nrProcs int, isMan
 			log.Fatal("could not start CPU profile: ", err)
 		}
 	}
+	if isManager {
+		mw.CSVLoggingIsEnabled(true)
+	}
 	length := M / nrProcs
 	begin := length * int(mw.Id-1)
 	end := length * int(mw.Id)
@@ -113,7 +119,8 @@ func JacobiProgramMultiView(matrixSize int, nrIterations int, nrProcs int, isMan
 	mw.Barrier(1)
 
 	for iter := 1; iter <= nrIterations; iter++ {
-		//fmt.Println("startinig iteration", iter, "at host", mw.Id)
+		fmt.Println("in iteration", iter, "at host", mw.Id)
+		iterationStartTime := time.Now()
 		for i := begin; i < end; i++ {
 			for j := 0; j < N; j++ {
 				var divisionAmount int = 4
@@ -158,6 +165,7 @@ func JacobiProgramMultiView(matrixSize int, nrIterations int, nrProcs int, isMan
 			}
 		}
 		mw.Barrier(3)
+		fmt.Println("iteration", iter, " took", time.Now().Sub(iterationStartTime))
 		log.Println("done with iteration", iter)
 	}
 	mw.Barrier(4)
@@ -169,6 +177,7 @@ func JacobiProgramMultiView(matrixSize int, nrIterations int, nrProcs int, isMan
 		}
 
 		if isManager {
+			mw.CSVLoggingIsEnabled(false)
 			end := time.Now()
 			diff := end.Sub(startTime)
 			fmt.Println("execution time:", diff.String())
