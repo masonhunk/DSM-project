@@ -236,9 +236,7 @@ func write(conn net.Conn, data []byte){
 	if (len(data) != int(length)) {
 		panic(fmt.Sprint("Length did not match.", length, len(data)))
 	}
-	fmt.Println("writing", uint64(len(data)))
 	l := utils.Uint64ToBytes(uint64(len(data)))
-	fmt.Println(l)
 	msg := append(l, data...)
 	conn.Write(msg)
 }
@@ -250,8 +248,6 @@ func read(conn net.Conn) []byte{
 		return nil
 	}
 	l := int(utils.BytesToUint64(msg))
-	fmt.Println("reading",l)
-	fmt.Println(msg)
 	msg = make([]byte, l)
 	_, err = io.ReadFull(conn, msg)
 	if err != nil {

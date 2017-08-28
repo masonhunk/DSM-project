@@ -8,8 +8,6 @@ import (
 	"bytes"
 	"github.com/davecgh/go-xdr/xdr2"
 	"sync"
-	"fmt"
-	"reflect"
 	"runtime"
 	"strconv"
 )
@@ -356,15 +354,12 @@ func (t *TreadmarksApi) createDiffRequest(pageNr int16, procId uint8) DiffReques
 //----------------------------------------------------------------//
 
 func (t *TreadmarksApi) sendMessage(to, msgType uint8, msg interface{}) {
-	fmt.Println(t.myId, getGID(), " -- sending ", reflect.TypeOf(msg), "to ", to)
-	fmt.Println(t.myId, getGID(), "Message is ", msg)
 	var w bytes.Buffer
 	xdr.Marshal(&w, &msg)
 	data := make([]byte, w.Len()+2)
 	data[0] = byte(to)
 	data[1] = byte(msgType)
 	w.Read(data[2:])
-	fmt.Println(t.myId,getGID(), " byte length of message is ", len(data))
 	t.out <- data
 }
 
@@ -474,13 +469,10 @@ func (t *TreadmarksApi) getManagerId(id uint8) uint8 {
 }
 
 func (t *TreadmarksApi) getHighestTimestamp(procId uint8) Timestamp {
-	fmt.Println(t.myId, "getting highest timestamp of ", procId)
 	if len(t.procarray[procId]) == 0 {
-		fmt.Println(t.myId, " didnt have any intervals, so timestamp is ", NewTimestamp(t.nrProcs))
 		return NewTimestamp(t.nrProcs)
 	}
 	ts := t.procarray[procId][len(t.procarray[procId])-1].Timestamp
-	fmt.Println(t.myId, "Timestamp was ", ts)
 	return ts
 }
 
