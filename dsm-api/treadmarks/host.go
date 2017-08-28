@@ -128,15 +128,12 @@ func (t *TreadmarksApi) ReleaseLock(id uint8) {
 	lock := t.locks[id]
 	lock.Lock()
 	lock.locked = false
-	b := lock.nextTimestamp != nil
-	if b {
-		lock.Unlock()
+	if lock.nextTimestamp != nil{
 		t.newInterval()
-		t.sendLockAcquireResponse(id)
-
+		defer t.sendLockAcquireResponse(id)
 	}
+	lock.last = t.getManagerId(id)
 	lock.Unlock()
-
 }
 
 //----------------------------------------------------------------//
@@ -384,7 +381,6 @@ func (t *TreadmarksApi) sendLockAcquireResponse(lockId uint8) {
 		Timestamp: t.Timestamp,
 	}
 	t.sendMessage(lock.nextId, 1, resp)
-	lock.last = lock.nextId
 	lock.nextId = 0
 	lock.nextTimestamp = nil
 	lock.haveToken = false
@@ -557,23 +553,31 @@ func (t *TreadmarksApi) handleLockAcquireRequest(req LockAcquireRequest) {
 	id := req.LockId
 	lock := t.locks[id]
 	lock.Lock()
-	if lock.haveToken && !lock.locked {
-		lock.haveToken = false
-		lock.nextId = req.From
-		lock.nextTimestamp = req.Timestamp
-		t.newInterval()
-		t.sendLockAcquireResponse(id)
+	if lock.haveToken {
+		if !lock.locked {
+			lock.haveToken = false
+			lock.nextId = req.From
+			lock.nextTimestamp = req.Timestamp
+			t.newInterval()
+			defer t.sendLockAcquireResponse(id)
+		} else {
+			if lock.nextTimestamp == nil {
+				lock.nextId = req.From
+				lock.nextTimestamp = req.Timestamp
+			} else {
+				t.forwardLockAcquireRequest(lock.last, req)
+				lock.last = req.From
+			}
+		}
 	} else {
 		if lock.nextTimestamp == nil {
 			lock.nextId = req.From
 			lock.nextTimestamp = req.Timestamp
-		}
-		if !lock.haveToken{
+		} else {
 			t.forwardLockAcquireRequest(lock.last, req)
 			lock.last = req.From
 		}
 	}
-
 	lock.Unlock()
 }
 
