@@ -6,9 +6,10 @@ import (
 	"DSM-project/network"
 	"DSM-project/utils"
 	"bytes"
-	"github.com/davecgh/go-xdr/xdr2"
 	"sync"
 	"fmt"
+	"github.com/davecgh/go-xdr/xdr2"
+	"log"
 	"reflect"
 )
 
@@ -19,7 +20,7 @@ type TreadmarksApi struct {
 	pagearray                      []*pageArrayEntry
 	twins                          [][]byte
 	dirtyPages                     map[int16]bool
-	dirtyPagesLock					*sync.RWMutex
+	dirtyPagesLock                 *sync.RWMutex
 	procarray                      [][]IntervalRecord
 	locks                          []*lock
 	channel                        chan bool
@@ -30,7 +31,7 @@ type TreadmarksApi struct {
 	conn                           network.Connection
 	group                          *sync.WaitGroup
 	currentInterval                *IntervalRecord
-	Timestamp						Timestamp
+	Timestamp                      Timestamp
 }
 
 var _ dsm_api.DSMApiInterface = new(TreadmarksApi)
@@ -116,6 +117,7 @@ func (t *TreadmarksApi) Barrier(id uint8) {
 func (t *TreadmarksApi) AcquireLock(id uint8) {
 	lock := t.locks[id]
 	lock.Lock()
+	fmt.Println("have token", t.myId, lock.haveToken)
 	if lock.haveToken {
 		lock.locked = true
 	} else {
@@ -234,12 +236,12 @@ func (t *TreadmarksApi) newInterval() {
 		}
 		t.procarray[t.myId] = append(t.procarray[t.myId], interval)
 		t.currentInterval = &t.procarray[t.myId][len(t.procarray[t.myId])-1]
-		fmt.Println(t.myId, " made a new interval with timestamp ", t.Timestamp, " and pages ", pages)
+		log.Println(t.myId, " made a new interval with timestamp ", t.Timestamp, " and pages ", pages)
 
 	} else {
-		fmt.Println(t.myId, " I didnt create any intervals.")
+		log.Println(t.myId, " I didnt create any intervals.")
 	}
-	fmt.Println(t.myId, " my intervals are now ", t.procarray[t.myId])
+	log.Println(t.myId, " my intervals are now ", t.procarray[t.myId])
 
 }
 
@@ -667,7 +669,7 @@ func (t *TreadmarksApi) handleDiffResponse(resp DiffResponse) {
 	wnl := resp.Writenotices
 	j := 0
 	for proc = 0; proc < t.nrProcs; proc++ {
-		if proc == t.myId{
+		if proc == t.myId {
 			continue
 		}
 		if j >= len(wnl) {
@@ -679,7 +681,7 @@ func (t *TreadmarksApi) handleDiffResponse(resp DiffResponse) {
 			if !(j < len(wnl)) {
 				break
 			}
-			if  !list[i].Timestamp.equals(wnl[j].Timestamp){
+			if !list[i].Timestamp.equals(wnl[j].Timestamp) {
 				break
 			}
 			list[i].Diff = wnl[j].Diff
