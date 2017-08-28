@@ -10,9 +10,12 @@ import (
 	"sync"
 	"fmt"
 	"reflect"
+	"runtime"
+	"strconv"
 )
 
 type TreadmarksApi struct {
+	running							bool
 	memory                         memory.VirtualMemory
 	myId, nrProcs                  uint8
 	memSize, pageByteSize, nrPages int
@@ -62,6 +65,7 @@ func (t *TreadmarksApi) Initialize(port int) error {
 	t.group = new(sync.WaitGroup)
 	t.initializeBarriers()
 	t.initializeLocks()
+	t.running = true
 	go t.handleIncoming()
 	return nil
 }
@@ -78,8 +82,9 @@ func (t *TreadmarksApi) Join(ip string, port int) error {
 }
 
 func (t *TreadmarksApi) Shutdown() error {
-	close(t.out)
+
 	t.group.Wait()
+	close(t.out)
 	return nil
 }
 
@@ -168,7 +173,8 @@ func (t *TreadmarksApi) onFault(addr int, faultType byte, accessType string, val
 		}
 	}
 	if accessType == "WRITE" {
-		t.twins[pageNr] = t.memory.PrivilegedRead(t.memory.GetPageAddr(int(pageNr)), t.memory.GetPageSize())
+		t.twins[pageNr] = make([]byte, t.pageByteSize)
+		copy(t.twins[pageNr], t.memory.PrivilegedRead(t.memory.GetPageAddr(int(pageNr)), t.memory.GetPageSize()))
 		t.dirtyPagesLock.Lock()
 		t.dirtyPages[pageNr] = true
 		t.dirtyPagesLock.Unlock()
@@ -350,15 +356,15 @@ func (t *TreadmarksApi) createDiffRequest(pageNr int16, procId uint8) DiffReques
 //----------------------------------------------------------------//
 
 func (t *TreadmarksApi) sendMessage(to, msgType uint8, msg interface{}) {
-	fmt.Println(t.myId, " -- sending ", reflect.TypeOf(msg), "to ", to)
-	fmt.Println(t.myId, "Message is ", msg)
+	fmt.Println(t.myId, getGID(), " -- sending ", reflect.TypeOf(msg), "to ", to)
+	fmt.Println(t.myId, getGID(), "Message is ", msg)
 	var w bytes.Buffer
 	xdr.Marshal(&w, &msg)
 	data := make([]byte, w.Len()+2)
 	data[0] = byte(to)
 	data[1] = byte(msgType)
 	w.Read(data[2:])
-	fmt.Println(t.myId, " byte length of message is ", len(data))
+	fmt.Println(t.myId,getGID(), " byte length of message is ", len(data))
 	t.out <- data
 }
 
@@ -430,11 +436,12 @@ func (t *TreadmarksApi) sendCopyRequest(pageNr int16) {
 }
 
 func (t *TreadmarksApi) sendCopyResponse(to uint8, pageNr int16) {
-	data := t.twins[pageNr]
+	data := make([]byte, t.pageByteSize)
+	copy(data, t.twins[pageNr])
 	if data == nil {
 		pageSize := t.memory.GetPageSize()
 		addr := int(pageNr) * pageSize
-		data = t.memory.PrivilegedRead(addr, pageSize)
+		copy(data, t.memory.PrivilegedRead(addr, pageSize))
 	}
 	resp := CopyResponse{
 		PageNr: pageNr,
@@ -544,6 +551,9 @@ func (t *TreadmarksApi) handleIncoming() {
 				panic(err.Error())
 			}
 			t.handleDiffResponse(resp)
+		}
+		if !t.running{
+			break
 		}
 	}
 	t.group.Done()
@@ -720,4 +730,13 @@ func (t *TreadmarksApi) applyDiff(pageNr int16, diff map[int]byte) {
 
 func (t *TreadmarksApi) GetId() int {
 	return int(t.myId)
+}
+
+func getGID() uint64 {
+	b := make([]byte, 64)
+	b = b[:runtime.Stack(b, false)]
+	b = bytes.TrimPrefix(b, []byte("goroutine "))
+	b = b[:bytes.IndexByte(b, ' ')]
+	n, _ := strconv.ParseUint(string(b), 10, 64)
+	return n
 }

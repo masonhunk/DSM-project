@@ -11,4 +11,5 @@ type DSMApiInterface interface{
 	Barrier(id uint8)
 	AcquireLock(id uint8)
 	ReleaseLock(id uint8)
+	GetId() int
 }
