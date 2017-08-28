@@ -40,7 +40,7 @@ func MergeSortTM(arraySize int, nrProcs int, isManager bool, pageByteSize int, g
 	cellByteSize := ARRAY_SIZE * INT_BYTE_LENGTH / nrProcs
 	fmt.Println("cell byte size:", cellByteSize)
 
-	tm := setupTreadMarksStruct(nrProcs, ARRAY_SIZE*INT_BYTE_LENGTH, pageByteSize, nrProcs, nrProcs)
+	tm := setupTreadMarksStruct(nrProcs, ARRAY_SIZE*INT_BYTE_LENGTH, pageByteSize, nrProcs, nrProcs+1)
 	if isManager {
 		tm.Startup()
 		rand.Seed(time.Now().UnixNano())

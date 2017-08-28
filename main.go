@@ -60,6 +60,14 @@ func main() {
 		Benchmarks.TestBarrierTimeMW(100000, *nrprocs, nil)
 	case "locksMW":
 		Benchmarks.TestLockMW(100000, cpuprofFile)
+	case "barrTM":
+		Benchmarks.TestBarrierTimeTM(100000, *nrprocs, nil)
+	case "locksTM":
+		Benchmarks.TestLockTM(10000, cpuprofFile)
+	case "SyncOpsCosTM":
+		Benchmarks.TestSynchronizedReadsWritesTM(10000, cpuprofFile)
+	case "NonSyncOpsCostTM":
+		Benchmarks.TestNonSynchronizedReadWritesTM(100000000, cpuprofFile)
 	default:
 		//Benchmarks.TestMultipleSortedIntTM()
 	}
