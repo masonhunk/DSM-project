@@ -129,11 +129,13 @@ func (t *TreadmarksApi) ReleaseLock(id uint8) {
 	lock.Lock()
 	lock.locked = false
 	b := lock.nextTimestamp != nil
-	lock.Unlock()
 	if b {
+		lock.Unlock()
 		t.newInterval()
 		t.sendLockAcquireResponse(id)
+
 	}
+	lock.Unlock()
 
 }
 
@@ -382,6 +384,7 @@ func (t *TreadmarksApi) sendLockAcquireResponse(lockId uint8) {
 		Timestamp: t.Timestamp,
 	}
 	t.sendMessage(lock.nextId, 1, resp)
+	lock.last = lock.nextId
 	lock.nextId = 0
 	lock.nextTimestamp = nil
 	lock.haveToken = false
@@ -423,7 +426,6 @@ func (t *TreadmarksApi) sendCopyRequest(pageNr int16) {
 		req := CopyRequest{
 			From:      t.myId,
 			PageNr:    pageNr,
-			Timestamp: t.Timestamp,
 		}
 		t.sendMessage(to, 5, req)
 	} else {
@@ -436,9 +438,11 @@ func (t *TreadmarksApi) sendCopyRequest(pageNr int16) {
 func (t *TreadmarksApi) sendCopyResponse(to uint8, pageNr int16) {
 	data := t.twins[pageNr]
 	if data == nil {
+		fmt.Println(t.myId, "didnt have twin")
 		pageSize := t.memory.GetPageSize()
 		addr := int(pageNr) * pageSize
 		data = t.memory.PrivilegedRead(addr, pageSize)
+		fmt.Println(t.myId, "copy was ", data)
 	}
 	resp := CopyResponse{
 		PageNr: pageNr,
@@ -553,9 +557,6 @@ func (t *TreadmarksApi) handleLockAcquireRequest(req LockAcquireRequest) {
 	id := req.LockId
 	lock := t.locks[id]
 	lock.Lock()
-
-
-
 	if lock.haveToken && !lock.locked {
 		lock.haveToken = false
 		lock.nextId = req.From
@@ -569,9 +570,10 @@ func (t *TreadmarksApi) handleLockAcquireRequest(req LockAcquireRequest) {
 		}
 		if !lock.haveToken{
 			t.forwardLockAcquireRequest(lock.last, req)
+			lock.last = req.From
 		}
 	}
-	lock.last = req.From
+
 	lock.Unlock()
 }
 
