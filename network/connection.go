@@ -129,10 +129,12 @@ func (c *connection) sendLoop(){
  */
 func (c *connection) receive(peer *peer){
 	c.group.Add(1)
-	running := true
-	for running {
+	for c.running {
 		b := read(peer.conn)
-		if b[0] == 0 {
+		if b == nil {
+			continue
+		}
+		if len(b) > 0 && b[0] == 0 {
 			id := int(b[1])
 			ip, port, _ := addrFromBytes(b[2:])
 			conn := c.connectToHost(ip, port)
@@ -141,7 +143,6 @@ func (c *connection) receive(peer *peer){
 			msg := append([]byte{byte(peer.id)}, b[1:]...)
 			c.in <- msg
 		}
-		running = c.running
 	}
 	peer.conn.Close()
 	c.group.Done()
@@ -230,6 +231,10 @@ func (c *connection) getAddr(id int) string{
 }
 
 func write(conn net.Conn, data []byte){
+	length := uint64(len(data))
+	if (len(data) != int(length)) {
+		panic(fmt.Sprint("Length did not match.", length, len(data)))
+	}
 	l := utils.Uint64ToBytes(uint64(len(data)))
 	msg := append(l, data...)
 	conn.Write(msg)

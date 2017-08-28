@@ -11,12 +11,14 @@ import (
 	"runtime"
 	"runtime/pprof"
 	"sync"
+	"time"
 )
 
 var cpuprofile = flag.String("cpuprofile", "", "write cpu profile `file`")
 var memprofile = flag.String("memprofile", "", "write memory profile to `file`")
 var benchmark = flag.String("benchmark", "default", "choose benchmark algorithm")
-var nrprocs = flag.Int("hosts", 1, "choose number of hosts.")
+var nrprocs = flag.Int("number of hosts", 1, "choose number of hosts.")
+var port = flag.Int("port", 1000, "Choose port.")
 var manager = flag.Bool("manager", true, "choose if instance is manager.")
 
 func main() {
@@ -51,7 +53,7 @@ func main() {
 		matrixsize := 1536
 		Benchmarks.JacobiProgramMultiView(matrixsize, 20, *nrprocs, *manager, 4096, &wg, cpuprofFile)
 	case "SortedIntTM":
-		Benchmarks.SortedIntTMBenchmark(*nrprocs, 1000, *manager, 8388608, 524288, 10)
+		Benchmarks.SortedIntTMBenchmark(nil, *port, *nrprocs, 1000, *manager, 8388608, 524288, 10)
 	case "SyncOpsCostMW":
 		Benchmarks.TestSynchronizedWritesMW(*nrprocs, 10000, cpuprofFile)
 	case "NonSyncOpsCostMW":
@@ -61,7 +63,10 @@ func main() {
 	case "locksMW":
 		Benchmarks.TestLockMW(100000, cpuprofFile)
 	default:
-		//Benchmarks.TestMultipleSortedIntTM()
+		group := new(sync.WaitGroup)
+		go Benchmarks.SortedIntTMBenchmark(group,1000, 2, 100, true, 10000, 524288, 10)
+		time.Sleep(time.Millisecond*500)
+		Benchmarks.SortedIntTMBenchmark(group,1001, 2, 100, false, 10000, 524288, 10)
 	}
 
 	if *memprofile == "" {

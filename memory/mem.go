@@ -135,7 +135,7 @@ func (m *Vmem) Read(addr int) (byte, error) {
 	if m.arDisabled {
 		return m.Stack[addr], nil
 	}
-	access := m.AccessMap[m.GetPageAddr(addr)]
+	access := m.GetRights(addr)
 
 	switch access {
 	case NO_ACCESS:
@@ -153,7 +153,6 @@ func (m *Vmem) Read(addr int) (byte, error) {
 }
 
 func (m *Vmem) ReadBytes(addr, length int) ([]byte, error) {
-
 	start := addr
 	end := addr + length
 	result := make([]byte, length)
