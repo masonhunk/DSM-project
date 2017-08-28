@@ -1,50 +1,18 @@
 package Benchmarks
 
 import (
-	"DSM-project/memory"
 	"DSM-project/multiview"
-	"DSM-project/treadmarks"
 	"fmt"
 	"io/ioutil"
 	"log"
+	"DSM-project/dsm-api/treadmarks"
+	"DSM-project/dsm-api"
+	"DSM-project/utils"
 	"sync"
-	"time"
 )
 
-func setupTreadMarksStruct1(nrProcs, memsize, pagebytesize, nrlocks, nrbarriers int) *treadmarks.TreadMarks {
-	vm1 := memory.NewVmem(memsize, pagebytesize)
-	tm1 := treadmarks.NewTreadMarks(vm1, nrProcs, nrlocks, nrbarriers)
-	return tm1
-}
 
-func TestMultipleSortedIntTM() {
-	//log.SetOutput(ioutil.Discard)
-	nrProcs := 3
-	batchsize := 1000
-	N := 100
-	Bmax := int32(10)
-	Imax := 10
-	group := new(sync.WaitGroup)
-	group.Add(nrProcs)
-
-	go func() {
-		SortedIntTMBenchmark(nrProcs, batchsize, true, N, Bmax, Imax)
-		group.Done()
-	}()
-	go func() {
-		time.Sleep(time.Millisecond * 200)
-		SortedIntTMBenchmark(nrProcs, batchsize, false, N, Bmax, Imax)
-		group.Done()
-	}()
-	go func() {
-		time.Sleep(time.Millisecond * 200)
-		SortedIntTMBenchmark(nrProcs, batchsize, false, N, Bmax, Imax)
-		group.Done()
-	}()
-	group.Wait()
-}
-
-func SortedIntMVBenchmark(nrProcs int, batchSize int, isManager bool, N int, Bmax int32, Imax int) {
+func SortedIntMVBenchmark( nrProcs int, batchSize int, isManager bool, N int, Bmax int32, Imax int) {
 	log.SetOutput(ioutil.Discard)
 	mv := multiview.NewMultiView()
 	rand := NewRandom()
@@ -139,21 +107,27 @@ func SortedIntMVBenchmark(nrProcs int, batchSize int, isManager bool, N int, Bma
 }
 
 //Benchmarks.SortedIntBenchmark(1, 1000, true, 8388608, 524288, 10)
-func SortedIntTMBenchmark(nrProcs int, batchSize int, isManager bool, N int, Bmax int32, Imax int) {
+func SortedIntTMBenchmark(group *sync.WaitGroup, port, nrProcs, batchSize int, isManager bool, N int, Bmax int32, Imax int) {
 	//First we do setup.
 	//log.SetOutput(ioutil.Discard)
+	//setupTreadMarksStruct1(nrProcs, (((N+1)*4)/pagebytesize+1)*pagebytesize, 8, 2, 4)
+	if group != nil {
+		group.Add(1)
+	}
 	rand := NewRandom()
 	pagebytesize := 8
-	tm := setupTreadMarksStruct1(nrProcs, (((N+1)*4)/pagebytesize+1)*pagebytesize, 8, 2, 4)
+	tm, err := treadmarks.NewTreadmarksApi((((N+1)*4)/pagebytesize+1)*pagebytesize, pagebytesize, uint8(nrProcs), uint8(2), uint8(4))
+	tm.Initialize(port)
+	if err != nil {
+		panic(err.Error())
+	}
 	defer tm.Shutdown()
 	key := func(i int) int { return (i + 1) * 4 }
 
 	if isManager {
 		fmt.Println("I'm a manager.")
-		tm.Startup()
 	} else {
-		tm.Join("localhost:2000")
-		fmt.Println("joined with id: ", tm.ProcId)
+		tm.Join("localhost", 1000)
 	}
 
 	fmt.Println("Making numbers")
@@ -161,7 +135,9 @@ func SortedIntTMBenchmark(nrProcs int, batchSize int, isManager bool, N int, Bma
 	for i := 0; i < N; i++ {
 		K[i] = int32(float64(Bmax) * ((rand.Next() + rand.Next() + rand.Next() + rand.Next()) / 4))
 	}
+	fmt.Println("Reached first barrier")
 	tm.Barrier(0)
+	fmt.Println("Crossed barrier")
 	for i := 1; i <= Imax; i++ {
 		fmt.Println("Starting iteration: ", i)
 		K[i] = int32(i)
@@ -171,9 +147,9 @@ func SortedIntTMBenchmark(nrProcs int, batchSize int, isManager bool, N int, Bma
 		var end int
 		for {
 			tm.AcquireLock(0)
-			start = tm.ReadInt(0)
+			start = readInt(tm, 0)
 			end = Min(start+batchSize, N)
-			tm.WriteInt(0, end)
+			writeInt(tm, 0, end)
 			tm.ReleaseLock(0)
 			if start >= N {
 				break
@@ -186,13 +162,13 @@ func SortedIntTMBenchmark(nrProcs int, batchSize int, isManager bool, N int, Bma
 				rj = 0
 				for l, kl := range K {
 					if kl < kj || (kj == kl && l < j) {
-						if kj == 22 || kj == 20 {
-						}
-
 						rj++
 					}
 				}
-				tm.WriteInt(key(j), rj)
+				writeInt(tm, key(j), rj)
+				if err != nil {
+					panic(err.Error())
+				}
 			}
 		}
 		tm.Barrier(1)
@@ -200,13 +176,14 @@ func SortedIntTMBenchmark(nrProcs int, batchSize int, isManager bool, N int, Bma
 		if isManager {
 			if N > 8388607 {
 				fmt.Println("Manager is doing partial verification.")
-				fmt.Println("First value is ", tm.ReadInt(key(2112377)), "\n -- it should be ", 104+i)
-				fmt.Println("Second value is  ", tm.ReadInt(key(662041)), "\n -- it should be ", 17523+i)
-				fmt.Println("Third value is  ", tm.ReadInt(key(5336171)), "\n -- it should be ", 123928+i)
-				fmt.Println("Fourth value is  ", tm.ReadInt(key(3642833)), "\n -- it should be ", 8288932-i)
-				fmt.Println("Fifth value is  ", tm.ReadInt(key(4250760)), "\n -- it should be ", 8388264-i)
+
+				fmt.Println("First value is ", readInt(tm, key(2112377)), "\n -- it should be ", 104+i)
+				fmt.Println("Second value is  ", readInt(tm, key(662041)), "\n -- it should be ", 17523+i)
+				fmt.Println("Third value is  ", readInt(tm, key(5336171)), "\n -- it should be ", 123928+i)
+				fmt.Println("Fourth value is  ", readInt(tm, key(3642833)), "\n -- it should be ", 8288932-i)
+				fmt.Println("Fifth value is  ", readInt(tm, key(4250760)), "\n -- it should be ", 8388264-i)
 			}
-			tm.WriteInt(0, 0)
+			writeInt(tm,0, 0)
 
 		}
 		tm.Barrier(2)
@@ -215,7 +192,9 @@ func SortedIntTMBenchmark(nrProcs int, batchSize int, isManager bool, N int, Bma
 	tm.Barrier(3)
 	sorted := make([]int32, N)
 	for i := 0; i < N; i++ {
-		sorted[tm.ReadInt(key(i))] = K[i]
+		x := readInt(tm, key(i))
+		fmt.Println(i, " - ", K[i], " - ", x, " - ", N)
+		sorted[x] = K[i]
 	}
 	var last int32 = 0
 	x := 0
@@ -227,5 +206,32 @@ func SortedIntTMBenchmark(nrProcs int, batchSize int, isManager bool, N int, Bma
 	}
 	fmt.Println("We had ", x, " things that wasn't sorted right.")
 	fmt.Println(sorted)
+	if group != nil {
+		group.Done()
+		group.Wait()
+	}
 
+}
+
+func readInt(dsm dsm_api.DSMApiInterface, addr int) int{
+	bInt := make([]byte, 4)
+	var err error
+	for i := range bInt{
+		bInt[i], err = dsm.Read(addr+i)
+		if err != nil {
+			panic(err.Error())
+		}
+	}
+	return int(utils.BytesToInt32(bInt))
+}
+
+func writeInt(dsm dsm_api.DSMApiInterface, addr, input int) {
+	bInt := utils.Int32ToBytes(int32(input))
+	var err error
+	for i := range bInt{
+		err = dsm.Write(addr+i, bInt[i])
+		if err != nil {
+			panic(err.Error())
+		}
+	}
 }
