@@ -6,11 +6,11 @@ import (
 	"DSM-project/network"
 	"DSM-project/utils"
 	"bytes"
-	"sync"
 	"fmt"
 	"github.com/davecgh/go-xdr/xdr2"
 	"log"
 	"reflect"
+	"sync"
 )
 
 type TreadmarksApi struct {
@@ -117,25 +117,39 @@ func (t *TreadmarksApi) Barrier(id uint8) {
 func (t *TreadmarksApi) AcquireLock(id uint8) {
 	lock := t.locks[id]
 	lock.Lock()
-	fmt.Println("have token", t.myId, lock.haveToken)
+	fmt.Println(t.myId, "have token", t.myId, lock.haveToken)
+
 	if lock.haveToken {
 		lock.locked = true
+		lock.Unlock()
 	} else {
-		defer t.sendLockAcquireRequest(lock.last, id)
+		lock.Unlock()
+		if t.myId == t.getManagerId(id) {
+			t.sendLockAcquireRequest(lock.last, id)
+		} else {
+			t.sendLockAcquireRequest(t.getManagerId(id), id)
+		}
+
 	}
-	lock.Unlock()
+
 }
 
 func (t *TreadmarksApi) ReleaseLock(id uint8) {
 	lock := t.locks[id]
 	lock.Lock()
+	defer lock.Unlock()
 	lock.locked = false
-	if lock.nextTimestamp != nil{
+	if lock.nextTimestamp != nil {
 		t.newInterval()
-		defer t.sendLockAcquireResponse(id)
+		t.sendLockAcquireResponse(id, lock.nextId, lock.nextTimestamp)
+		lock.nextTimestamp = nil
+		lock.haveToken = false
 	}
-	lock.last = t.getManagerId(id)
-	lock.Unlock()
+	if t.getManagerId(id) == t.myId {
+		lock.last = lock.nextId
+	} else {
+		lock.last = t.getManagerId(id)
+	}
 }
 
 //----------------------------------------------------------------//
@@ -206,7 +220,7 @@ func (t *TreadmarksApi) addWritenoticeRecord(pageNr int16, procId uint8, timesta
 	}
 	t.memory.SetRights(addr, memory.NO_ACCESS)
 	wn := WritenoticeRecord{
-		Owner: procId,
+		Owner:     procId,
 		Timestamp: timestamp,
 	}
 	wnl := t.pagearray[pageNr].writenotices[procId]
@@ -351,7 +365,7 @@ func (t *TreadmarksApi) createDiffRequest(pageNr int16, procId uint8) DiffReques
 //----------------------------------------------------------------//
 
 func (t *TreadmarksApi) sendMessage(to, msgType uint8, msg interface{}) {
-	fmt.Println(t.myId, " -- sending message ", reflect.TypeOf(msg), " : ", msg)
+	fmt.Println(t.myId, " -- sending message ", reflect.TypeOf(msg), " : ", msg, " to ", to)
 	var w bytes.Buffer
 	xdr.Marshal(&w, &msg)
 	data := make([]byte, w.Len()+2)
@@ -362,7 +376,6 @@ func (t *TreadmarksApi) sendMessage(to, msgType uint8, msg interface{}) {
 }
 
 func (t *TreadmarksApi) sendLockAcquireRequest(to uint8, lockId uint8) {
-
 	req := LockAcquireRequest{
 		From:      t.myId,
 		LockId:    lockId,
@@ -374,18 +387,15 @@ func (t *TreadmarksApi) sendLockAcquireRequest(to uint8, lockId uint8) {
 	<-t.channel
 }
 
-func (t *TreadmarksApi) sendLockAcquireResponse(lockId uint8) {
-	lock := t.locks[lockId]
-	intervals := t.getMissingIntervals(lock.nextTimestamp)
+func (t *TreadmarksApi) sendLockAcquireResponse(lockId uint8, to uint8, timestamp Timestamp) {
+	fmt.Println(t.myId, " sending lock acquire response")
+	intervals := t.getMissingIntervals(timestamp)
 	resp := LockAcquireResponse{
 		LockId:    lockId,
 		Intervals: intervals,
 		Timestamp: t.Timestamp,
 	}
-	t.sendMessage(lock.nextId, 1, resp)
-	lock.nextId = 0
-	lock.nextTimestamp = nil
-	lock.haveToken = false
+	t.sendMessage(to, 1, resp)
 }
 
 func (t *TreadmarksApi) forwardLockAcquireRequest(id uint8, req LockAcquireRequest) {
@@ -422,8 +432,8 @@ func (t *TreadmarksApi) sendCopyRequest(pageNr int16) {
 	to := copySet[len(copySet)-1]
 	if to != t.myId {
 		req := CopyRequest{
-			From:      t.myId,
-			PageNr:    pageNr,
+			From:   t.myId,
+			PageNr: pageNr,
 		}
 		t.sendMessage(to, 5, req)
 	} else {
@@ -502,6 +512,7 @@ func (t *TreadmarksApi) handleIncoming() {
 			if err != nil {
 				panic(err.Error())
 			}
+			fmt.Println(t.myId, "got lock acquire response: ", resp)
 			t.handleLockAcquireResponse(resp)
 		case 3: //Barrier Request
 			var req BarrierRequest
@@ -555,30 +566,16 @@ func (t *TreadmarksApi) handleLockAcquireRequest(req LockAcquireRequest) {
 	id := req.LockId
 	lock := t.locks[id]
 	lock.Lock()
-	if lock.haveToken {
-		if !lock.locked {
-			lock.haveToken = false
-			lock.nextId = req.From
-			lock.nextTimestamp = req.Timestamp
-			t.newInterval()
-			defer t.sendLockAcquireResponse(id)
-		} else {
-			if lock.nextTimestamp == nil {
-				lock.nextId = req.From
-				lock.nextTimestamp = req.Timestamp
-			} else {
-				t.forwardLockAcquireRequest(lock.last, req)
-				lock.last = req.From
-			}
-		}
-	} else {
-		if lock.nextTimestamp == nil {
-			lock.nextId = req.From
-			lock.nextTimestamp = req.Timestamp
-		} else {
-			t.forwardLockAcquireRequest(lock.last, req)
-			lock.last = req.From
-		}
+	if lock.haveToken && !lock.locked {
+		t.sendLockAcquireResponse(id, req.From, req.Timestamp)
+		lock.haveToken = false
+		lock.last = req.From
+	} else if t.getManagerId(id) != t.myId{
+		lock.nextId = req.From
+		lock.nextTimestamp = req.Timestamp
+	}else {
+		t.forwardLockAcquireRequest(lock.last, req)
+		lock.last = req.From
 	}
 	lock.Unlock()
 }
@@ -587,13 +584,16 @@ func (t *TreadmarksApi) handleLockAcquireResponse(resp LockAcquireResponse) {
 	t.Timestamp = t.Timestamp.merge(resp.Timestamp)
 	id := resp.LockId
 	lock := t.locks[id]
+	fmt.Println(t.myId, "trying to take lock")
 	lock.Lock()
+	fmt.Println(t.myId, "took lock")
 	for _, interval := range resp.Intervals {
 		t.addInterval(interval)
 	}
 	lock.locked = true
 	lock.haveToken = true
 	lock.Unlock()
+	fmt.Println(t.myId, "Inserting into channel")
 	t.channel <- true
 }
 
