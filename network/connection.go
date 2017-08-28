@@ -9,12 +9,11 @@ import (
 	"encoding/binary"
 	"strconv"
 	"fmt"
-	"DSM-project/dsm-api/treadmarks"
+	"DSM-project/utils"
 )
 
 type Connection interface{
-	Connect(ip string, port int) error
-	Close() error
+	Connect(ip string, port int) (int,error)
 }
 
 var _ Connection = new(connection)
@@ -39,7 +38,7 @@ type peer struct{
 	NewConnection gives a new connection, that will be listening on the given port.
 	The host will have ID 0 at this point.
  */
-func NewConnection(port int, bufferSize int) *connection {
+func NewConnection(port int, bufferSize int) (*connection, <-chan []byte, chan<- []byte) {
 	c := new(connection)
 	c.peers = make([]*peer, 1)
 	c.in, c.out = make(chan []byte, bufferSize), make(chan []byte, bufferSize)
@@ -53,7 +52,7 @@ func NewConnection(port int, bufferSize int) *connection {
 	c.listener = listener.(*net.TCPListener)
 	go c.listen()
 	go c.sendLoop()
-	return c
+	return c, c.in, c.out
 }
 
 /*
@@ -62,7 +61,7 @@ func NewConnection(port int, bufferSize int) *connection {
 	This will also make this host start listening and sending messages, which will then be passed through the channels
 	given when the connection was initialized.
  */
-func (c *connection) Connect(ip string, port int) error{
+func (c *connection) Connect(ip string, port int) (int,error){
 	tempConn, err := net.DialTimeout("tcp", fmt.Sprint(ip, ":", port), time.Second*5)
 	conn := tempConn.(*net.TCPConn)
 	if err != nil {
@@ -93,16 +92,7 @@ func (c *connection) Connect(ip string, port int) error{
 		j += k
 	}
 	go c.receive(c.peers[otherId])
-	return nil
-}
-
-/*
-	Will close the connection gracefully.
- */
-func (c *connection) Close() error {
-	c.running = false
-	c.group.Wait()
-	return nil
+	return c.myId, nil
 }
 
 /*
@@ -112,16 +102,25 @@ func (c *connection) sendLoop(){
 	c.group.Add(1)
 	var id int
 	for msg := range c.out {
-		id = int(treadmarks.ByteToUint8(msg[0]))
+		id = int(msg[0])
 		if id == c.myId {
 			c.in <- msg
 		} else {
-			msg[0] = 1
-			write(c.peers[id].conn, msg)
+			if id >= len(c.peers) {
+				go func(){
+					time.Sleep(time.Millisecond*500)
+					c.out <- msg
+				}()
+			} else {
+				msg[0] = 1
+				write(c.peers[id].conn, msg)
+			}
 		}
-
 	}
+	c.running = false
 	c.group.Done()
+	c.group.Wait()
+	close(c.in)
 }
 
 /*
@@ -130,17 +129,19 @@ func (c *connection) sendLoop(){
  */
 func (c *connection) receive(peer *peer){
 	c.group.Add(1)
-	for c.running {
+	running := true
+	for running {
 		b := read(peer.conn)
 		if b[0] == 0 {
 			id := int(b[1])
 			ip, port, _ := addrFromBytes(b[2:])
 			conn := c.connectToHost(ip, port)
 			c.addPeer(id, conn, port)
-			c.in <- []byte{0, byte(len(c.peers))}
 		} else {
-			c.in <- append([]byte{byte(peer.id)}, b[1:]...)
+			msg := append([]byte{byte(peer.id)}, b[1:]...)
+			c.in <- msg
 		}
+		running = c.running
 	}
 	peer.conn.Close()
 	c.group.Done()
@@ -152,7 +153,8 @@ func (c *connection) receive(peer *peer){
  */
 func (c *connection) listen() {
 	c.group.Add(1)
-	for c.running {
+	running := true
+	for running {
 		c.listener.SetDeadline(time.Now().Add(time.Millisecond*500))
 		conn, err := c.listener.AcceptTCP()
 		if err == nil {
@@ -160,6 +162,7 @@ func (c *connection) listen() {
 		}else if !strings.HasSuffix(err.Error(),"i/o timeout") {
 			panic("Something crashed when we were accepting: " + err.Error())
 		}
+		running = c.running
 	}
 	c.listener.Close()
 	c.group.Done()
@@ -227,24 +230,24 @@ func (c *connection) getAddr(id int) string{
 }
 
 func write(conn net.Conn, data []byte){
-	l := len(data)/256
-	msg := make([]byte, l)
-	msg = append(msg, byte(len(data) % 256))
-	msg = append(msg, data...)
+	l := utils.Uint64ToBytes(uint64(len(data)))
+	msg := append(l, data...)
 	conn.Write(msg)
 }
 
 func read(conn net.Conn) []byte{
-	msg := make([]byte, 1)
-	conn.Read(msg)
-	l := 0
-	for msg[0] == 0{
-		l += 256
-		conn.Read(msg)
+	msg := make([]byte, 8)
+	conn.SetReadDeadline(time.Now().Add(time.Millisecond*500))
+	_, err := conn.Read(msg)
+	if err != nil {
+		return nil
 	}
-	l += int(msg[0])
+	l := utils.BytesToUint64(msg)
 	msg = make([]byte, l)
-	conn.Read(msg)
+	_, err = conn.Read(msg)
+	if err != nil {
+		return nil
+	}
 	return msg
 }
 

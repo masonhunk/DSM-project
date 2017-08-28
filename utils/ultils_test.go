@@ -1,4 +1,4 @@
-package treadmarks
+package utils
 
 import (
 	"testing"

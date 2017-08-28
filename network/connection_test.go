@@ -4,7 +4,6 @@ import (
 	"testing"
 	"github.com/stretchr/testify/assert"
 	"time"
-	"fmt"
 )
 
 func TestConnection_iptransform(t *testing.T) {
@@ -51,9 +50,9 @@ func TestConnection_iptransform(t *testing.T) {
 }
 
 func TestNewConnection(t *testing.T) {
-	c0 := NewConnection(2334, 10)
-	c1 := NewConnection(1123, 10)
-	c2 := NewConnection(1523, 10)
+	c0,_,_ := NewConnection(2334, 10)
+	c1,_,_ := NewConnection(1123, 10)
+	c2,_,_ := NewConnection(1523, 10)
 	control1 := make(chan bool)
 	control2 := make(chan bool)
 	assert.True(t, c0.running)
@@ -61,13 +60,17 @@ func TestNewConnection(t *testing.T) {
 	assert.Equal(t, 0, c0.myId)
 	go func(){
 		<- control1
-		assert.Nil(t, c1.Connect("localhost", 2334))
+		myId, err := c1.Connect("localhost", 2334)
+		assert.Nil(t, err)
+		assert.Equal(t, 1, myId)
 		control1 <- true
 
 	}()
 	go func(){
 		<-control2
-		assert.Nil(t, c2.Connect("localhost", 2334))
+		myId, err := c2.Connect("localhost", 2334)
+		assert.Nil(t, err)
+		assert.Equal(t, 2, myId)
 		control2 <- true
 
 	}()
@@ -88,20 +91,10 @@ func TestNewConnection(t *testing.T) {
 	assert.Len(t, c0.peers, 3)
 	assert.Len(t, c1.peers, 3)
 	assert.Len(t, c2.peers, 3)
-	q := 0
-	fmt.Println("BOOOM", q)
-	q++
 	c0.out <- []byte{0, 0, 1, 2, 3}
-	fmt.Println("BOOOM", q)
-	q++
 	c0.out <- []byte{1, 0, 1, 2, 3}
-	fmt.Println("BOOOM", q)
-	q++
 	c0.out <- []byte{2, 0, 1, 2, 3}
-	fmt.Println("BOOOM", q)
-	q++
 	c1.out <- []byte{0, 1, 2, 3, 4}
-	fmt.Println("BOOOM", q)
 	c1.out <- []byte{1, 1, 2, 3, 4}
 	c1.out <- []byte{2, 1, 2, 3, 4}
 	c2.out <- []byte{0, 2, 3, 4, 5}

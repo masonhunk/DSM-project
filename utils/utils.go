@@ -1,4 +1,4 @@
-package treadmarks
+package utils
 
 import "unsafe"
 
@@ -39,6 +39,20 @@ func Int32ToBytes(i int32) []byte{
 	ptr := uintptr(unsafe.Pointer(&i))
 	slice := make([]byte, 4)
 	for i := 0; i < 4; i++ {
+		slice[i] = *(*byte)(unsafe.Pointer(ptr))
+		ptr++
+	}
+	return slice
+}
+
+func BytesToUint64(data []byte) uint64{
+	return *(*uint64)(unsafe.Pointer(&data[0]))
+}
+
+func Uint64ToBytes(i uint64) []byte{
+	ptr := uintptr(unsafe.Pointer(&i))
+	slice := make([]byte, 8)
+	for i := 0; i < 8; i++ {
 		slice[i] = *(*byte)(unsafe.Pointer(ptr))
 		ptr++
 	}

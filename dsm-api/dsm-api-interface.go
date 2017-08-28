@@ -9,6 +9,6 @@ type DSMApiInterface interface{
 	Malloc(size int) (int, error)
 	Free(addr, size int) error
 	Barrier(id uint8)
-	Lock(id uint8)
-	Release(id uint8)
+	AcquireLock(id uint8)
+	ReleaseLock(id uint8)
 }
