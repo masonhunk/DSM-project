@@ -17,7 +17,7 @@ import (
 var cpuprofile = flag.String("cpuprofile", "", "write cpu profile `file`")
 var memprofile = flag.String("memprofile", "", "write memory profile to `file`")
 var benchmark = flag.String("benchmark", "default", "choose benchmark algorithm")
-var nrprocs = flag.Int("number of hosts", 1, "choose number of hosts.")
+var nrprocs = flag.Int("hosts", 1, "choose number of hosts.")
 var port = flag.Int("port", 1000, "Choose port.")
 var manager = flag.Bool("manager", true, "choose if instance is manager.")
 
@@ -63,18 +63,18 @@ func main() {
 	case "locksMW":
 		Benchmarks.TestLockMW(100000, cpuprofFile)
 	case "barrTM":
-		Benchmarks.TestBarrierTimeTM(100000, *nrprocs, nil)
+		Benchmarks.TestBarrierTimeTM(100000, *nrprocs, cpuprofFile)
 	case "locksTM":
-		Benchmarks.TestLockTM(10000, cpuprofFile)
+		Benchmarks.TestLockTM(100, cpuprofFile)
 	case "SyncOpsCosTM":
 		Benchmarks.TestSynchronizedReadsWritesTM(10000, cpuprofFile)
 	case "NonSyncOpsCostTM":
 		Benchmarks.TestNonSynchronizedReadWritesTM(100000000, cpuprofFile)
 	default:
 		group := new(sync.WaitGroup)
-		go Benchmarks.SortedIntTMBenchmark(group,1000, 2, 100, true, 10000, 524288, 10)
-		time.Sleep(time.Millisecond*500)
-		Benchmarks.SortedIntTMBenchmark(group,1001, 2, 100, false, 10000, 524288, 10)
+		go Benchmarks.SortedIntTMBenchmark(group, 1000, 2, 100, true, 10000, 524288, 10)
+		time.Sleep(time.Millisecond * 500)
+		Benchmarks.SortedIntTMBenchmark(group, 1001, 2, 100, false, 10000, 524288, 10)
 	}
 
 	if *memprofile == "" {

@@ -47,8 +47,12 @@ func TestLockTM(nrTimes int, pprofFile io.Writer) {
 		}
 	}
 	for i := 0; i < nrTimes; i++ {
+		fmt.Println("about to acquire lock at host", i%7)
 		tms[i%7].AcquireLock(0)
+		fmt.Println("acquired lock at host", i%7)
 		tms[i%7].ReleaseLock(0)
+		fmt.Println("released lock at host", i%7)
+
 	}
 	pprof.StopCPUProfile()
 
