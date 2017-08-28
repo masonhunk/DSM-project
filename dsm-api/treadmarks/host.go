@@ -6,11 +6,10 @@ import (
 	"DSM-project/network"
 	"DSM-project/utils"
 	"bytes"
-	"fmt"
 	"github.com/davecgh/go-xdr/xdr2"
-	"log"
-	"reflect"
 	"sync"
+	"fmt"
+	"reflect"
 )
 
 type TreadmarksApi struct {
@@ -30,7 +29,6 @@ type TreadmarksApi struct {
 	out                            chan<- []byte
 	conn                           network.Connection
 	group                          *sync.WaitGroup
-	currentInterval                *IntervalRecord
 	Timestamp                      Timestamp
 }
 
@@ -117,9 +115,11 @@ func (t *TreadmarksApi) Barrier(id uint8) {
 func (t *TreadmarksApi) AcquireLock(id uint8) {
 	lock := t.locks[id]
 	lock.Lock()
-	fmt.Println(t.myId, "have token", t.myId, lock.haveToken)
 
 	if lock.haveToken {
+		if lock.locked {
+			panic("locking lock twice")
+		}
 		lock.locked = true
 		lock.Unlock()
 	} else {
@@ -129,9 +129,7 @@ func (t *TreadmarksApi) AcquireLock(id uint8) {
 		} else {
 			t.sendLockAcquireRequest(t.getManagerId(id), id)
 		}
-
 	}
-
 }
 
 func (t *TreadmarksApi) ReleaseLock(id uint8) {
@@ -197,17 +195,13 @@ func (t *TreadmarksApi) initializeBarriers() {
 //----------------------------------------------------------------//
 
 func (t *TreadmarksApi) newWritenoticeRecord(pageNr int16) {
-	t.dirtyPagesLock.Lock()
-	defer t.dirtyPagesLock.Unlock()
-	if t.dirtyPages[pageNr] == true {
 
 		wn := WritenoticeRecord{
 			Owner:     t.myId,
 			Timestamp: t.Timestamp,
 		}
 		t.pagearray[pageNr].writenotices[t.myId] = append(t.pagearray[pageNr].writenotices[t.myId], wn)
-		delete(t.dirtyPages, pageNr)
-	}
+
 }
 
 func (t *TreadmarksApi) addWritenoticeRecord(pageNr int16, procId uint8, timestamp Timestamp) {
@@ -229,34 +223,25 @@ func (t *TreadmarksApi) addWritenoticeRecord(pageNr int16, procId uint8, timesta
 }
 
 func (t *TreadmarksApi) newInterval() {
-	fmt.Println(t.myId, " New Interval - current intervals are ", t.procarray[t.myId])
-	t.dirtyPagesLock.RLock()
+	t.dirtyPagesLock.Lock()
 	pages := make([]int16, 0, len(t.dirtyPages))
 	for page := range t.dirtyPages {
 		pages = append(pages, page)
+		delete(t.dirtyPages, page)
 	}
-	t.dirtyPagesLock.RUnlock()
 	if len(pages) > 0 {
-
-		t.Timestamp = t.Timestamp.increment(t.myId)
 		for _, page := range pages {
 			t.newWritenoticeRecord(page)
 		}
-
 		interval := IntervalRecord{
 			Owner:     t.myId,
 			Timestamp: t.Timestamp,
 			Pages:     pages,
 		}
 		t.procarray[t.myId] = append(t.procarray[t.myId], interval)
-		t.currentInterval = &t.procarray[t.myId][len(t.procarray[t.myId])-1]
-		log.Println(t.myId, " made a new interval with timestamp ", t.Timestamp, " and pages ", pages)
-
-	} else {
-		log.Println(t.myId, " I didnt create any intervals.")
+		t.Timestamp = t.Timestamp.increment(t.myId)
 	}
-	log.Println(t.myId, " my intervals are now ", t.procarray[t.myId])
-
+	t.dirtyPagesLock.Unlock()
 }
 
 func (t *TreadmarksApi) addInterval(interval IntervalRecord) {
@@ -365,13 +350,15 @@ func (t *TreadmarksApi) createDiffRequest(pageNr int16, procId uint8) DiffReques
 //----------------------------------------------------------------//
 
 func (t *TreadmarksApi) sendMessage(to, msgType uint8, msg interface{}) {
-	fmt.Println(t.myId, " -- sending message ", reflect.TypeOf(msg), " : ", msg, " to ", to)
+	fmt.Println(t.myId, " -- sending ", reflect.TypeOf(msg), "to ", to)
+	fmt.Println(t.myId, "Message is ", msg)
 	var w bytes.Buffer
 	xdr.Marshal(&w, &msg)
 	data := make([]byte, w.Len()+2)
 	data[0] = byte(to)
 	data[1] = byte(msgType)
 	w.Read(data[2:])
+	fmt.Println(t.myId, " byte length of message is ", len(data))
 	t.out <- data
 }
 
@@ -388,7 +375,6 @@ func (t *TreadmarksApi) sendLockAcquireRequest(to uint8, lockId uint8) {
 }
 
 func (t *TreadmarksApi) sendLockAcquireResponse(lockId uint8, to uint8, timestamp Timestamp) {
-	fmt.Println(t.myId, " sending lock acquire response")
 	intervals := t.getMissingIntervals(timestamp)
 	resp := LockAcquireResponse{
 		LockId:    lockId,
@@ -446,11 +432,9 @@ func (t *TreadmarksApi) sendCopyRequest(pageNr int16) {
 func (t *TreadmarksApi) sendCopyResponse(to uint8, pageNr int16) {
 	data := t.twins[pageNr]
 	if data == nil {
-		fmt.Println(t.myId, "didnt have twin")
 		pageSize := t.memory.GetPageSize()
 		addr := int(pageNr) * pageSize
 		data = t.memory.PrivilegedRead(addr, pageSize)
-		fmt.Println(t.myId, "copy was ", data)
 	}
 	resp := CopyResponse{
 		PageNr: pageNr,
@@ -483,10 +467,14 @@ func (t *TreadmarksApi) getManagerId(id uint8) uint8 {
 }
 
 func (t *TreadmarksApi) getHighestTimestamp(procId uint8) Timestamp {
+	fmt.Println(t.myId, "getting highest timestamp of ", procId)
 	if len(t.procarray[procId]) == 0 {
+		fmt.Println(t.myId, " didnt have any intervals, so timestamp is ", NewTimestamp(t.nrProcs))
 		return NewTimestamp(t.nrProcs)
 	}
-	return t.procarray[procId][len(t.procarray[procId])-1].Timestamp
+	ts := t.procarray[procId][len(t.procarray[procId])-1].Timestamp
+	fmt.Println(t.myId, "Timestamp was ", ts)
+	return ts
 }
 
 //----------------------------------------------------------------//
@@ -512,7 +500,6 @@ func (t *TreadmarksApi) handleIncoming() {
 			if err != nil {
 				panic(err.Error())
 			}
-			fmt.Println(t.myId, "got lock acquire response: ", resp)
 			t.handleLockAcquireResponse(resp)
 		case 3: //Barrier Request
 			var req BarrierRequest
@@ -584,16 +571,13 @@ func (t *TreadmarksApi) handleLockAcquireResponse(resp LockAcquireResponse) {
 	t.Timestamp = t.Timestamp.merge(resp.Timestamp)
 	id := resp.LockId
 	lock := t.locks[id]
-	fmt.Println(t.myId, "trying to take lock")
 	lock.Lock()
-	fmt.Println(t.myId, "took lock")
 	for _, interval := range resp.Intervals {
 		t.addInterval(interval)
 	}
 	lock.locked = true
 	lock.haveToken = true
 	lock.Unlock()
-	fmt.Println(t.myId, "Inserting into channel")
 	t.channel <- true
 }
 
@@ -695,7 +679,7 @@ func (t *TreadmarksApi) handleDiffResponse(resp DiffResponse) {
 
 func (t *TreadmarksApi) applyAllDiffs(pageNr int16) {
 	wnl := t.pagearray[pageNr].writenotices
-	index := make([]int, len(wnl))
+	index := t.pagearray[pageNr].index
 	for {
 		var best uint8 = 0
 		var bestTs Timestamp = nil
@@ -706,7 +690,6 @@ func (t *TreadmarksApi) applyAllDiffs(pageNr int16) {
 				if bestTs == nil || !wn.Timestamp.covers(bestTs) {
 					best = proc
 					bestTs = wn.Timestamp
-
 				}
 			}
 		}
@@ -733,3 +716,8 @@ func (t *TreadmarksApi) applyDiff(pageNr int16, diff map[int]byte) {
 //----------------------------------------------------------------//
 //                           Help functions                       //
 //----------------------------------------------------------------//
+
+
+func (t *TreadmarksApi) GetId() int {
+	return int(t.myId)
+}
