@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"fmt"
 	"DSM-project/utils"
+	"io"
 )
 
 type Connection interface{
@@ -132,7 +133,7 @@ func (c *connection) receive(peer *peer){
 	for c.running {
 		b := read(peer.conn)
 		if b == nil {
-			continue
+			break
 		}
 		if len(b) > 0 && b[0] == 0 {
 			id := int(b[1])
@@ -242,14 +243,13 @@ func write(conn net.Conn, data []byte){
 
 func read(conn net.Conn) []byte{
 	msg := make([]byte, 8)
-	conn.SetReadDeadline(time.Now().Add(time.Millisecond*500))
-	_, err := conn.Read(msg)
+	_, err := io.ReadFull(conn, msg)
 	if err != nil {
 		return nil
 	}
-	l := utils.BytesToUint64(msg)
+	l := int(utils.BytesToUint64(msg))
 	msg = make([]byte, l)
-	_, err = conn.Read(msg)
+	_, err = io.ReadFull(conn, msg)
 	if err != nil {
 		return nil
 	}

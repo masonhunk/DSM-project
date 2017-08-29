@@ -25,6 +25,7 @@ type accessControl struct {
 }
 
 type pageArrayEntry struct {
+	index []int
 	hasMissingDiffs bool
 	hasCopy      bool
 	copySet      []uint8
@@ -45,6 +46,7 @@ func NewPageArrayEntry(nrProcs uint8) *pageArrayEntry {
 		wnl[j] = make([]WritenoticeRecord, 0)
 	}
 	entry := &pageArrayEntry{
+		index : make([]int, nrProcs),
 		hasCopy:      false,
 		copySet:      []uint8{0},
 		writenotices: wnl,

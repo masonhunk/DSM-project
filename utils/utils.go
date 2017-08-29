@@ -45,6 +45,20 @@ func Int32ToBytes(i int32) []byte {
 	return slice
 }
 
+func BytesToUint32(data []byte) uint32{
+	return *(*uint32)(unsafe.Pointer(&data[0]))
+}
+
+func Uint32ToBytes(i uint32) []byte{
+	ptr := uintptr(unsafe.Pointer(&i))
+	slice := make([]byte, 4)
+	for i := 0; i < 4; i++ {
+		slice[i] = *(*byte)(unsafe.Pointer(ptr))
+		ptr++
+	}
+	return slice
+}
+
 func BytesToUint64(data []byte) uint64 {
 	return *(*uint64)(unsafe.Pointer(&data[0]))
 }
