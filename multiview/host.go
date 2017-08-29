@@ -7,9 +7,11 @@ import (
 	"encoding/binary"
 	"encoding/gob"
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
@@ -118,7 +120,8 @@ func (m *Multiview) Join(memSize, pageByteSize int) error {
 
 func (m *Multiview) Initialize(memSize, pageByteSize int, nrProcs int) error {
 	var err error
-	f, err := os.Create("BenchmarkResults/multivewLog" + time.Now().String() + ".csv")
+	filename := "BenchmarkResults/multivewLog" + strings.Replace(strings.Replace(time.Now().String()[:19], " ", "_", -1), ":", "-", -1) + ".csv"
+	f, err := os.Create(filename)
 	if err != nil {
 		f.Close()
 		log.Fatal(err)
