@@ -37,7 +37,7 @@ type BarrierResponse struct{
 
 type IntervalRecord struct{
 	Owner     uint8
-	Timestamp Timestamp
+	timestamp timestamp
 	Pages     []int16
 }
 */

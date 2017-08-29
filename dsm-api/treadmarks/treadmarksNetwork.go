@@ -60,7 +60,7 @@ func (l LockAcquireRequest) GobEncode() ([]byte, error) {
 	if err != nil {
 		fmt.Println(err.Error())
 	}
-	err = enc.Encode(l.Timestamp)
+	err = enc.Encode(l.timestamp)
 	if err != nil {
 		fmt.Println(err.Error())
 	}
@@ -80,7 +80,7 @@ func (l *LockAcquireRequest) GobDecode(data []byte) error {
 		fmt.Println(err.Error())
 		return err
 	}
-	err = dec.Decode(&l.Timestamp)
+	err = dec.Decode(&l.timestamp)
 	if err != nil{
 		fmt.Println(err.Error())
 		return err

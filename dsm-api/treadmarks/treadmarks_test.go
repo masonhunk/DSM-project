@@ -5,6 +5,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"fmt"
 	"time"
+	"DSM-project/dsm-api"
+	"DSM-project/utils"
+	"runtime"
 )
 
 func TestNewTreadmarksApi_ReadWriteSingleProc(t *testing.T) {
@@ -378,3 +381,496 @@ func TestNewTreadmarksApi_ReadAndWriteMultiple2(t *testing.T) {
 	<- done
 }
 
+func TestNewTreadmarksApi_ReadAndWriteMultiple3(t *testing.T) {
+	runtime.GOMAXPROCS(4)
+	tm0, _ := NewTreadmarksApi(1024*4, 128, 2, 3, 3)
+	tm0.Initialize(1000)
+	tm1, _ := NewTreadmarksApi(1024*4, 128, 2, 3, 3)
+	tm1.Initialize(1001)
+	tm1.Join("localhost", 1000)
+	done := make(chan bool, 2)
+
+	go func(){
+		tm := tm0
+		writeInt(tm, 0, 1)
+		fmt.Println(tm.myId, " at barrier 0")
+		tm.Barrier(0)
+		fmt.Println(tm.myId, " past barrier 0")
+		for {
+			tm.AcquireLock(0)
+			n := readInt(tm, 4)
+			if n >= 1000{
+				break
+			}
+			writeInt(tm, 4, n+100)
+			tm.ReleaseLock(0)
+			fmt.Println(tm.myId, " iterating n=", n)
+			for ; n < n+100 && n < 1000; n++ {
+				writeInt(tm, (n+2)*4, n)
+			}
+			fmt.Println(tm.myId, " done iterating n=", n)
+		}
+		fmt.Println(tm.myId, "at barrier 1")
+		tm.Barrier(1)
+		for n := 0; n < 1000; n++{
+			assert.Equal(t, n, readInt(tm, (n+2)*4))
+		}
+		done <- true
+	}()
+	go func(){
+		tm := tm1
+		fmt.Println(tm.myId, " at barrier 0")
+		tm.Barrier(0)
+		fmt.Println(tm.myId, " past barrier 0")
+		for {
+			tm.AcquireLock(0)
+			n := readInt(tm, 4)
+			if n >= 1000{
+				break
+			}
+			writeInt(tm, 4, n+100)
+			tm.ReleaseLock(0)
+			fmt.Println(tm.myId, " iterating n=", n)
+			for ; n < n+100 && n < 1000; n++ {
+				writeInt(tm, (n+2)*4, n)
+			}
+		}
+		fmt.Println(tm.myId, "at barrier 1")
+		tm.Barrier(1)
+		for n := 0; n < 1000; n++{
+			assert.Equal(t, n, readInt(tm, (n+2)*4))
+		}
+		done <- true
+	}()
+	<- done
+	<- done
+}
+
+func TestNewTreadmarksApi_locks(t *testing.T) {
+	tm0, _ := NewTreadmarksApi(1024, 128, 3, 3, 3)
+	tm0.Initialize(1000)
+	tm1, _ := NewTreadmarksApi(1024, 128, 3, 3, 3)
+	tm1.Initialize(1001)
+	tm1.Join("localhost", 1000)
+	tm2, _ := NewTreadmarksApi(1024, 128, 3, 3, 3)
+	tm2.Initialize(1002)
+	tm2.Join("localhost", 1000)
+
+	//go0:= make(chan bool)
+	//go1 := make(chan bool)
+	go2 :=  make(chan bool, 1)
+
+	var lockId uint8 = 0
+
+	lock0, lock1, lock2 := tm0.locks[lockId], tm1.locks[lockId], tm2.locks[lockId]
+
+	assert.False(t, lock0.locked)
+	assert.False(t, lock1.locked)
+	assert.False(t, lock2.locked)
+	assert.True(t, lock0.haveToken)
+	assert.False(t, lock1.haveToken)
+	assert.False(t, lock2.haveToken)
+	assert.Nil(t, lock0.nextTimestamp)
+	assert.Nil(t, lock1.nextTimestamp)
+	assert.Nil(t, lock2.nextTimestamp)
+	assert.Equal(t, tm0.getManagerId(lockId), lock0.last)
+	assert.Equal(t, tm1.getManagerId(lockId), lock1.last)
+	assert.Equal(t, tm2.getManagerId(lockId), lock2.last)
+
+	tm0.AcquireLock(lockId)
+
+	assert.True(t, lock0.locked)
+	assert.False(t, lock1.locked)
+	assert.False(t, lock2.locked)
+	assert.True(t, lock0.haveToken)
+	assert.False(t, lock1.haveToken)
+	assert.False(t, lock2.haveToken)
+	assert.Nil(t, lock0.nextTimestamp)
+	assert.Nil(t, lock1.nextTimestamp)
+	assert.Nil(t, lock2.nextTimestamp)
+	assert.Equal(t, tm0.getManagerId(lockId), lock0.last)
+	assert.Equal(t, tm1.getManagerId(lockId), lock1.last)
+	assert.Equal(t, tm2.getManagerId(lockId), lock2.last)
+
+	tm0.ReleaseLock(lockId)
+
+	assert.False(t, lock0.locked)
+	assert.False(t, lock1.locked)
+	assert.False(t, lock2.locked)
+	assert.True(t, lock0.haveToken)
+	assert.False(t, lock1.haveToken)
+	assert.False(t, lock2.haveToken)
+	assert.Nil(t, lock0.nextTimestamp)
+	assert.Nil(t, lock1.nextTimestamp)
+	assert.Nil(t, lock2.nextTimestamp)
+	assert.Equal(t, tm0.getManagerId(lockId), lock0.last)
+	assert.Equal(t, tm1.getManagerId(lockId), lock1.last)
+	assert.Equal(t, tm2.getManagerId(lockId), lock2.last)
+
+	tm1.AcquireLock(lockId)
+
+	assert.False(t, lock0.locked)
+	assert.True(t, lock1.locked)
+	assert.False(t, lock2.locked)
+	assert.False(t, lock0.haveToken)
+	assert.True(t, lock1.haveToken)
+	assert.False(t, lock2.haveToken)
+	assert.Nil(t, lock0.nextTimestamp)
+	assert.Nil(t, lock1.nextTimestamp)
+	assert.Nil(t, lock2.nextTimestamp)
+	assert.Equal(t,uint8(1), lock0.last)
+	assert.Equal(t, tm1.getManagerId(lockId), lock1.last)
+	assert.Equal(t, tm2.getManagerId(lockId), lock2.last)
+
+	go func(){
+		go2 <- true
+		tm2.AcquireLock(lockId)
+		go2 <- true
+
+	}()
+	<- go2
+	time.Sleep(time.Millisecond*100)
+	assert.False(t, lock0.locked)
+	assert.True(t, lock1.locked)
+	assert.False(t, lock2.locked)
+	assert.False(t, lock0.haveToken)
+	assert.True(t, lock1.haveToken)
+	assert.False(t, lock2.haveToken)
+	assert.Nil(t, lock0.nextTimestamp)
+	assert.NotNil(t, lock1.nextTimestamp)
+	assert.Nil(t, lock2.nextTimestamp)
+	assert.Equal(t, uint8(2), lock0.last)
+	assert.Equal(t, uint8(2), lock1.nextId)
+	assert.Equal(t, tm2.getManagerId(lockId), lock2.nextId)
+
+	tm1.ReleaseLock(lockId)
+	<- go2
+	time.Sleep(time.Millisecond*100)
+	assert.False(t, lock0.locked)
+	assert.False(t, lock1.locked)
+	assert.True(t, lock2.locked)
+	assert.False(t, lock0.haveToken)
+	assert.False(t, lock1.haveToken)
+	assert.True(t, lock2.haveToken)
+	assert.Nil(t, lock0.nextTimestamp)
+	assert.Nil(t, lock1.nextTimestamp)
+	assert.Nil(t, lock2.nextTimestamp)
+	assert.Equal(t, uint8(2), lock0.last)
+	assert.Equal(t, tm1.getManagerId(lockId), lock1.last)
+	assert.Equal(t, tm2.getManagerId(lockId), lock2.last)
+	assert.Equal(t, tm1.getManagerId(lockId), lock1.nextId)
+	assert.Equal(t, tm2.getManagerId(lockId), lock2.nextId)
+}
+
+
+
+func TestTreadmarksApiTestLock(t *testing.T) {
+	tm0, _ := NewTreadmarksApi(1024, 128, 4, 3, 3)
+	tm0.Initialize(1000)
+	tm1, _ := NewTreadmarksApi(1024, 128, 4, 3, 3)
+	tm1.Initialize(1001)
+	tm1.Join("localhost", 1000)
+	tm2, _ := NewTreadmarksApi(1024, 128, 4, 3, 3)
+	tm2.Initialize(1002)
+	tm2.Join("localhost", 1000)
+	tm3, _ := NewTreadmarksApi(1024, 128, 4, 3, 3)
+	tm3.Initialize(1003)
+	tm3.Join("localhost", 1000)
+
+	//go0:= make(chan bool, 1)
+	//go1 := make(chan bool, 1)
+	//go2 :=  make(chan bool, 1)
+	//go3 :=  make(chan bool, 1)
+
+	var lockId uint8 = 0
+
+	lock0, lock1, lock2, lock3 := tm0.locks[lockId], tm1.locks[lockId], tm2.locks[lockId], tm3.locks[lockId]
+
+	go func(){
+		tm1.AcquireLock(lockId)
+	}()
+	time.Sleep(time.Millisecond*100)
+	go func(){
+		tm2.AcquireLock(lockId)
+	}()
+	time.Sleep(time.Millisecond*100)
+	go func(){
+		tm3.AcquireLock(lockId)
+	}()
+	time.Sleep(time.Millisecond*100)
+
+	assert.False(t, lock0.locked)
+	assert.True(t, lock1.locked)
+	assert.False(t, lock2.locked)
+	assert.False(t, lock3.locked)
+	assert.False(t, lock0.haveToken)
+	assert.True(t, lock1.haveToken)
+	assert.False(t, lock2.haveToken)
+	assert.False(t, lock3.haveToken)
+	assert.Equal(t, byte(3), lock0.last)
+	assert.Equal(t, byte(2), lock1.nextId)
+	assert.Equal(t, byte(3), lock2.nextId)
+	assert.Equal(t, byte(0), lock3. nextId)
+	assert.Nil(t, lock0.nextTimestamp)
+	assert.NotNil(t, lock1.nextTimestamp)
+	assert.NotNil(t, lock2.nextTimestamp)
+	assert.Nil(t, lock3.nextTimestamp)
+
+	tm1.ReleaseLock(lockId)
+
+	time.Sleep(time.Millisecond*100)
+
+	assert.False(t, lock0.locked)
+	assert.False(t, lock1.locked)
+	assert.True(t, lock2.locked)
+	assert.False(t, lock3.locked)
+	assert.False(t, lock0.haveToken)
+	assert.False(t, lock1.haveToken)
+	assert.True(t, lock2.haveToken)
+	assert.False(t, lock3.haveToken)
+	assert.Equal(t, byte(3), lock0.last)
+	assert.Equal(t, byte(0), lock1.nextId)
+	assert.Equal(t, byte(3), lock2.nextId)
+	assert.Equal(t, byte(0), lock3. nextId)
+	assert.Nil(t, lock0.nextTimestamp)
+	assert.Nil(t, lock1.nextTimestamp)
+	assert.NotNil(t, lock2.nextTimestamp)
+	assert.Nil(t, lock3.nextTimestamp)
+
+	tm2.ReleaseLock(lockId)
+
+	time.Sleep(time.Millisecond*100)
+
+	assert.False(t, lock0.locked)
+	assert.False(t, lock1.locked)
+	assert.False(t, lock2.locked)
+	assert.True(t, lock3.locked)
+	assert.False(t, lock0.haveToken)
+	assert.False(t, lock1.haveToken)
+	assert.False(t, lock2.haveToken)
+	assert.True(t, lock3.haveToken)
+	assert.Equal(t, byte(3), lock0.last)
+	assert.Equal(t, byte(0), lock1.nextId)
+	assert.Equal(t, byte(0), lock2.nextId)
+	assert.Equal(t, byte(0), lock3. nextId)
+	assert.Nil(t, lock0.nextTimestamp)
+	assert.Nil(t, lock1.nextTimestamp)
+	assert.Nil(t, lock2.nextTimestamp)
+	assert.Nil(t, lock3.nextTimestamp)
+}
+
+func TestTreadmarksApiTestLock2(t *testing.T) {
+	tm0, _ := NewTreadmarksApi(1024, 128, 4, 3, 3)
+	tm0.Initialize(1000)
+	tm1, _ := NewTreadmarksApi(1024, 128, 4, 3, 3)
+	tm1.Initialize(1001)
+	tm1.Join("localhost", 1000)
+	tm2, _ := NewTreadmarksApi(1024, 128, 4, 3, 3)
+	tm2.Initialize(1002)
+	tm2.Join("localhost", 1000)
+	tm3, _ := NewTreadmarksApi(1024, 128, 4, 3, 3)
+	tm3.Initialize(1003)
+	tm3.Join("localhost", 1000)
+
+	//go0:= make(chan bool, 1)
+	//go1 := make(chan bool, 1)
+	//go2 :=  make(chan bool, 1)
+	//go3 :=  make(chan bool, 1)
+
+	var lockId uint8 = 0
+
+	lock0, lock1, lock2, lock3 := tm0.locks[lockId], tm1.locks[lockId], tm2.locks[lockId], tm3.locks[lockId]
+
+	tm1.AcquireLock(lockId)
+	tm1.ReleaseLock(lockId)
+	time.Sleep(time.Millisecond*100)
+
+	assert.False(t, lock0.locked)
+	assert.False(t, lock1.locked)
+	assert.False(t, lock2.locked)
+	assert.False(t, lock3.locked)
+	assert.False(t, lock0.haveToken)
+	assert.True(t, lock1.haveToken)
+	assert.False(t, lock2.haveToken)
+	assert.False(t, lock3.haveToken)
+	assert.Equal(t, byte(1), lock0.last)
+	assert.Equal(t, byte(0), lock1.nextId)
+	assert.Equal(t, byte(0), lock2.nextId)
+	assert.Equal(t, byte(0), lock3. nextId)
+	assert.Nil(t, lock0.nextTimestamp)
+	assert.Nil(t, lock1.nextTimestamp)
+	assert.Nil(t, lock2.nextTimestamp)
+	assert.Nil(t, lock3.nextTimestamp)
+
+	tm2.AcquireLock(lockId)
+	tm2.ReleaseLock(lockId)
+
+	time.Sleep(time.Millisecond*100)
+
+	assert.False(t, lock0.locked)
+	assert.False(t, lock1.locked)
+	assert.False(t, lock2.locked)
+	assert.False(t, lock3.locked)
+	assert.False(t, lock0.haveToken)
+	assert.False(t, lock1.haveToken)
+	assert.True(t, lock2.haveToken)
+	assert.False(t, lock3.haveToken)
+	assert.Equal(t, byte(2), lock0.last)
+	assert.Equal(t, byte(0), lock1.nextId)
+	assert.Equal(t, byte(0), lock2.nextId)
+	assert.Equal(t, byte(0), lock3. nextId)
+	assert.Nil(t, lock0.nextTimestamp)
+	assert.Nil(t, lock1.nextTimestamp)
+	assert.Nil(t, lock2.nextTimestamp)
+	assert.Nil(t, lock3.nextTimestamp)
+
+	tm3.AcquireLock(lockId)
+	tm3.ReleaseLock(lockId)
+
+	time.Sleep(time.Millisecond*100)
+
+	assert.False(t, lock0.locked)
+	assert.False(t, lock1.locked)
+	assert.False(t, lock2.locked)
+	assert.False(t, lock3.locked)
+	assert.False(t, lock0.haveToken)
+	assert.False(t, lock1.haveToken)
+	assert.False(t, lock2.haveToken)
+	assert.True(t, lock3.haveToken)
+	assert.Equal(t, byte(3), lock0.last)
+	assert.Equal(t, byte(0), lock1.nextId)
+	assert.Equal(t, byte(0), lock2.nextId)
+	assert.Equal(t, byte(0), lock3. nextId)
+	assert.Nil(t, lock0.nextTimestamp)
+	assert.Nil(t, lock1.nextTimestamp)
+	assert.Nil(t, lock2.nextTimestamp)
+	assert.Nil(t, lock3.nextTimestamp)
+}
+
+func TestTreadmarksApi_Barriers(t *testing.T) {
+	tm0, _ := NewTreadmarksApi(1024, 128, 4, 3, 3)
+	tm0.Initialize(1000)
+	tm1, _ := NewTreadmarksApi(1024, 128, 4, 3, 3)
+	tm1.Initialize(1001)
+	tm1.Join("localhost", 1000)
+	tm2, _ := NewTreadmarksApi(1024, 128, 4, 3, 3)
+	tm2.Initialize(1002)
+	tm2.Join("localhost", 1000)
+	tm3, _ := NewTreadmarksApi(1024, 128, 4, 3, 3)
+	tm3.Initialize(1003)
+	tm3.Join("localhost", 1000)
+
+	go0:= make(chan bool)
+	go1 := make(chan bool)
+	go2 :=  make(chan bool)
+	go3 := make(chan bool)
+
+	test := func(tm *TreadmarksApi, g chan bool) {
+		go func(){
+			tm.Write(0, byte(0))
+			tm.Barrier(0)
+			g <- true
+			<- g
+			tm.Write(0, byte(0))
+		}()
+		time.Sleep(time.Millisecond*100)
+	}
+
+	test(tm0, go0)
+	test(tm1, go1)
+	test(tm2, go2)
+
+	assert.True(t, timeout(go0))
+	assert.True(t, timeout(go1))
+	assert.True(t, timeout(go2))
+
+	test(tm3, go3)
+
+	assert.False(t, timeout(go0))
+	assert.False(t, timeout(go1))
+	assert.False(t, timeout(go2))
+	assert.False(t, timeout(go3))
+	go0 <- true; go1 <- true; go2 <- true; go3 <- true
+	time.Sleep(time.Millisecond*100)
+
+	test(tm1, go1)
+	test(tm0, go0)
+	test(tm2, go2)
+
+	assert.True(t, timeout(go1))
+	assert.True(t, timeout(go0))
+	assert.True(t, timeout(go2))
+
+	test(tm3, go3)
+
+	assert.False(t, timeout(go0))
+	assert.False(t, timeout(go1))
+	assert.False(t, timeout(go2))
+	assert.False(t, timeout(go3))
+	go0 <- true; go1 <- true; go2 <- true; go3 <- true
+	time.Sleep(time.Millisecond*100)
+
+	test(tm1, go1)
+	test(tm2, go2)
+	test(tm0, go0)
+
+	assert.True(t, timeout(go1))
+	assert.True(t, timeout(go0))
+	assert.True(t, timeout(go2))
+
+	test(tm3, go3)
+	assert.False(t, timeout(go0))
+	assert.False(t, timeout(go1))
+	assert.False(t, timeout(go2))
+	assert.False(t, timeout(go3))
+	go0 <- true; go1 <- true; go2 <- true; go3 <- true
+	time.Sleep(time.Millisecond*100)
+
+	test(tm1, go1)
+	test(tm2, go2)
+	test(tm3, go3)
+
+	assert.True(t, timeout(go1))
+	assert.True(t, timeout(go0))
+	assert.True(t, timeout(go2))
+
+	test(tm0, go0)
+	assert.False(t, timeout(go0))
+	assert.False(t, timeout(go1))
+	assert.False(t, timeout(go2))
+	assert.False(t, timeout(go3))
+
+
+}
+
+func readInt(dsm dsm_api.DSMApiInterface, addr int) int{
+	bInt := make([]byte, 4)
+	var err error
+	for i := range bInt{
+		bInt[i], err = dsm.Read(addr+i)
+		if err != nil {
+			panic(err.Error())
+		}
+	}
+	return int(utils.BytesToUint32(bInt))
+}
+
+func writeInt(dsm dsm_api.DSMApiInterface, addr, input int) {
+	bInt := utils.Uint32ToBytes(uint32(input))
+	var err error
+	for i := range bInt{
+		err = dsm.Write(addr+i, bInt[i])
+		if err != nil {
+			panic(err.Error())
+		}
+	}
+}
+
+func timeout(channel chan bool) bool {
+	select {
+	case <- channel:
+		return false
+	case <- time.After(time.Millisecond*100):
+		return true
+	}
+}
