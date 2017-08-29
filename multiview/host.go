@@ -7,7 +7,6 @@ import (
 	"encoding/binary"
 	"encoding/gob"
 	"errors"
-	"fmt"
 	"log"
 	"os"
 	"strconv"
