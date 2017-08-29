@@ -6,15 +6,15 @@ import (
 	"DSM-project/multiview"
 	"DSM-project/utils"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
+	"runtime/pprof"
 	"sync"
 	"time"
-	"runtime/pprof"
-	"io"
 )
 
-func SortedIntMVBenchmark(nrProcs int, batchSize int, isManager bool, N int, Bmax int32, Imax int,pprofFile io.Writer) {
+func SortedIntMVBenchmark(nrProcs int, batchSize int, isManager bool, N int, Bmax int32, Imax int, pprofFile io.Writer) {
 	log.SetOutput(ioutil.Discard)
 	mv := multiview.NewMultiView()
 	rand := NewRandom()
@@ -137,7 +137,6 @@ func SortedIntMVBenchmark(nrProcs int, batchSize int, isManager bool, N int, Bma
 		fmt.Println("execution time:", diff.String())
 	}
 
-
 	fmt.Println("We had ", x, " things that wasnt sorted right.")
 	if isManager {
 		mv.Barrier(4)
@@ -224,8 +223,6 @@ func SortedIntTMBenchmark(group *sync.WaitGroup, port, nrProcs, batchSize int, i
 			}
 		}
 
-
-
 		tm.Barrier(1)
 		//Partial verification
 		if isManager {
@@ -248,7 +245,7 @@ func SortedIntTMBenchmark(group *sync.WaitGroup, port, nrProcs, batchSize int, i
 	sorted := make([]int32, N)
 	for i := 0; i < N; i++ {
 		x := readInt(tm, key(i))
-		fmt.Println(i, " - ", K[i], " - ", x, " - ", N)
+		//fmt.Println(i, " - ", K[i], " - ", x, " - ", N)
 		sorted[x] = K[i]
 	}
 	var last int32 = 0
@@ -265,7 +262,6 @@ func SortedIntTMBenchmark(group *sync.WaitGroup, port, nrProcs, batchSize int, i
 		diff := endTime.Sub(startTime)
 		fmt.Println("execution time:", diff.String())
 	}
-
 
 	fmt.Println("We had ", x, " things that wasn't sorted right.")
 	if group != nil {

@@ -6,7 +6,6 @@ import (
 	"DSM-project/network"
 	"DSM-project/utils"
 	"bytes"
-	"fmt"
 	"github.com/davecgh/go-xdr/xdr2"
 	"runtime"
 	"strconv"
@@ -592,7 +591,6 @@ func (t *TreadmarksApi) handleBarrierRequest(req BarrierRequest) {
 		t.barrier <- n
 	} else {
 		for _, req := range t.barrierreq {
-			fmt.Println(t.myId, t.timestamp, "handling req from ", req.From, ": ", req)
 			for _, interval := range req.Intervals{
 				t.addInterval(interval)
 			}
