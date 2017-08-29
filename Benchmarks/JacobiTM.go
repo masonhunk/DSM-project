@@ -3,6 +3,9 @@ package Benchmarks
 import (
 	"DSM-project/dsm-api/treadmarks"
 	"fmt"
+	"io"
+	"log"
+	"runtime/pprof"
 	"sync"
 	"testing"
 	"time"
@@ -13,15 +16,15 @@ func TestJacobiProgramTreadMarks(t *testing.T) {
 	group := new(sync.WaitGroup)
 	group.Add(2)
 	matrixsize := 64
-	go JacobiProgramTreadMarks(matrixsize, 4, 2, true, 2000, group)
+	go JacobiProgramTreadMarks(matrixsize, 4, 2, true, 2000, group, nil)
 	go func() {
 		time.Sleep(time.Millisecond * 200)
-		JacobiProgramTreadMarks(matrixsize, 4, 2, false, 2001, group)
+		JacobiProgramTreadMarks(matrixsize, 4, 2, false, 2001, group, nil)
 	}()
 	group.Wait()
 }
 
-func JacobiProgramTreadMarks(matrixsize int, nrIterations int, nrProcs int, isManager bool, port int, group *sync.WaitGroup) {
+func JacobiProgramTreadMarks(matrixsize int, nrIterations int, nrProcs int, isManager bool, port int, group *sync.WaitGroup, pprofFile io.Writer) {
 	var M = matrixsize
 	var N = matrixsize
 	const float32_BYTE_LENGTH = 4 //32 bits
@@ -39,14 +42,21 @@ func JacobiProgramTreadMarks(matrixsize int, nrIterations int, nrProcs int, isMa
 
 	tm, _ := treadmarks.NewTreadmarksApi(M*N*float32_BYTE_LENGTH, 4096, uint8(nrProcs), uint8(nrProcs), uint8(nrProcs))
 	tm.Initialize(port)
-	defer tm.Shutdown()
 	if !isManager {
 		tm.Join("localhost", 2000)
 		fmt.Println("joined with id:", tm.GetId())
 	}
 
 	tm.Barrier(0)
-
+	var startTime time.Time
+	if isManager {
+		startTime = time.Now()
+	}
+	if pprofFile != nil {
+		if err := pprof.StartCPUProfile(pprofFile); err != nil {
+			log.Fatal("could not start CPU profile: ", err)
+		}
+	}
 	length := M / nrProcs
 	begin := length * int(tm.GetId())
 	end := length * int(tm.GetId()+1)
@@ -91,19 +101,32 @@ func JacobiProgramTreadMarks(matrixsize int, nrIterations int, nrProcs int, isMa
 				privateArray[i][j] = (bytesToFloat32(g1) + bytesToFloat32(g2) + bytesToFloat32(g3) + bytesToFloat32(g4)) / float32(divisionAmount)
 			}
 		}
-		fmt.Println("at barrier 1 in iteration", iter)
+		//fmt.Println("at barrier 1 in iteration", iter)
 		tm.Barrier(1)
 		for i := begin; i < end; i++ {
 			for j := 0; j < N; j++ {
 				addr := gridAddr(i, j)
 				var valAsBytes []byte = float32ToBytes(privateArray[i][j])
+				if len(valAsBytes) > 8 {
+					panic("valAsBytes was longer than expected")
+				}
 				for r, b := range valAsBytes {
 					tm.Write(addr+r, b)
 				}
 			}
 		}
+		//fmt.Println("at barrier 2 in iteration", iter)
 		tm.Barrier(2)
+		//fmt.Println("after barrier 2 in iteration", iter)
 	}
-	defer group.Done()
+	if isManager {
+		endTime := time.Now()
+		diff := endTime.Sub(startTime)
+		fmt.Println("execution time:", diff.String())
+	}
 
+	fmt.Println("before done")
+	tm.Shutdown()
+	group.Done()
+	fmt.Println("after done")
 }

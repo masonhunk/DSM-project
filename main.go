@@ -52,8 +52,8 @@ func main() {
 	case "JacobiTM":
 		wg := sync.WaitGroup{}
 		wg.Add(1)
-		matrixsize := 128
-		Benchmarks.JacobiProgramTreadMarks(matrixsize, 8, *nrprocs, *manager, *port, &wg)
+		matrixsize := 1536
+		Benchmarks.JacobiProgramTreadMarks(matrixsize, 20, *nrprocs, *manager, *port, &wg, cpuprofFile)
 	case "JacobiMW":
 		wg := sync.WaitGroup{}
 		wg.Add(1)

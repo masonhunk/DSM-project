@@ -7,31 +7,30 @@ import (
 	"DSM-project/utils"
 	"bytes"
 	"github.com/davecgh/go-xdr/xdr2"
-	"sync"
 	"runtime"
 	"strconv"
-	"fmt"
+	"sync"
 )
 
 type TreadmarksApi struct {
-	running							bool
+	running                        bool
 	memory                         memory.VirtualMemory
 	myId, nrProcs                  uint8
 	memSize, pageByteSize, nrPages int
 	pagearray                      []*pageArrayEntry
 	twins                          [][]byte
-	dirtyPages     map[int16]bool
-	dirtyPagesLock *sync.RWMutex
-	procarray      [][]IntervalRecord
-	locks          []*lock
-	channel        chan bool
-	barrier        chan uint8
-	barrierreq     []BarrierRequest
-	in             <-chan []byte
-	out            chan<- []byte
-	conn           network.Connection
-	group          *sync.WaitGroup
-	timestamp      Timestamp
+	dirtyPages                     map[int16]bool
+	dirtyPagesLock                 *sync.RWMutex
+	procarray                      [][]IntervalRecord
+	locks                          []*lock
+	channel                        chan bool
+	barrier                        chan uint8
+	barrierreq                     []BarrierRequest
+	in                             <-chan []byte
+	out                            chan<- []byte
+	conn                           network.Connection
+	group                          *sync.WaitGroup
+	timestamp                      Timestamp
 }
 
 var _ dsm_api.DSMApiInterface = new(TreadmarksApi)
@@ -81,8 +80,7 @@ func (t *TreadmarksApi) Join(ip string, port int) error {
 }
 
 func (t *TreadmarksApi) Shutdown() error {
-
-	t.group.Wait()
+	//t.group.Wait()
 	close(t.out)
 	return nil
 }
@@ -113,19 +111,18 @@ func (t *TreadmarksApi) Free(addr, size int) error {
 
 func (t *TreadmarksApi) Barrier(id uint8) {
 	t.newInterval()
-	defer func(){
-		fmt.Println(t.myId, t.timestamp, "returning from barrier call.")
+	defer func() {
+		//fmt.Println(t.myId, t.timestamp, "returning from barrier call.")
 	}()
-	fmt.Println(t.myId, t.timestamp, "Calling barrier.")
-	fmt.Println(t.myId, t.timestamp, "My current intervals are: ", t.procarray[t.myId])
-
+	//fmt.Println(t.myId, t.timestamp, "Calling barrier.")
+	//fmt.Println(t.myId, t.timestamp, "My current intervals are: ", t.procarray[t.myId])
 
 	t.sendBarrierRequest(id)
 }
 
 func (t *TreadmarksApi) AcquireLock(id uint8) {
-	defer func(){
-		fmt.Println(t.myId, t.timestamp, "returning from acquire lock call.")
+	defer func() {
+		//fmt.Println(t.myId, t.timestamp, "returning from acquire lock call.")
 	}()
 	lock := t.locks[id]
 	lock.Lock()
@@ -212,11 +209,11 @@ func (t *TreadmarksApi) initializeBarriers() {
 //----------------------------------------------------------------//
 
 func (t *TreadmarksApi) newWritenoticeRecord(pageNr int16) {
-		wn := WritenoticeRecord{
-			Owner:     t.myId,
-			Timestamp: t.timestamp,
-		}
-		t.pagearray[pageNr].writenotices[t.myId] = append(t.pagearray[pageNr].writenotices[t.myId], wn)
+	wn := WritenoticeRecord{
+		Owner:     t.myId,
+		Timestamp: t.timestamp,
+	}
+	t.pagearray[pageNr].writenotices[t.myId] = append(t.pagearray[pageNr].writenotices[t.myId], wn)
 }
 
 func (t *TreadmarksApi) addWritenoticeRecord(pageNr int16, procId uint8, timestamp Timestamp) {
@@ -298,7 +295,7 @@ func (t *TreadmarksApi) getMissingIntervals(ts Timestamp) []IntervalRecord {
 	for proc = 0; proc < t.nrProcs; proc++ {
 		intervals = append(intervals, t.getMissingIntervalsForProc(proc, ts)...)
 	}
-	fmt.Println(t.myId, t.timestamp, "List of missing intervals with regards to ts: ", ts, " is ", intervals)
+	//fmt.Println(t.myId, t.timestamp, "List of missing intervals with regards to ts: ", ts, " is ", intervals)
 	return intervals
 }
 
@@ -312,7 +309,7 @@ func (t *TreadmarksApi) getMissingIntervalsForProc(procId uint8, ts Timestamp) [
 			break
 		}
 	}
-	fmt.Println(t.myId, t.timestamp, "List of missing intervals made by ", procId," with regards to ts: ", ts, " is ", result)
+	//fmt.Println(t.myId, t.timestamp, "List of missing intervals made by ", procId," with regards to ts: ", ts, " is ", result)
 	return result
 }
 
@@ -420,6 +417,7 @@ func (t *TreadmarksApi) sendBarrierRequest(barrierId uint8) {
 	} else {
 		t.handleBarrierRequest(req)
 	}
+	//fmt.Println("waiting on channel receive")
 	<-t.channel
 }
 
@@ -562,7 +560,7 @@ func (t *TreadmarksApi) handleIncoming() {
 			}
 			t.handleDiffResponse(resp)
 		}
-		if !t.running{
+		if !t.running {
 			break
 		}
 	}
@@ -577,10 +575,10 @@ func (t *TreadmarksApi) handleLockAcquireRequest(req LockAcquireRequest) {
 		t.sendLockAcquireResponse(id, req.From, req.Timestamp)
 		lock.haveToken = false
 		lock.last = req.From
-	} else if t.getManagerId(id) != t.myId{
+	} else if t.getManagerId(id) != t.myId {
 		lock.nextId = req.From
 		lock.nextTimestamp = req.Timestamp
-	}else {
+	} else {
 		t.forwardLockAcquireRequest(lock.last, req)
 		lock.last = req.From
 	}
@@ -601,45 +599,45 @@ func (t *TreadmarksApi) handleLockAcquireResponse(resp LockAcquireResponse) {
 }
 
 func (t *TreadmarksApi) handleBarrierRequest(req BarrierRequest) {
-	fmt.Println(t.myId, t.timestamp, " recieved barrier request from ", req.From, ": ", req)
+	//fmt.Println(t.myId, t.timestamp, " recieved barrier request from ", req.From, ": ", req)
 	t.barrierreq[req.From] = req
 	n := <-t.barrier + 1
 	if n < t.nrProcs {
 		t.barrier <- n
 	} else {
-		fmt.Println(t.myId, t.timestamp, "Got all barrier requests - started handling them.")
+		//fmt.Println(t.myId, t.timestamp, "Got all barrier requests - started handling them.")
 		for _, req := range t.barrierreq {
-			fmt.Println(t.myId, t.timestamp, "handling req from ", req.From, ": ", req)
-			for _, interval := range req.Intervals{
+			//fmt.Println(t.myId, t.timestamp, "handling req from ", req.From, ": ", req)
+			for _, interval := range req.Intervals {
 				t.addInterval(interval)
 			}
 		}
-		fmt.Println(t.myId, t.timestamp, "sending out barrier responses")
+		//fmt.Println(t.myId, t.timestamp, "sending out barrier responses")
 		var i uint8
 		for i = 0; i < t.nrProcs; i++ {
 			if i != t.myId {
-				fmt.Println(t.myId, t.timestamp, "sending out barrier response to ", i)
+				//fmt.Println(t.myId, t.timestamp, "sending out barrier response to ", i)
 				t.sendBarrierResponse(i, t.barrierreq[i].Timestamp)
 			}
 		}
-		fmt.Println(t.myId, t.timestamp, "After handling barrier requests, all my intervals are:")
-		for i := range t.procarray {
-			fmt.Println(t.myId, t.timestamp, "Proc: ", i, " Intervals: ", t.procarray[i])
-		}
+		//fmt.Println(t.myId, t.timestamp, "After handling barrier requests, all my intervals are:")
+		/*for i := range t.procarray {
+			//fmt.Println(t.myId, t.timestamp, "Proc: ", i, " Intervals: ", t.procarray[i])
+		}*/
 		t.barrier <- 0
 		t.channel <- true
 	}
 }
 
 func (t *TreadmarksApi) handleBarrierResponse(resp BarrierResponse) {
-	fmt.Println(t.myId, t.timestamp, "handling barrier response: ", resp)
+	//fmt.Println(t.myId, t.timestamp, "handling barrier response: ", resp)
 	for _, interval := range resp.Intervals {
 		t.addInterval(interval)
 	}
-	fmt.Println(t.myId, t.timestamp, "After handling barrier response, all my intervals are:")
-	for i := range t.procarray {
-		fmt.Println(t.myId, t.timestamp, "Proc: ", i, " Intervals: ", t.procarray[i])
-	}
+	//fmt.Println(t.myId, t.timestamp, "After handling barrier response, all my intervals are:")
+	/*for i := range t.procarray {
+		//fmt.Println(t.myId, t.timestamp, "Proc: ", i, " Intervals: ", t.procarray[i])
+	}*/
 
 	t.channel <- true
 }
@@ -750,7 +748,6 @@ func (t *TreadmarksApi) applyDiff(pageNr int16, diff map[int]byte) {
 //----------------------------------------------------------------//
 //                           Help functions                       //
 //----------------------------------------------------------------//
-
 
 func (t *TreadmarksApi) GetId() int {
 	return int(t.myId)
