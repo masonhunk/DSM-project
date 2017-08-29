@@ -115,6 +115,8 @@ func JacobiProgramMultiView(matrixSize int, nrIterations int, nrProcs int, isMan
 	if end <= begin {
 		panic("begin is larger than end")
 	}
+	fmt.Println("begin, end at host", mw.Id, ":", begin, end)
+
 	//fmt.Println("at barrier 1")
 	mw.Barrier(1)
 

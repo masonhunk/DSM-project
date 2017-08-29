@@ -18,7 +18,7 @@ var cpuprofile = flag.String("cpuprofile", "", "write cpu profile `file`")
 var memprofile = flag.String("memprofile", "", "write memory profile to `file`")
 var benchmark = flag.String("benchmark", "default", "choose benchmark algorithm")
 var nrprocs = flag.Int("hosts", 1, "choose number of hosts.")
-var port = flag.Int("port", 1000, "Choose port.")
+var port = flag.Int("port", 2000, "Choose port.")
 var manager = flag.Bool("manager", true, "choose if instance is manager.")
 
 func main() {
@@ -42,11 +42,18 @@ func main() {
 		nrOfInts := 4096 * 1000000
 		batchSize := 10000 * 4096 // nr of ints in batch
 		Benchmarks.ParallelSumMW(batchSize, nrOfInts, *nrprocs, *manager, pageSize, &wg, cpuprofFile)
+	case "ModuloMultTM":
+		wg := sync.WaitGroup{}
+		wg.Add(1)
+		pageSize := 4096
+		nrOfInts := 4096 * 1000000
+		batchSize := 10000 * 4096 // nr of ints in batch
+		Benchmarks.ParallelSumTM(batchSize, nrOfInts, *nrprocs, *manager, *port, pageSize, &wg, cpuprofFile)
 	case "JacobiTM":
 		wg := sync.WaitGroup{}
 		wg.Add(1)
-		matrixsize := 64
-		Benchmarks.JacobiProgramTreadMarks(matrixsize, 8, *nrprocs, *manager, &wg)
+		matrixsize := 128
+		Benchmarks.JacobiProgramTreadMarks(matrixsize, 8, *nrprocs, *manager, *port, &wg)
 	case "JacobiMW":
 		wg := sync.WaitGroup{}
 		wg.Add(1)
@@ -54,6 +61,12 @@ func main() {
 		Benchmarks.JacobiProgramMultiView(matrixsize, 20, *nrprocs, *manager, 4096, &wg, cpuprofFile)
 	case "SortedIntTM":
 		Benchmarks.SortedIntTMBenchmark(nil, *port, *nrprocs, 1000, *manager, 8388608, 524288, 10)
+	case "SortedIntMW":
+		batchSize := 1000
+		N := 38860
+		var Bmax int32 = 524288
+		Imax := 10
+		Benchmarks.SortedIntMVBenchmark(*nrprocs, batchSize, *manager, N, Bmax, Imax)
 	case "SyncOpsCostMW":
 		Benchmarks.TestSynchronizedWritesMW(*nrprocs, 10000, cpuprofFile)
 	case "NonSyncOpsCostMW":
@@ -61,13 +74,13 @@ func main() {
 	case "barrMW":
 		Benchmarks.TestBarrierTimeMW(100000, *nrprocs, nil)
 	case "locksMW":
-		Benchmarks.TestLockMW(100000, cpuprofFile)
+		Benchmarks.TestLockMW(2000000, cpuprofFile)
 	case "barrTM":
 		Benchmarks.TestBarrierTimeTM(100000, *nrprocs, cpuprofFile)
 	case "locksTM":
-		Benchmarks.TestLockTM(100, cpuprofFile)
-	case "SyncOpsCosTM":
-		Benchmarks.TestSynchronizedReadsWritesTM(10000, cpuprofFile)
+		Benchmarks.TestLockTM(2000000, cpuprofFile)
+	case "SyncOpsCostTM":
+		Benchmarks.TestSynchronizedReadsWritesTM(5000, cpuprofFile)
 	case "NonSyncOpsCostTM":
 		Benchmarks.TestNonSynchronizedReadWritesTM(100000000, cpuprofFile)
 	default:

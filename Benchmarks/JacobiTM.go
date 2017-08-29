@@ -1,6 +1,7 @@
 package Benchmarks
 
 import (
+	"DSM-project/dsm-api/treadmarks"
 	"fmt"
 	"sync"
 	"testing"
@@ -12,15 +13,15 @@ func TestJacobiProgramTreadMarks(t *testing.T) {
 	group := new(sync.WaitGroup)
 	group.Add(2)
 	matrixsize := 64
-	go JacobiProgramTreadMarks(matrixsize, 4, 2, true, group)
+	go JacobiProgramTreadMarks(matrixsize, 4, 2, true, 2000, group)
 	go func() {
 		time.Sleep(time.Millisecond * 200)
-		JacobiProgramTreadMarks(matrixsize, 4, 2, false, group)
+		JacobiProgramTreadMarks(matrixsize, 4, 2, false, 2001, group)
 	}()
 	group.Wait()
 }
 
-func JacobiProgramTreadMarks(matrixsize int, nrIterations int, nrProcs int, isManager bool, group *sync.WaitGroup) {
+func JacobiProgramTreadMarks(matrixsize int, nrIterations int, nrProcs int, isManager bool, port int, group *sync.WaitGroup) {
 	var M = matrixsize
 	var N = matrixsize
 	const float32_BYTE_LENGTH = 4 //32 bits
@@ -36,78 +37,73 @@ func JacobiProgramTreadMarks(matrixsize int, nrIterations int, nrProcs int, isMa
 		return (m * N * float32_BYTE_LENGTH) + (n * float32_BYTE_LENGTH)
 	}
 
-	tm := setupTreadMarksStruct(nrProcs, M*N*float32_BYTE_LENGTH, 64, 1, 3)
-	if isManager {
-		tm.Startup()
-	} else {
-		tm.Join("localhost:2000")
-		fmt.Println("joined with id:", tm.ProcId)
+	tm, _ := treadmarks.NewTreadmarksApi(M*N*float32_BYTE_LENGTH, 4096, uint8(nrProcs), uint8(nrProcs), uint8(nrProcs))
+	tm.Initialize(port)
+	defer tm.Shutdown()
+	if !isManager {
+		tm.Join("localhost", 2000)
+		fmt.Println("joined with id:", tm.GetId())
 	}
 
 	tm.Barrier(0)
 
 	length := M / nrProcs
-	begin := length * int(tm.ProcId-1)
-	end := length * int(tm.ProcId)
-	fmt.Println("begin, end:", begin, end)
-
-	for iter := 0; iter <= nrIterations; iter++ {
+	begin := length * int(tm.GetId())
+	end := length * int(tm.GetId()+1)
+	fmt.Println("begin, end at host", tm.GetId(), ":", begin, end)
+	if end <= begin {
+		panic("begin is larger than end")
+	}
+	for iter := 1; iter <= nrIterations; iter++ {
 		fmt.Println("in iteration nr", iter)
 		for i := begin; i < end; i++ {
 			for j := 0; j < N; j++ {
 				divisionAmount := 4
-				r1 := gridAddr(i-1, j)
-				r2 := gridAddr(i+1, j)
-				r3 := gridAddr(i, j-1)
-				r4 := gridAddr(i, j+1)
-				var g1 []byte = make([]byte, 4)
-				var g2 []byte = make([]byte, 4)
-				var g3 []byte = make([]byte, 4)
-				var g4 []byte = make([]byte, 4)
-				if r1 == -1 {
-					divisionAmount--
+				g1 := []byte{0, 0, 0, 0}
+				g2 := []byte{0, 0, 0, 0}
+				g3 := []byte{0, 0, 0, 0}
+				g4 := []byte{0, 0, 0, 0}
+
+				if i > 0 {
+					g1 = readBytes(tm, gridAddr(i-1, j), float32_BYTE_LENGTH)
+
 				} else {
-					g1, _ = tm.ReadBytes(gridAddr(i-1, j), float32_BYTE_LENGTH)
+					divisionAmount--
 				}
-				if r2 == -1 {
-					divisionAmount--
+				if i < M-1 {
+					if i+1 == end {
+						//log.Println("about to read to shared variable with i+1, j values:", i+1, j, "and address", gridEntryAddresses[i+1][j])
+					}
+					g2 = readBytes(tm, gridAddr(i+1, j), float32_BYTE_LENGTH)
 				} else {
-					g2, _ = tm.ReadBytes(gridAddr(i+1, j), float32_BYTE_LENGTH)
+					divisionAmount--
 				}
-				if r3 == -1 {
-					divisionAmount--
+				if j > 0 {
+					g3 = readBytes(tm, gridAddr(i, j-1), float32_BYTE_LENGTH)
 				} else {
-					g3, _ = tm.ReadBytes(gridAddr(i, j-1), float32_BYTE_LENGTH)
+					divisionAmount--
 				}
-				if r4 == -1 {
-					divisionAmount--
+				if j < N-1 {
+					g4 = readBytes(tm, gridAddr(i, j+1), float32_BYTE_LENGTH)
 				} else {
-					g4, _ = tm.ReadBytes(gridAddr(i, j+1), float32_BYTE_LENGTH)
+					divisionAmount--
 				}
 				privateArray[i][j] = (bytesToFloat32(g1) + bytesToFloat32(g2) + bytesToFloat32(g3) + bytesToFloat32(g4)) / float32(divisionAmount)
 			}
-			tm.Barrier(1)
-			for i := begin; i < end; i++ {
-				for j := 0; j < N; j++ {
-					addr := gridAddr(i, j)
-					var valAsBytes []byte = float32ToBytes(privateArray[i][j])
-					for r, b := range valAsBytes {
-						tm.Write(addr+r, b)
-					}
+		}
+		fmt.Println("at barrier 1 in iteration", iter)
+		tm.Barrier(1)
+		for i := begin; i < end; i++ {
+			for j := 0; j < N; j++ {
+				addr := gridAddr(i, j)
+				var valAsBytes []byte = float32ToBytes(privateArray[i][j])
+				for r, b := range valAsBytes {
+					tm.Write(addr+r, b)
 				}
 			}
-			tm.Barrier(2)
 		}
+		tm.Barrier(2)
 	}
-	defer func() {
-		if isManager {
-			tm.Shutdown()
-		} else {
-			tm.Close()
-		}
-		fmt.Println("exiting algorithm...")
-		group.Done()
-
-	}()
+	defer group.Done()
 
 }
