@@ -1,25 +1,25 @@
 package treadmarks
 
 import (
-	"testing"
 	"bytes"
 	"encoding/gob"
 	"github.com/stretchr/testify/assert"
+	"testing"
 )
 
 func TestEncodeDecode(t *testing.T) {
 	intervals := make([]IntervalRecord, 1)
 	intervals[0] = IntervalRecord{
-		Owner: 2,
+		Owner:     2,
 		Timestamp: NewTimestamp(3),
-		Pages: []int16{0,1},
+		Pages:     []int16{0, 1},
 	}
 	resp := BarrierResponse{
-		Intervals:intervals,
+		Intervals: intervals,
 	}
 
 	respc := BarrierResponse{
-		Intervals:make([]IntervalRecord, 0),
+		Intervals: make([]IntervalRecord, 0),
 	}
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
@@ -30,6 +30,7 @@ func TestEncodeDecode(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, resp, respc)
 }
+
 /*
 type BarrierResponse struct{
 	Intervals []IntervalRecord

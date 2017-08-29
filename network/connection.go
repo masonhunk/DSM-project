@@ -1,44 +1,46 @@
 package network
 
 import (
-	"net"
-	"time"
-	"sync"
-	"bytes"
-	"strings"
-	"encoding/binary"
-	"strconv"
-	"fmt"
 	"DSM-project/utils"
+	"bytes"
+	"encoding/binary"
+	"fmt"
 	"io"
+	"net"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
 )
 
-type Connection interface{
-	Connect(ip string, port int) (int,error)
+type Connection interface {
+	Connect(ip string, port int) (int, error)
+	Close()
 }
 
 var _ Connection = new(connection)
 
-type connection struct{
-	myId int
-	myPort int
-	running bool
-	group *sync.WaitGroup
+type connection struct {
+	myId     int
+	myPort   int
+	running  bool
+	group    *sync.WaitGroup
 	listener *net.TCPListener
-	peers []*peer
-	in, out chan []byte
+	peers    []*peer
+	in, out  chan []byte
 }
 
-type peer struct{
-	id int
-	ip string
+type peer struct {
+	id   int
+	ip   string
 	port int
 	conn *net.TCPConn
 }
+
 /*
 	NewConnection gives a new connection, that will be listening on the given port.
 	The host will have ID 0 at this point.
- */
+*/
 func NewConnection(port int, bufferSize int) (*connection, <-chan []byte, chan<- []byte) {
 	c := new(connection)
 	c.peers = make([]*peer, 1)
@@ -61,15 +63,15 @@ func NewConnection(port int, bufferSize int) (*connection, <-chan []byte, chan<-
 	When connected, this host will receive a new ID from the host.
 	This will also make this host start listening and sending messages, which will then be passed through the channels
 	given when the connection was initialized.
- */
-func (c *connection) Connect(ip string, port int) (int,error){
+*/
+func (c *connection) Connect(ip string, port int) (int, error) {
 	tempConn, err := net.DialTimeout("tcp", fmt.Sprint(ip, ":", port), time.Second*5)
 	conn := tempConn.(*net.TCPConn)
 	if err != nil {
 		panic("Couldnt dial the host: " + err.Error())
 	}
 
-	write(conn, []byte{0,0, byte(c.myPort/256), byte(c.myPort % 256)})
+	write(conn, []byte{0, 0, byte(c.myPort / 256), byte(c.myPort % 256)})
 	//conn.SetReadDeadline(time.Now().Add(time.Second*5))
 
 	msg := read(conn)
@@ -84,10 +86,10 @@ func (c *connection) Connect(ip string, port int) (int,error){
 		j++
 		ip, port, k := addrFromBytes(msg[j:])
 		newConn, err := net.Dial("tcp", fmt.Sprint(ip, ":", port))
-		if err != nil{
-			panic("Got error when connecting to addr " + fmt.Sprint(ip, ":", port) + ": "+err.Error())
+		if err != nil {
+			panic("Got error when connecting to addr " + fmt.Sprint(ip, ":", port) + ": " + err.Error())
 		}
-		write(newConn, []byte{0,byte(c.myId), byte(c.myPort/256), byte(c.myPort % 256)})
+		write(newConn, []byte{0, byte(c.myId), byte(c.myPort / 256), byte(c.myPort % 256)})
 		c.addPeer(id, newConn.(*net.TCPConn), port)
 		go c.receive(c.peers[id])
 		j += k
@@ -96,10 +98,16 @@ func (c *connection) Connect(ip string, port int) (int,error){
 	return c.myId, nil
 }
 
+func (c *connection) Close() {
+	close(c.out)
+	c.group.Wait()
+
+}
+
 /*
 	This is a locally used method that sends messages read from the incoming channel.
- */
-func (c *connection) sendLoop(){
+*/
+func (c *connection) sendLoop() {
 	c.group.Add(1)
 	var id int
 	for msg := range c.out {
@@ -108,8 +116,8 @@ func (c *connection) sendLoop(){
 			c.in <- msg
 		} else {
 			if id >= len(c.peers) {
-				go func(){
-					time.Sleep(time.Millisecond*500)
+				go func() {
+					time.Sleep(time.Millisecond * 500)
 					c.out <- msg
 				}()
 			} else {
@@ -127,8 +135,8 @@ func (c *connection) sendLoop(){
 /*
 	This is a locally used method that reads messages from a certain connection, and puts them in the
 	outgoing channel.
- */
-func (c *connection) receive(peer *peer){
+*/
+func (c *connection) receive(peer *peer) {
 	c.group.Add(1)
 	for c.running {
 		b := read(peer.conn)
@@ -152,19 +160,18 @@ func (c *connection) receive(peer *peer){
 /*
 	Local functions that just runs a loop listening for incoming connections and running addHost
 	on all new connections.
- */
+*/
 func (c *connection) listen() {
 	c.group.Add(1)
-	running := true
-	for running {
-		c.listener.SetDeadline(time.Now().Add(time.Millisecond*500))
+
+	for c.running {
+		c.listener.SetDeadline(time.Now().Add(time.Millisecond * 500))
 		conn, err := c.listener.AcceptTCP()
 		if err == nil {
 			c.addHost(conn)
-		}else if !strings.HasSuffix(err.Error(),"i/o timeout") {
+		} else if !strings.HasSuffix(err.Error(), "i/o timeout") {
 			panic("Something crashed when we were accepting: " + err.Error())
 		}
-		running = c.running
 	}
 	c.listener.Close()
 	c.group.Done()
@@ -173,17 +180,17 @@ func (c *connection) listen() {
 /*
 	If the host sends a message with ID = 0, it is a new host joining the network, so we send it our list of peers.
 	If the ID is different from 0, the host has already joined the network, and should just be added to our list of peers.
- */
+*/
 func (c *connection) addHost(conn *net.TCPConn) {
 	msg := read(conn)
 	var buf bytes.Buffer
 	id := int(msg[1])
-	port := int(msg[2])*256+int(msg[3])
-	if id == 0{
+	port := int(msg[2])*256 + int(msg[3])
+	if id == 0 {
 		id = len(c.peers)
 		buf.Write([]byte{byte(id), byte(c.myId)})
-		for i := range c.peers{
-			if i != c.myId{
+		for i := range c.peers {
+			if i != c.myId {
 				buf.WriteByte(byte(i))
 				buf.Write(addrToBytes(c.peers[i].ip, c.peers[i].port))
 			}
@@ -197,21 +204,21 @@ func (c *connection) addHost(conn *net.TCPConn) {
 
 /*
 	This functions connects to a host with the given address and returns the TCP connection pointer.
- */
-func (c *connection) connectToHost(ip string, port int) *net.TCPConn{
+*/
+func (c *connection) connectToHost(ip string, port int) *net.TCPConn {
 	var conn net.Conn
 	var err error
 	for c.running {
 		conn, err = net.DialTimeout("tcp", fmt.Sprint(ip, ":", port), time.Millisecond*500)
-		if err != nil && !strings.HasSuffix(err.Error(),"i/o timeout"){
+		if err != nil && !strings.HasSuffix(err.Error(), "i/o timeout") {
 			panic("Something went wrong when trying to connect to " + fmt.Sprint(ip, ":", port))
 		}
 	}
 	return conn.(*net.TCPConn)
 }
 
-func (c *connection) addPeer(id int, conn *net.TCPConn, port int){
-	if len(c.peers) <= id{
+func (c *connection) addPeer(id int, conn *net.TCPConn, port int) {
+	if len(c.peers) <= id {
 		c.peers = append(c.peers, make([]*peer, (id-len(c.peers))+1)...)
 	}
 	ip := "localhost"
@@ -226,14 +233,14 @@ func (c *connection) addPeer(id int, conn *net.TCPConn, port int){
 	c.peers[id] = &peer{id, ip, port, conn}
 }
 
-func (c *connection) getAddr(id int) string{
+func (c *connection) getAddr(id int) string {
 	peer := c.peers[id]
 	return fmt.Sprint(peer.ip, ":", peer.port)
 }
 
-func write(conn net.Conn, data []byte){
+func write(conn net.Conn, data []byte) {
 	length := uint64(len(data))
-	if (len(data) != int(length)) {
+	if len(data) != int(length) {
 		panic(fmt.Sprint("Length did not match.", length, len(data)))
 	}
 	l := utils.Uint64ToBytes(uint64(len(data)))
@@ -241,8 +248,9 @@ func write(conn net.Conn, data []byte){
 	conn.Write(msg)
 }
 
-func read(conn net.Conn) []byte{
+func read(conn net.Conn) []byte {
 	msg := make([]byte, 8)
+	conn.SetReadDeadline(time.Now().Add(time.Second))
 	_, err := io.ReadFull(conn, msg)
 	if err != nil {
 		return nil
@@ -256,23 +264,23 @@ func read(conn net.Conn) []byte{
 	return msg
 }
 
-func addrFromBytes(b []byte) (string, int, int){
+func addrFromBytes(b []byte) (string, int, int) {
 	s := make([]string, 4)
-	for i := 0; i < 4; i++{
+	for i := 0; i < 4; i++ {
 		s[i] = strconv.Itoa(int(b[i]))
 	}
 	ip := strings.Join(s, ".")
 	port, i := binary.Varint(b[4:])
-	return ip, int(port), i+4
+	return ip, int(port), i + 4
 }
 
-func addrToBytes(ip string, port int) []byte{
+func addrToBytes(ip string, port int) []byte {
 	ipArray := strings.Split(ip, ".")
 	if len(ipArray) != 4 {
-		ipArray =  []string{"127","0","0","1"}
+		ipArray = []string{"127", "0", "0", "1"}
 	}
 	ip_in_bytes := make([]byte, 4)
-	for i := range ipArray{
+	for i := range ipArray {
 		v, _ := strconv.Atoi(ipArray[i])
 		ip_in_bytes[i] = byte(v)
 	}

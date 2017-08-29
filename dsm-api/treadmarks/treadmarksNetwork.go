@@ -1,26 +1,25 @@
 package treadmarks
 
-
-type LockAcquireRequest struct{
+type LockAcquireRequest struct {
 	From      uint8 `xdropaque:"false"`
 	LockId    uint8 `xdropaque:"false"`
 	Timestamp Timestamp
 }
 
-type LockAcquireResponse struct{
+type LockAcquireResponse struct {
 	LockId    uint8 `xdropaque:"false"`
 	Timestamp Timestamp
 	Intervals []IntervalRecord
 }
 
-type BarrierRequest struct{
+type BarrierRequest struct {
 	From      uint8 `xdropaque:"false"`
 	BarrierId uint8 `xdropaque:"false"`
 	Timestamp Timestamp
 	Intervals []IntervalRecord
 }
 
-type BarrierResponse struct{
+type BarrierResponse struct {
 	Intervals []IntervalRecord
 	Timestamp Timestamp
 }
@@ -39,15 +38,16 @@ type DiffResponse struct {
 }
 
 type CopyRequest struct {
-	From uint8 `xdropaque:"false"`
-	PageNr int16 `xdropaque:"false"`
+	From      uint8 `xdropaque:"false"`
+	PageNr    int16 `xdropaque:"false"`
 	Timestamp Timestamp
 }
 
 type CopyResponse struct {
 	PageNr int16 `xdropaque:"false"`
-	Data []byte
+	Data   []byte
 }
+
 /*
 func (l LockAcquireRequest) GobEncode() ([]byte, error) {
 	var buf bytes.Buffer
