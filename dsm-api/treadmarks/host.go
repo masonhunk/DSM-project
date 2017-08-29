@@ -80,7 +80,7 @@ func (t *TreadmarksApi) Join(ip string, port int) error {
 }
 
 func (t *TreadmarksApi) Shutdown() error {
-	//t.group.Wait()
+	t.group.Wait()
 	close(t.out)
 	return nil
 }

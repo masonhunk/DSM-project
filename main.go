@@ -52,12 +52,12 @@ func main() {
 	case "JacobiTM":
 		wg := sync.WaitGroup{}
 		wg.Add(1)
-		matrixsize := 1536
+		matrixsize := 256
 		Benchmarks.JacobiProgramTreadMarks(matrixsize, 20, *nrprocs, *manager, *port, &wg, cpuprofFile)
 	case "JacobiMW":
 		wg := sync.WaitGroup{}
 		wg.Add(1)
-		matrixsize := 1536
+		matrixsize := 512
 		Benchmarks.JacobiProgramMultiView(matrixsize, 20, *nrprocs, *manager, 4096, &wg, cpuprofFile)
 	case "SortedIntTM":
 		Benchmarks.SortedIntTMBenchmark(nil, *port, *nrprocs, 1000, *manager, 38860, 524288, 10, cpuprofFile)
