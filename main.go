@@ -52,21 +52,21 @@ func main() {
 	case "JacobiTM":
 		wg := sync.WaitGroup{}
 		wg.Add(1)
-		matrixsize := 128
-		Benchmarks.JacobiProgramTreadMarks(matrixsize, 8, *nrprocs, *manager, *port, &wg)
+		matrixsize := 1536
+		Benchmarks.JacobiProgramTreadMarks(matrixsize, 20, *nrprocs, *manager, *port, &wg, cpuprofFile)
 	case "JacobiMW":
 		wg := sync.WaitGroup{}
 		wg.Add(1)
 		matrixsize := 1536
 		Benchmarks.JacobiProgramMultiView(matrixsize, 20, *nrprocs, *manager, 4096, &wg, cpuprofFile)
 	case "SortedIntTM":
-		Benchmarks.SortedIntTMBenchmark(nil, *port, *nrprocs, 1000, *manager, 8388608, 524288, 10)
+		Benchmarks.SortedIntTMBenchmark(nil, *port, *nrprocs, 1000, *manager, 38860, 524288, 10, cpuprofFile)
 	case "SortedIntMW":
 		batchSize := 1000
 		N := 38860
 		var Bmax int32 = 524288
 		Imax := 10
-		Benchmarks.SortedIntMVBenchmark(*nrprocs, batchSize, *manager, N, Bmax, Imax)
+		Benchmarks.SortedIntMVBenchmark(*nrprocs, batchSize, *manager, N, Bmax, Imax, cpuprofFile)
 	case "SyncOpsCostMW":
 		Benchmarks.TestSynchronizedWritesMW(*nrprocs, 10000, cpuprofFile)
 	case "NonSyncOpsCostMW":
@@ -85,9 +85,9 @@ func main() {
 		Benchmarks.TestNonSynchronizedReadWritesTM(100000000, cpuprofFile)
 	default:
 		group := new(sync.WaitGroup)
-		go Benchmarks.SortedIntTMBenchmark(group, 1000, 2, 100, true, 10000, 524288, 10)
+		go Benchmarks.SortedIntTMBenchmark(group, 1000, 2, 100, true, 10000, 524288, 10, cpuprofFile)
 		time.Sleep(time.Millisecond * 500)
-		Benchmarks.SortedIntTMBenchmark(group, 1001, 2, 100, false, 10000, 524288, 10)
+		Benchmarks.SortedIntTMBenchmark(group, 1001, 2, 100, false, 10000, 524288, 10, cpuprofFile)
 	}
 
 	if *memprofile == "" {

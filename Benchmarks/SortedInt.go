@@ -9,9 +9,12 @@ import (
 	"io/ioutil"
 	"log"
 	"sync"
+	"time"
+	"runtime/pprof"
+	"io"
 )
 
-func SortedIntMVBenchmark(nrProcs int, batchSize int, isManager bool, N int, Bmax int32, Imax int) {
+func SortedIntMVBenchmark(nrProcs int, batchSize int, isManager bool, N int, Bmax int32, Imax int,pprofFile io.Writer) {
 	log.SetOutput(ioutil.Discard)
 	mv := multiview.NewMultiView()
 	rand := NewRandom()
@@ -55,6 +58,17 @@ func SortedIntMVBenchmark(nrProcs int, batchSize int, isManager bool, N int, Bma
 	for i := 0; i < N; i++ {
 		K[i] = int32(float64(Bmax) * ((rand.Next() + rand.Next() + rand.Next() + rand.Next()) / 4))
 	}
+
+	var startTime time.Time
+	if isManager {
+		startTime = time.Now()
+	}
+	if pprofFile != nil {
+		if err := pprof.StartCPUProfile(pprofFile); err != nil {
+			log.Fatal("could not start CPU profile: ", err)
+		}
+	}
+
 	mv.Barrier(0)
 	for i := 1; i <= Imax; i++ {
 		fmt.Println("Starting iteration ", i)
@@ -101,7 +115,7 @@ func SortedIntMVBenchmark(nrProcs int, batchSize int, isManager bool, N int, Bma
 
 		}
 		mv.Barrier(2)
-
+		fmt.Println("ending iteration", i)
 	}
 	sorted := make([]int32, N)
 	for i := 0; i < N; i++ {
@@ -116,18 +130,27 @@ func SortedIntMVBenchmark(nrProcs int, batchSize int, isManager bool, N int, Bma
 		}
 		last = v
 	}
-	fmt.Println("We had ", x, " things that wasnt sorted right.")
-	fmt.Println(sorted)
+
 	if isManager {
+		endTime := time.Now()
+		diff := endTime.Sub(startTime)
+		fmt.Println("execution time:", diff.String())
+	}
+
+
+	fmt.Println("We had ", x, " things that wasnt sorted right.")
+	if isManager {
+		mv.Barrier(4)
 		mv.Shutdown()
 	} else {
+		mv.Barrier(4)
 		mv.Leave()
 	}
 
 }
 
 //Benchmarks.SortedIntBenchmark(1, 1000, true, 8388608, 524288, 10)
-func SortedIntTMBenchmark(group *sync.WaitGroup, port, nrProcs, batchSize int, isManager bool, N int, Bmax int32, Imax int) {
+func SortedIntTMBenchmark(group *sync.WaitGroup, port, nrProcs, batchSize int, isManager bool, N int, Bmax int32, Imax int, pprofFile io.Writer) {
 	//First we do setup.
 	//log.SetOutput(ioutil.Discard)
 	//setupTreadMarksStruct1(nrProcs, (((N+1)*4)/pagebytesize+1)*pagebytesize, 8, 2, 4)
@@ -155,9 +178,18 @@ func SortedIntTMBenchmark(group *sync.WaitGroup, port, nrProcs, batchSize int, i
 	for i := 0; i < N; i++ {
 		K[i] = int32(float64(Bmax) * ((rand.Next() + rand.Next() + rand.Next() + rand.Next()) / 4))
 	}
-	fmt.Println("Reached first barrier")
+
+	var startTime time.Time
+	if isManager {
+		startTime = time.Now()
+	}
+	if pprofFile != nil {
+		if err := pprof.StartCPUProfile(pprofFile); err != nil {
+			log.Fatal("could not start CPU profile: ", err)
+		}
+	}
+
 	tm.Barrier(0)
-	fmt.Println("Crossed barrier")
 	for i := 1; i <= Imax; i++ {
 		fmt.Println("Starting iteration: ", i)
 		K[i] = int32(i)
@@ -191,6 +223,9 @@ func SortedIntTMBenchmark(group *sync.WaitGroup, port, nrProcs, batchSize int, i
 				}
 			}
 		}
+
+
+
 		tm.Barrier(1)
 		//Partial verification
 		if isManager {
@@ -224,8 +259,15 @@ func SortedIntTMBenchmark(group *sync.WaitGroup, port, nrProcs, batchSize int, i
 		}
 		last = v
 	}
+
+	if isManager {
+		endTime := time.Now()
+		diff := endTime.Sub(startTime)
+		fmt.Println("execution time:", diff.String())
+	}
+
+
 	fmt.Println("We had ", x, " things that wasn't sorted right.")
-	fmt.Println(sorted)
 	if group != nil {
 		group.Done()
 		group.Wait()
