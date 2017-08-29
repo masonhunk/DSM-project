@@ -42,11 +42,18 @@ func main() {
 		nrOfInts := 4096 * 1000000
 		batchSize := 10000 * 4096 // nr of ints in batch
 		Benchmarks.ParallelSumMW(batchSize, nrOfInts, *nrprocs, *manager, pageSize, &wg, cpuprofFile)
+	case "ModuloMultTM":
+		wg := sync.WaitGroup{}
+		wg.Add(1)
+		pageSize := 4096
+		nrOfInts := 4096 * 1000000
+		batchSize := 10000 * 4096 // nr of ints in batch
+		Benchmarks.ParallelSumTM(batchSize, nrOfInts, *nrprocs, *manager, *port, pageSize, &wg, cpuprofFile)
 	case "JacobiTM":
 		wg := sync.WaitGroup{}
 		wg.Add(1)
-		matrixsize := 64
-		Benchmarks.JacobiProgramTreadMarks(matrixsize, 8, *nrprocs, *manager, &wg)
+		matrixsize := 128
+		Benchmarks.JacobiProgramTreadMarks(matrixsize, 8, *nrprocs, *manager, *port, &wg)
 	case "JacobiMW":
 		wg := sync.WaitGroup{}
 		wg.Add(1)

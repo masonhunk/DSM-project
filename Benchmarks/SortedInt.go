@@ -278,3 +278,17 @@ func writeInt64(dsm dsm_api.DSMApiInterface, addr int, input int64) {
 		}
 	}
 }
+
+func readBytes(dsm dsm_api.DSMApiInterface, addr, length int) []byte {
+	res := make([]byte, length)
+	for i := 0; i < length-1; i++ {
+		res[i], _ = dsm.Read(addr + i)
+	}
+	return res
+}
+
+func writeBytes(dsm dsm_api.DSMApiInterface, addr int, bytes []byte) {
+	for i, b := range bytes {
+		dsm.Write(addr+i, b)
+	}
+}

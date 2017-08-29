@@ -24,12 +24,12 @@ func TestParallelSumTM(t *testing.T) {
 	batchSize := 10000 * 4096 // nr of ints in batch
 	nrProcs := 4
 	group.Add(nrProcs)
-	go ParallelSumTM(batchSize, nrOfInts, nrProcs, true, pageSize, &group, nil)
+	go ParallelSumTM(batchSize, nrOfInts, nrProcs, true, 2000, pageSize, &group, nil)
 	for i := 0; i < nrProcs-1; i++ {
-		go func() {
+		go func(i int) {
 			time.Sleep(150 * time.Millisecond)
-			ParallelSumTM(batchSize, nrOfInts, nrProcs, false, pageSize, &group, nil)
-		}()
+			ParallelSumTM(batchSize, nrOfInts, nrProcs, false, 2000+i+10, pageSize, &group, nil)
+		}(i)
 	}
 	group.Wait()
 
@@ -134,32 +134,32 @@ func ParallelSumMW(batchSize int, nrOfInts int, nrProcs int, isManager bool, pag
 	}()
 }
 
-func ParallelSumTM(batchSize int, nrOfInts int, nrProcs int, isManager bool, pageByteSize int, group *sync.WaitGroup, cpuProfFile io.Writer) {
+func ParallelSumTM(batchSize int, nrOfInts int, nrProcs int, isManager bool, port int, pageByteSize int, group *sync.WaitGroup, cpuProfFile io.Writer) {
 	const INT_BYTE_LENGTH = 8 //64 bits
 	var sharedSumAddr int
 	var currBatchNrAddr int
 	var tm *treadmarks.TreadmarksApi
 	tm, _ = treadmarks.NewTreadmarksApi(INT_BYTE_LENGTH*2, pageByteSize, uint8(nrProcs), uint8(4), uint8(4))
-	tm.Initialize(2000)
+	tm.Initialize(port)
 	defer tm.Shutdown()
 	if isManager {
 		tm.Barrier(0)
 		rand.Seed(time.Now().UnixNano())
 		sharedSumAddr, _ = tm.Malloc(INT_BYTE_LENGTH)
 		currBatchNrAddr, _ = tm.Malloc(INT_BYTE_LENGTH)
-		log.Println("sharedSumAddr at manager:", sharedSumAddr)
-		log.Println("currBatchNrAddr at manager:", currBatchNrAddr)
+		fmt.Println("sharedSumAddr at manager:", sharedSumAddr)
+		fmt.Println("currBatchNrAddr at manager:", currBatchNrAddr)
 		tm.Barrier(3)
 
 	} else {
 		tm.Join("localhost", 2000)
 		tm.Barrier(0)
-		//tm.Barrier(3)
+		tm.Barrier(3)
 
-		//sharedSumAddr = tm.GetMemoryByteSize()
-		//currBatchNrAddr = 2*tm.GetMemoryByteSize() + 8
-		//log.Println("sharedSumAddr at host", tm, sharedSumAddr)
-		//log.Println("currBatchNrAddr at host:", tm.Id, currBatchNrAddr)
+		sharedSumAddr = 0
+		currBatchNrAddr = 8
+		fmt.Println("sharedSumAddr at host", tm.GetId(), sharedSumAddr)
+		fmt.Println("currBatchNrAddr at host", tm.GetId(), currBatchNrAddr)
 	}
 	var startTime time.Time
 	if isManager {
@@ -202,6 +202,6 @@ func ParallelSumTM(batchSize int, nrOfInts int, nrProcs int, isManager bool, pag
 		fmt.Println("result localSum:", readInt64(tm, sharedSumAddr))
 	}
 	tm.Barrier(3)
-	log.Println("exiting algorithm at process", tm, "...")
+	log.Println("exiting algorithm at process", tm.GetId(), "...")
 	defer group.Done()
 }
