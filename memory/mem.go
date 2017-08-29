@@ -50,6 +50,7 @@ func (m *Vmem) PrivilegedRead(addr, length int) []byte {
 }
 
 func (m *Vmem) PrivilegedWrite(addr int, data []byte) error {
+
 	for i, bt := range data {
 		m.Stack[i+addr] = bt
 	}
@@ -122,7 +123,7 @@ func NewVmem(memSize int, pageByteSize int) *Vmem {
 	m.AccessMap = make(map[int]byte)
 	m.PAGE_BYTESIZE = pageByteSize
 	m.FreeMemObjects = make([]AddrPair, 1)
-	m.FreeMemObjects[0] = AddrPair{0, max(memSize, pageByteSize)-1}
+	m.FreeMemObjects[0] = AddrPair{0, max(memSize, pageByteSize) - 1}
 	m.mallocHistory = make(map[int]int)
 	m.arDisabled = false
 	m.faultListeners = make([]FaultListener, 0)

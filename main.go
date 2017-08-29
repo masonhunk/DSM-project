@@ -18,7 +18,7 @@ var cpuprofile = flag.String("cpuprofile", "", "write cpu profile `file`")
 var memprofile = flag.String("memprofile", "", "write memory profile to `file`")
 var benchmark = flag.String("benchmark", "default", "choose benchmark algorithm")
 var nrprocs = flag.Int("hosts", 1, "choose number of hosts.")
-var port = flag.Int("port", 1000, "Choose port.")
+var port = flag.Int("port", 2000, "Choose port.")
 var manager = flag.Bool("manager", true, "choose if instance is manager.")
 
 func main() {
@@ -54,6 +54,12 @@ func main() {
 		Benchmarks.JacobiProgramMultiView(matrixsize, 20, *nrprocs, *manager, 4096, &wg, cpuprofFile)
 	case "SortedIntTM":
 		Benchmarks.SortedIntTMBenchmark(nil, *port, *nrprocs, 1000, *manager, 8388608, 524288, 10)
+	case "SortedIntMW":
+		batchSize := 1000
+		N := 38860
+		var Bmax int32 = 524288
+		Imax := 10
+		Benchmarks.SortedIntMVBenchmark(*nrprocs, batchSize, *manager, N, Bmax, Imax)
 	case "SyncOpsCostMW":
 		Benchmarks.TestSynchronizedWritesMW(*nrprocs, 10000, cpuprofFile)
 	case "NonSyncOpsCostMW":
@@ -61,13 +67,13 @@ func main() {
 	case "barrMW":
 		Benchmarks.TestBarrierTimeMW(100000, *nrprocs, nil)
 	case "locksMW":
-		Benchmarks.TestLockMW(100000, cpuprofFile)
+		Benchmarks.TestLockMW(2000000, cpuprofFile)
 	case "barrTM":
 		Benchmarks.TestBarrierTimeTM(100000, *nrprocs, cpuprofFile)
 	case "locksTM":
-		Benchmarks.TestLockTM(100, cpuprofFile)
-	case "SyncOpsCosTM":
-		Benchmarks.TestSynchronizedReadsWritesTM(10000, cpuprofFile)
+		Benchmarks.TestLockTM(2000000, cpuprofFile)
+	case "SyncOpsCostTM":
+		Benchmarks.TestSynchronizedReadsWritesTM(5000, cpuprofFile)
 	case "NonSyncOpsCostTM":
 		Benchmarks.TestNonSynchronizedReadWritesTM(100000000, cpuprofFile)
 	default:

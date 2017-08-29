@@ -1,18 +1,17 @@
 package Benchmarks
 
 import (
+	"DSM-project/dsm-api"
+	"DSM-project/dsm-api/treadmarks"
 	"DSM-project/multiview"
+	"DSM-project/utils"
 	"fmt"
 	"io/ioutil"
 	"log"
-	"DSM-project/dsm-api/treadmarks"
-	"DSM-project/dsm-api"
-	"DSM-project/utils"
 	"sync"
 )
 
-
-func SortedIntMVBenchmark( nrProcs int, batchSize int, isManager bool, N int, Bmax int32, Imax int) {
+func SortedIntMVBenchmark(nrProcs int, batchSize int, isManager bool, N int, Bmax int32, Imax int) {
 	log.SetOutput(ioutil.Discard)
 	mv := multiview.NewMultiView()
 	rand := NewRandom()
@@ -21,17 +20,34 @@ func SortedIntMVBenchmark( nrProcs int, batchSize int, isManager bool, N int, Bm
 	memsize := (((N+1)*4)/pagebytesize + 1) * pagebytesize
 	prog := N*4 + ((N%(pagebytesize/4))+1)*memsize
 	if isManager {
-
 		mv.Initialize(memsize, pagebytesize, nrProcs)
 		fmt.Println("I am the manager.")
 		for i := range address {
 			address[i], _ = mv.Malloc(4)
+			//fmt.Println("manager address", i, ":",address[i])
 		}
 		prog, _ = mv.Malloc(4)
+		mv.Barrier(3)
 	} else {
 		mv.Join(memsize, pagebytesize)
-		for i := range address {
-			address[i] = i*4 + ((i%(mv.GetPageSize()/4))+1)*memsize
+		mv.Barrier(3)
+		for i := range address { /*
+				//address[i] = i*4 + ((i%(mv.GetPageSize()/4))+1)*memsize
+				k := i * N * 4
+				l := k + j*4
+				q := (i + j) % (mw.GetPageSize() / float32_BYTE_LENGTH)
+				memsize := M * N * float32_BYTE_LENGTH
+				vAddr := (q+1)*memsize + l*/
+
+			k := 4 * i
+			q := 0
+			if 4%pagebytesize != 0 {
+				q = i % max((pagebytesize/4), 2)
+			}
+			vAddr := (q+1)*mv.GetMemoryByteSize() + k
+			//fmt.Println("host", mv.Id, "address", i, ":", vAddr)
+			address[i] = vAddr
+			mv.ReadInt(vAddr)
 		}
 
 	}
@@ -102,7 +118,11 @@ func SortedIntMVBenchmark( nrProcs int, batchSize int, isManager bool, N int, Bm
 	}
 	fmt.Println("We had ", x, " things that wasnt sorted right.")
 	fmt.Println(sorted)
-	defer mv.Shutdown()
+	if isManager {
+		mv.Shutdown()
+	} else {
+		mv.Leave()
+	}
 
 }
 
@@ -127,7 +147,7 @@ func SortedIntTMBenchmark(group *sync.WaitGroup, port, nrProcs, batchSize int, i
 	if isManager {
 		fmt.Println("I'm a manager.")
 	} else {
-		tm.Join("localhost", 1000)
+		tm.Join("localhost", 2000)
 	}
 
 	fmt.Println("Making numbers")
@@ -183,7 +203,7 @@ func SortedIntTMBenchmark(group *sync.WaitGroup, port, nrProcs, batchSize int, i
 				fmt.Println("Fourth value is  ", readInt(tm, key(3642833)), "\n -- it should be ", 8288932-i)
 				fmt.Println("Fifth value is  ", readInt(tm, key(4250760)), "\n -- it should be ", 8388264-i)
 			}
-			writeInt(tm,0, 0)
+			writeInt(tm, 0, 0)
 
 		}
 		tm.Barrier(2)
@@ -213,11 +233,11 @@ func SortedIntTMBenchmark(group *sync.WaitGroup, port, nrProcs, batchSize int, i
 
 }
 
-func readInt(dsm dsm_api.DSMApiInterface, addr int) int{
+func readInt(dsm dsm_api.DSMApiInterface, addr int) int {
 	bInt := make([]byte, 4)
 	var err error
-	for i := range bInt{
-		bInt[i], err = dsm.Read(addr+i)
+	for i := range bInt {
+		bInt[i], err = dsm.Read(addr + i)
 		if err != nil {
 			panic(err.Error())
 		}
@@ -228,7 +248,30 @@ func readInt(dsm dsm_api.DSMApiInterface, addr int) int{
 func writeInt(dsm dsm_api.DSMApiInterface, addr, input int) {
 	bInt := utils.Int32ToBytes(int32(input))
 	var err error
-	for i := range bInt{
+	for i := range bInt {
+		err = dsm.Write(addr+i, bInt[i])
+		if err != nil {
+			panic(err.Error())
+		}
+	}
+}
+
+func readInt64(dsm dsm_api.DSMApiInterface, addr int) int {
+	bInt := make([]byte, 8)
+	var err error
+	for i := range bInt {
+		bInt[i], err = dsm.Read(addr + i)
+		if err != nil {
+			panic(err.Error())
+		}
+	}
+	return int(utils.BytesToInt64(bInt))
+}
+
+func writeInt64(dsm dsm_api.DSMApiInterface, addr int, input int64) {
+	bInt := utils.Int64ToBytes(input)
+	var err error
+	for i := range bInt {
 		err = dsm.Write(addr+i, bInt[i])
 		if err != nil {
 			panic(err.Error())

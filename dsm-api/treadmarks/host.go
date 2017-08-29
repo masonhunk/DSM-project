@@ -6,7 +6,6 @@ import (
 	"DSM-project/network"
 	"DSM-project/utils"
 	"bytes"
-	"fmt"
 	"github.com/davecgh/go-xdr/xdr2"
 	"log"
 	"reflect"
@@ -117,7 +116,7 @@ func (t *TreadmarksApi) Barrier(id uint8) {
 func (t *TreadmarksApi) AcquireLock(id uint8) {
 	lock := t.locks[id]
 	lock.Lock()
-	fmt.Println(t.myId, "have token", t.myId, lock.haveToken)
+	log.Println(t.myId, "have token", t.myId, lock.haveToken)
 
 	if lock.haveToken {
 		lock.locked = true
@@ -229,7 +228,7 @@ func (t *TreadmarksApi) addWritenoticeRecord(pageNr int16, procId uint8, timesta
 }
 
 func (t *TreadmarksApi) newInterval() {
-	fmt.Println(t.myId, " New Interval - current intervals are ", t.procarray[t.myId])
+	log.Println(t.myId, " New Interval - current intervals are ", t.procarray[t.myId])
 	t.dirtyPagesLock.RLock()
 	pages := make([]int16, 0, len(t.dirtyPages))
 	for page := range t.dirtyPages {
@@ -365,7 +364,7 @@ func (t *TreadmarksApi) createDiffRequest(pageNr int16, procId uint8) DiffReques
 //----------------------------------------------------------------//
 
 func (t *TreadmarksApi) sendMessage(to, msgType uint8, msg interface{}) {
-	fmt.Println(t.myId, " -- sending message ", reflect.TypeOf(msg), " : ", msg, " to ", to)
+	log.Println(t.myId, " -- sending message ", reflect.TypeOf(msg), " : ", msg, " to ", to)
 	var w bytes.Buffer
 	xdr.Marshal(&w, &msg)
 	data := make([]byte, w.Len()+2)
@@ -388,7 +387,7 @@ func (t *TreadmarksApi) sendLockAcquireRequest(to uint8, lockId uint8) {
 }
 
 func (t *TreadmarksApi) sendLockAcquireResponse(lockId uint8, to uint8, timestamp Timestamp) {
-	fmt.Println(t.myId, " sending lock acquire response")
+	log.Println(t.myId, " sending lock acquire response")
 	intervals := t.getMissingIntervals(timestamp)
 	resp := LockAcquireResponse{
 		LockId:    lockId,
@@ -446,11 +445,11 @@ func (t *TreadmarksApi) sendCopyRequest(pageNr int16) {
 func (t *TreadmarksApi) sendCopyResponse(to uint8, pageNr int16) {
 	data := t.twins[pageNr]
 	if data == nil {
-		fmt.Println(t.myId, "didnt have twin")
+		log.Println(t.myId, "didnt have twin")
 		pageSize := t.memory.GetPageSize()
 		addr := int(pageNr) * pageSize
 		data = t.memory.PrivilegedRead(addr, pageSize)
-		fmt.Println(t.myId, "copy was ", data)
+		log.Println(t.myId, "copy was ", data)
 	}
 	resp := CopyResponse{
 		PageNr: pageNr,
@@ -512,7 +511,7 @@ func (t *TreadmarksApi) handleIncoming() {
 			if err != nil {
 				panic(err.Error())
 			}
-			fmt.Println(t.myId, "got lock acquire response: ", resp)
+			log.Println(t.myId, "got lock acquire response: ", resp)
 			t.handleLockAcquireResponse(resp)
 		case 3: //Barrier Request
 			var req BarrierRequest
@@ -570,10 +569,10 @@ func (t *TreadmarksApi) handleLockAcquireRequest(req LockAcquireRequest) {
 		t.sendLockAcquireResponse(id, req.From, req.Timestamp)
 		lock.haveToken = false
 		lock.last = req.From
-	} else if t.getManagerId(id) != t.myId{
+	} else if t.getManagerId(id) != t.myId {
 		lock.nextId = req.From
 		lock.nextTimestamp = req.Timestamp
-	}else {
+	} else {
 		t.forwardLockAcquireRequest(lock.last, req)
 		lock.last = req.From
 	}
@@ -584,16 +583,16 @@ func (t *TreadmarksApi) handleLockAcquireResponse(resp LockAcquireResponse) {
 	t.Timestamp = t.Timestamp.merge(resp.Timestamp)
 	id := resp.LockId
 	lock := t.locks[id]
-	fmt.Println(t.myId, "trying to take lock")
+	log.Println(t.myId, "trying to take lock")
 	lock.Lock()
-	fmt.Println(t.myId, "took lock")
+	log.Println(t.myId, "took lock")
 	for _, interval := range resp.Intervals {
 		t.addInterval(interval)
 	}
 	lock.locked = true
 	lock.haveToken = true
 	lock.Unlock()
-	fmt.Println(t.myId, "Inserting into channel")
+	log.Println(t.myId, "Inserting into channel")
 	t.channel <- true
 }
 
