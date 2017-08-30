@@ -38,9 +38,8 @@ type DiffResponse struct {
 }
 
 type CopyRequest struct {
-	From      uint8 `xdropaque:"false"`
-	PageNr    int16 `xdropaque:"false"`
-	Timestamp Timestamp
+	From   uint8 `xdropaque:"false"`
+	PageNr int16 `xdropaque:"false"`
 }
 
 type CopyResponse struct {

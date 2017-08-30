@@ -212,6 +212,7 @@ func TestNewTreadmarksApi_LockAcquireReleaseMultipleProc_Concurrent(t *testing.T
 	time.Sleep(time.Millisecond * 10)
 	assert.Len(t, done, 5)
 	assert.Equal(t, []int{0, 0, 1, 1, 2}, done)
+	go2 <- true
 }
 
 func TestTreadmarksApi_Barrier_MultiplePeers(t *testing.T) {
@@ -391,7 +392,7 @@ func TestNewTreadmarksApi_ReadAndWriteMultiple2(t *testing.T) {
 }
 
 func TestNewTreadmarksApi_ReadAndWriteMultiple3(t *testing.T) {
-	runtime.GOMAXPROCS(4)
+	runtime.GOMAXPROCS(2)
 	tm0, _ := NewTreadmarksApi(1024*4, 128, 2, 3, 3)
 	tm0.Initialize(1000)
 	defer tm0.Shutdown()
@@ -400,25 +401,24 @@ func TestNewTreadmarksApi_ReadAndWriteMultiple3(t *testing.T) {
 	tm1.Join("localhost", 1000)
 	defer tm1.Shutdown()
 	done := make(chan bool, 2)
-
 	go func() {
 		tm := tm0
-		writeInt(tm, 0, 1)
+		tm.Write(0, 1)
 		fmt.Println(tm.myId, " at barrier 0")
 		tm.Barrier(0)
 		fmt.Println(tm.myId, " past barrier 0")
 		for {
 			tm.AcquireLock(0)
-			n := readInt(tm, 4)
-			if n >= 1000 {
+			n, _ := tm.Read(0)
+			if !(n < 200) {
 				tm.ReleaseLock(0)
 				break
 			}
-			writeInt(tm, 4, n+100)
+			tm.Write(0, n+10)
 			tm.ReleaseLock(0)
-			var k int
-			for k = n; k < n+100 && k < 1000; k++ {
-				writeInt(tm, (k+2)*4, k)
+			var k uint8
+			for k = n; k < n+10 && k < 200; k++ {
+				tm.Write(int(k), k)
 			}
 			fmt.Println(tm.myId, " done iterating n=", k)
 		}
@@ -434,16 +434,16 @@ func TestNewTreadmarksApi_ReadAndWriteMultiple3(t *testing.T) {
 		fmt.Println(tm.myId, " past barrier 0")
 		for {
 			tm.AcquireLock(0)
-			n := readInt(tm, 4)
-			if n >= 1000 {
+			n, _ := tm.Read(0)
+			if !(n < 200) {
 				tm.ReleaseLock(0)
 				break
 			}
-			writeInt(tm, 4, n+100)
+			tm.Write(0, n+10)
 			tm.ReleaseLock(0)
-			var k int
-			for k = n; k < n+100 && k < 1000; k++ {
-				writeInt(tm, (k+2)*4, k)
+			var k uint8
+			for k = n; k < n+10 && k < 200; k++ {
+				tm.Write(int(k), k)
 			}
 			fmt.Println(tm.myId, " done iterating n=", k)
 		}
@@ -454,76 +454,19 @@ func TestNewTreadmarksApi_ReadAndWriteMultiple3(t *testing.T) {
 	}()
 	<-done
 	<-done
-	for n := 0; n < 1000; n++ {
-		assert.Equal(t, n, readInt(tm0, (n+2)*4))
+	var n uint8
+	for n = 1; n < 200; n++ {
+		val, _ := tm0.Read(int(n))
+		assert.Equal(t, n, val)
 	}
-	for n := 0; n < 1000; n++ {
-		assert.Equal(t, n, readInt(tm1, (n+2)*4))
+	for n = 1; n < 200; n++ {
+		val, _ := tm1.Read(int(n))
+		assert.Equal(t, n, val)
 	}
 	fmt.Println(tm0.procarray[0])
 	fmt.Println(tm1.procarray[0])
 	fmt.Println(tm0.procarray[1])
 	fmt.Println(tm1.procarray[1])
-
-	for i := 0; i < len(tm0.pagearray); i++ {
-		wn0 := tm0.pagearray[i].writenotices[0]
-		wn1 := tm1.pagearray[i].writenotices[0]
-
-		if len(wn0) < len(wn1) {
-			for i := 0; i < len(wn1); i++ {
-				existsIn := false
-				for j := 0; j < len(wn0); j++ {
-					existsIn = existsIn || wn1[i].Timestamp.equals(wn0[j].Timestamp)
-				}
-				if !existsIn {
-					fmt.Println("This does not exists in both ", wn1[i])
-				}
-			}
-		} else {
-			for i := 0; i < len(wn0); i++ {
-				existsIn := false
-				for j := 0; j < len(wn1); j++ {
-					existsIn = existsIn || wn1[j].Timestamp.equals(wn0[i].Timestamp)
-				}
-				if !existsIn {
-					fmt.Println("This does not exists in both ", wn0[i])
-				}
-			}
-		}
-
-		for j := 0; j < len(wn1); j++ {
-			for k := range wn1[j].Diff {
-				d0 := wn1[j].Diff[k]
-				_, ok := wn0[j].Diff[k]
-				if !ok {
-					fmt.Println("Host 1 is missing diff ", d0, " from writenotice ", wn1[j])
-				}
-
-			}
-		}
-
-		for j := 0; j < len(wn0); j++ {
-			for k := range wn0[j].Diff {
-				d0 := wn0[j].Diff[k]
-				_, ok := wn1[j].Diff[k]
-				if !ok {
-					fmt.Println("Host 1 is missing diff ", d0, " from writenotice ", wn0[j])
-				}
-
-			}
-		}
-		fmt.Println()
-		wn0 = tm0.pagearray[i].writenotices[1]
-		wn1 = tm1.pagearray[i].writenotices[1]
-		for j := 0; j < len(wn0); j++ {
-			for k := range wn0[j].Diff {
-				d0 := wn0[j].Diff[k]
-				d1 := wn1[j].Diff[k]
-				fmt.Println(k, " : ", d0, ", ", d1, " --- ", d0 == d1)
-			}
-		}
-	}
-
 }
 
 func TestNewTreadmarksApi_locks(t *testing.T) {
@@ -603,7 +546,7 @@ func TestNewTreadmarksApi_locks(t *testing.T) {
 	assert.Nil(t, lock1.nextTimestamp)
 	assert.Nil(t, lock2.nextTimestamp)
 	assert.Equal(t, uint8(1), lock0.last)
-	assert.Equal(t, tm1.getManagerId(lockId), lock1.last)
+	assert.Equal(t, tm1.myId, lock1.last)
 	assert.Equal(t, tm2.getManagerId(lockId), lock2.last)
 	fmt.Println("Boom")
 	go func() {
@@ -645,7 +588,7 @@ func TestNewTreadmarksApi_locks(t *testing.T) {
 	assert.Nil(t, lock2.nextTimestamp)
 	assert.Equal(t, uint8(2), lock0.last)
 	assert.Equal(t, tm1.getManagerId(lockId), lock1.last)
-	assert.Equal(t, tm2.getManagerId(lockId), lock2.last)
+	assert.Equal(t, tm2.myId, lock2.last)
 	assert.Equal(t, tm1.getManagerId(lockId), lock1.nextId)
 	assert.Equal(t, tm2.getManagerId(lockId), lock2.nextId)
 }
@@ -950,23 +893,166 @@ func TestTreadmarksApi_Barriers(t *testing.T) {
 
 }
 
-func TestTreadmarksApi_Diffs(t *testing.T) {
-	tm0, _ := NewTreadmarksApi(1024*4, 128, 2, 3, 3)
+func TestNewTreadmarksApi_LockIntervalsMultipleProcs(t *testing.T) {
+	tm0, _ := NewTreadmarksApi(30, 10, 3, 3, 3)
 	tm0.Initialize(1000)
 	defer tm0.Shutdown()
-	tm1, _ := NewTreadmarksApi(1024*4, 128, 2, 3, 3)
+	tm1, _ := NewTreadmarksApi(30, 10, 3, 3, 3)
 	tm1.Initialize(1001)
 	tm1.Join("localhost", 1000)
 	defer tm1.Shutdown()
+	tm2, _ := NewTreadmarksApi(30, 10, 3, 3, 3)
+	tm2.Initialize(1002)
+	tm2.Join("localhost", 1000)
+	defer tm2.Shutdown()
 
 	tm0.AcquireLock(0)
-	tm0.Write(0, 1)
+	tm0.Write(0, 4)
 	tm0.ReleaseLock(0)
 	tm1.AcquireLock(0)
-	val, err := tm1.Read(0)
-	assert.Equal(t, byte(1), val)
-	assert.Nil(t, err)
+	tm1.Write(0, 5)
 	tm1.ReleaseLock(0)
+	tm0.AcquireLock(0)
+	tm0.Write(0, 6)
+	tm0.ReleaseLock(0)
+	tm1.AcquireLock(0)
+	tm1.Write(0, 7)
+	tm1.ReleaseLock(0)
+	tm0.AcquireLock(0)
+	tm0.ReleaseLock(0)
+	tm2.AcquireLock(0)
+	val, err := tm2.Read(0)
+	assert.Equal(t, byte(7), val)
+	assert.Nil(t, err)
+	assert.Len(t, tm0.procarray[0], 2)
+	assert.Len(t, tm1.procarray[0], 2)
+	assert.Len(t, tm2.procarray[0], 2)
+	assert.Len(t, tm0.procarray[1], 2)
+	assert.Len(t, tm1.procarray[1], 2)
+	assert.Len(t, tm2.procarray[1], 2)
+	assert.Len(t, tm0.procarray[2], 0)
+	assert.Len(t, tm1.procarray[2], 0)
+	assert.Len(t, tm2.procarray[2], 0)
+
+	assert.Len(t, tm0.pagearray[0].writenotices[0], 2)
+	assert.Len(t, tm1.pagearray[0].writenotices[0], 2)
+	assert.Len(t, tm2.pagearray[0].writenotices[0], 2)
+	assert.Len(t, tm0.pagearray[0].writenotices[1], 2)
+	assert.Len(t, tm1.pagearray[0].writenotices[1], 2)
+	assert.Len(t, tm2.pagearray[0].writenotices[1], 2)
+	assert.Len(t, tm0.pagearray[0].writenotices[2], 0)
+	assert.Len(t, tm1.pagearray[0].writenotices[2], 0)
+	assert.Len(t, tm2.pagearray[0].writenotices[2], 0)
+}
+
+func TestNewTreadmarksApi_LockIntervalsMultipleProcs_2(t *testing.T) {
+	tm0, _ := NewTreadmarksApi(30, 10, 3, 3, 3)
+	tm0.Initialize(1000)
+	defer tm0.Shutdown()
+	tm1, _ := NewTreadmarksApi(30, 10, 3, 3, 3)
+	tm1.Initialize(1001)
+	tm1.Join("localhost", 1000)
+	defer tm1.Shutdown()
+	tm2, _ := NewTreadmarksApi(30, 10, 3, 3, 3)
+	tm2.Initialize(1002)
+	tm2.Join("localhost", 1000)
+	defer tm2.Shutdown()
+
+	tm0.AcquireLock(0)
+	tm0.Write(1, 10)
+	tm0.ReleaseLock(0)
+	tm0.AcquireLock(0)
+	tm0.ReleaseLock(0)
+	tm1.AcquireLock(0)
+	val, _ := tm1.Read(1)
+	assert.Equal(t, byte(10), val)
+	fmt.Println("boom")
+	tm0.Write(2, 11)
+	tm1.ReleaseLock(0)
+	tm0.AcquireLock(0)
+	val, _ = tm0.Read(2)
+	assert.Equal(t, byte(11), val)
+	tm0.ReleaseLock(0)
+	tm1.AcquireLock(0)
+	val, _ = tm1.Read(2)
+	assert.Equal(t, byte(11), val)
+	tm1.ReleaseLock(0)
+	tm0.Write(12, 10)
+	tm0.Write(24, 11)
+	tm0.AcquireLock(0)
+	tm0.ReleaseLock(0)
+	tm1.AcquireLock(0)
+	val, _ = tm1.Read(12)
+	assert.Equal(t, byte(10), val)
+	val, _ = tm1.Read(24)
+	assert.Equal(t, byte(11), val)
+}
+
+func TestTreadmarksApi_RepeatedLock(t *testing.T) {
+	tm0, _ := NewTreadmarksApi(30, 10, 3, 3, 3)
+	tm0.Initialize(1000)
+	defer tm0.Shutdown()
+	tm1, _ := NewTreadmarksApi(30, 10, 3, 3, 3)
+	tm1.Initialize(1001)
+	tm1.Join("localhost", 1000)
+	defer tm1.Shutdown()
+	runtime.GOMAXPROCS(4)
+	go0, go1 := make(chan int), make(chan int)
+	i := 0
+	go func() {
+		tm := tm0
+		g := go0
+		<-g
+		time.Sleep(time.Millisecond * 100)
+		fmt.Println("0")
+		for {
+
+			tm.AcquireLock(0)
+
+			val, _ := tm.Read(0)
+			tm.Write(0, val+1%256)
+			tm.ReleaseLock(0)
+			if val > 253 {
+				fmt.Println("0, ", i)
+				i++
+				if i > 1000 {
+					fmt.Println("boom")
+					g <- 1
+					return
+				}
+			}
+		}
+
+	}()
+	go func() {
+		tm := tm1
+		g := go1
+		<-g
+		time.Sleep(time.Millisecond * 100)
+		fmt.Println("1")
+		for {
+			tm.AcquireLock(0)
+
+			val, _ := tm.Read(0)
+			tm.Write(0, val+1%256)
+			tm.ReleaseLock(0)
+			if val > 253 {
+				fmt.Println("1, ", i)
+				i++
+				if i > 1000 {
+					fmt.Println("boom")
+					g <- 1
+					return
+				}
+			}
+		}
+
+	}()
+	go0 <- 1
+	go1 <- 2
+	<-go1
+	<-go0
+
 }
 
 func readInt(dsm dsm_api.DSMApiInterface, addr int) int {

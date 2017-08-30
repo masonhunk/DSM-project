@@ -4,9 +4,9 @@ import (
 	"DSM-project/dsm-api"
 	"DSM-project/memory"
 	"DSM-project/network"
-	"DSM-project/utils"
 	"bytes"
 	"github.com/davecgh/go-xdr/xdr2"
+	"math"
 	"runtime"
 	"strconv"
 	"sync"
@@ -20,6 +20,7 @@ type TreadmarksApi struct {
 	memSize, pageByteSize, nrPages int
 	pagearray                      []*pageArrayEntry
 	twins                          [][]byte
+	twinsLock                      *sync.RWMutex
 	dirtyPages                     map[int16]bool
 	dirtyPagesLock                 *sync.RWMutex
 	procarray                      [][]IntervalRecord
@@ -40,16 +41,18 @@ func NewTreadmarksApi(memSize, pageByteSize int, nrProcs, nrLocks, nrBarriers ui
 	var err error
 	t := new(TreadmarksApi)
 	t.memory = memory.NewVmem(memSize, pageByteSize)
-	t.nrPages = memSize/pageByteSize + utils.Min(memSize%pageByteSize, 1)
+	t.nrPages = int(math.Ceil(float64(memSize) / float64(pageByteSize)))
 	t.memSize, t.pageByteSize, t.nrProcs = memSize, pageByteSize, nrProcs
 	t.pagearray = NewPageArray(t.nrPages, nrProcs)
 	t.procarray = NewProcArray(nrProcs)
 	t.locks = make([]*lock, nrLocks)
 	t.channel = make(chan bool, 1)
-	t.twins = make([][]byte, t.nrPages)
-	t.dirtyPages = make(map[int16]bool)
+
 	t.barrierreq = make([]BarrierRequest, t.nrProcs)
 	t.timestamp = NewTimestamp(t.nrProcs)
+	t.twins = make([][]byte, t.nrPages)
+	t.dirtyPages = make(map[int16]bool)
+	t.twinsLock = new(sync.RWMutex)
 	t.dirtyPagesLock = new(sync.RWMutex)
 	return t, err
 }
@@ -88,19 +91,11 @@ func (t *TreadmarksApi) Shutdown() error {
 }
 
 func (t *TreadmarksApi) Read(addr int) (byte, error) {
-	b, err := t.memory.Read(addr)
-	if err != nil {
-		return t.memory.Read(addr)
-	}
-	return b, err
+	return t.memory.Read(addr)
 }
 
 func (t *TreadmarksApi) Write(addr int, val byte) error {
-	err := t.memory.Write(addr, val)
-	if err != nil {
-		return t.memory.Write(addr, val)
-	}
-	return nil
+	return t.memory.Write(addr, val)
 }
 
 func (t *TreadmarksApi) Malloc(size int) (int, error) {
@@ -112,16 +107,14 @@ func (t *TreadmarksApi) Free(addr, size int) error {
 }
 
 func (t *TreadmarksApi) Barrier(id uint8) {
-	t.newInterval()
-
 	t.sendBarrierRequest(id)
 }
 
 func (t *TreadmarksApi) AcquireLock(id uint8) {
+
 	time.Sleep(0)
 	lock := t.locks[id]
 	lock.Lock()
-
 	if lock.haveToken {
 		if lock.locked {
 			panic("locking lock twice")
@@ -129,9 +122,10 @@ func (t *TreadmarksApi) AcquireLock(id uint8) {
 		lock.locked = true
 		lock.Unlock()
 	} else {
+		t.sendLockAcquireRequest(lock.last, id)
+		lock.last = t.myId
 		lock.Unlock()
-		t.newInterval()
-		t.sendLockAcquireRequest(t.getManagerId(id), id)
+		<-t.channel
 	}
 }
 
@@ -145,7 +139,6 @@ func (t *TreadmarksApi) ReleaseLock(id uint8) {
 		t.sendLockAcquireResponse(id, lock.nextId, lock.nextTimestamp)
 		lock.nextTimestamp = nil
 		lock.nextId = t.getManagerId(id)
-		lock.last = t.getManagerId(id)
 		lock.haveToken = false
 	}
 }
@@ -155,24 +148,29 @@ func (t *TreadmarksApi) ReleaseLock(id uint8) {
 //----------------------------------------------------------------//
 
 func (t *TreadmarksApi) onFault(addr int, faultType byte, accessType string, value byte) {
-	pageNr := int16(addr / t.memory.GetPageSize())
+
+	pageNr := int16(t.memory.GetPageAddr(addr) / t.memory.GetPageSize())
 	page := t.pagearray[pageNr]
 	access := t.memory.GetRights(addr)
-
 	if access == memory.NO_ACCESS {
 		if !page.hasCopy {
 			t.sendCopyRequest(pageNr)
+			<-t.channel
 		}
 		if t.hasMissingDiffs(pageNr) {
 			t.sendDiffRequests(pageNr)
+			t.applyAllDiffs(pageNr)
 		}
 	}
 	if accessType == "WRITE" {
+		t.dirtyPagesLock.Lock()
+		t.twinsLock.Lock()
 		t.twins[pageNr] = make([]byte, t.pageByteSize)
 		copy(t.twins[pageNr], t.memory.PrivilegedRead(t.memory.GetPageAddr(int(pageNr)), t.memory.GetPageSize()))
-		t.dirtyPagesLock.Lock()
+		t.memory.PrivilegedWrite(addr, []byte{value})
 		t.dirtyPages[pageNr] = true
 		t.dirtyPagesLock.Unlock()
+		t.twinsLock.Unlock()
 		t.memory.SetRights(addr, memory.READ_WRITE)
 	} else {
 		t.memory.SetRights(addr, memory.READ_ONLY)
@@ -201,37 +199,45 @@ func (t *TreadmarksApi) newWritenoticeRecord(pageNr int16) {
 		Timestamp: t.timestamp,
 	}
 	t.pagearray[pageNr].writenotices[t.myId] = append(t.pagearray[pageNr].writenotices[t.myId], wn)
+	delete(t.dirtyPages, pageNr)
 }
 
 func (t *TreadmarksApi) addWritenoticeRecord(pageNr int16, procId uint8, timestamp Timestamp) {
 	pageSize := t.memory.GetPageSize()
 	addr := int(pageNr) * pageSize
 	access := t.memory.GetRights(addr)
+
 	if access == memory.READ_WRITE {
-		t.newWritenoticeRecord(pageNr)
-		t.generateDiff(pageNr)
+		t.dirtyPagesLock.Lock()
+		if t.dirtyPages[pageNr] {
+			t.newWritenoticeRecord(pageNr)
+		}
+		t.dirtyPagesLock.Unlock()
+		t.twinsLock.Lock()
+		t.generateDiff(pageNr, t.twins[pageNr])
+		t.twins[pageNr] = nil
+		t.twinsLock.Unlock()
 	}
 	t.memory.SetRights(addr, memory.NO_ACCESS)
 	wn := WritenoticeRecord{
 		Owner:     procId,
 		Timestamp: timestamp,
 	}
-	wnl := t.pagearray[pageNr].writenotices[procId]
-	t.pagearray[pageNr].writenotices[procId] = append(wnl, wn)
-	t.pagearray[pageNr].hasMissingDiffs = true
+	page := t.pagearray[pageNr]
+	wnl := page.writenotices[procId]
+	wnl = append(wnl, wn)
+	page.hasMissingDiffs = true
+	t.pagearray[pageNr].writenotices[procId] = wnl
 }
 
 func (t *TreadmarksApi) newInterval() {
-
 	t.dirtyPagesLock.Lock()
-	pages := make([]int16, 0, len(t.dirtyPages))
-	for page := range t.dirtyPages {
-		pages = append(pages, page)
-		delete(t.dirtyPages, page)
-	}
-	if len(pages) > 0 {
+	if len(t.dirtyPages) > 0 {
+		pages := make([]int16, 0, len(t.dirtyPages))
+
 		t.timestamp = t.timestamp.increment(t.myId)
-		for _, page := range pages {
+		for page := range t.dirtyPages {
+			pages = append(pages, page)
 			t.newWritenoticeRecord(page)
 		}
 		interval := IntervalRecord{
@@ -241,35 +247,39 @@ func (t *TreadmarksApi) newInterval() {
 		}
 		t.procarray[t.myId] = append(t.procarray[t.myId], interval)
 	}
-
 	t.dirtyPagesLock.Unlock()
 }
 
 func (t *TreadmarksApi) addInterval(interval IntervalRecord) {
-	if !t.timestamp.covers(interval.Timestamp) {
+	ts := NewTimestamp(t.nrProcs).merge(t.timestamp)
+	if !ts.covers(interval.Timestamp) || !interval.Timestamp.covers(ts) {
 		for _, p := range interval.Pages {
 			t.addWritenoticeRecord(p, interval.Owner, interval.Timestamp)
 		}
 		t.procarray[interval.Owner] = append(t.procarray[interval.Owner], interval)
 		t.timestamp = t.timestamp.merge(interval.Timestamp)
+	} else {
 	}
 }
 
-func (t *TreadmarksApi) generateDiff(pageNr int16) {
+func (t *TreadmarksApi) generateDiff(pageNr int16, twin []byte) {
 	pageSize := t.memory.GetPageSize()
 	addr := int(pageNr) * pageSize
 	t.memory.SetRights(addr, memory.READ_ONLY)
 	data := t.memory.PrivilegedRead(addr, pageSize)
-	twin := t.twins[pageNr]
 	diff := make(map[int]byte)
 	for i := range data {
 		if data[i] != twin[i] {
 			diff[i] = data[i]
 		}
 	}
-	t.twins[pageNr] = nil
-	t.pagearray[pageNr].writenotices[t.myId][len(t.pagearray[pageNr].writenotices[t.myId])-1].Diff = diff
+	t.pagearray[pageNr].hasMissingDiffs = false
 
+	if len(diff) == 0 {
+		t.pagearray[pageNr].writenotices[t.myId] = t.pagearray[pageNr].writenotices[t.myId][:len(t.pagearray[pageNr].writenotices[t.myId])-1]
+	} else {
+		t.pagearray[pageNr].writenotices[t.myId][len(t.pagearray[pageNr].writenotices[t.myId])-1].Diff = diff
+	}
 }
 
 //----------------------------------------------------------------//
@@ -295,7 +305,6 @@ func (t *TreadmarksApi) getMissingIntervalsForProc(procId uint8, ts Timestamp) [
 			break
 		}
 	}
-	//fmt.Println(t.myId, t.timestamp, "List of missing intervals made by ", procId," with regards to ts: ", ts, " is ", result)
 	return result
 }
 
@@ -317,6 +326,7 @@ func (t *TreadmarksApi) createDiffRequests(pageNr int16) []DiffRequest {
 				} else if req.Last.covers(oReq.Last) {
 					diffRequests[i].to = req.to
 					diffRequests[i].First = oReq.First.min(req.First)
+					diffRequests[i].Last = oReq.Last.merge(req.Last)
 					insert = false
 				}
 			}
@@ -330,7 +340,6 @@ func (t *TreadmarksApi) createDiffRequests(pageNr int16) []DiffRequest {
 }
 
 func (t *TreadmarksApi) createDiffRequest(pageNr int16, procId uint8) DiffRequest {
-
 	req := DiffRequest{
 		to:     procId,
 		From:   t.myId,
@@ -338,6 +347,7 @@ func (t *TreadmarksApi) createDiffRequest(pageNr int16, procId uint8) DiffReques
 	}
 
 	wnl := t.pagearray[pageNr].writenotices[procId]
+
 	l := len(wnl) - 1
 	if l >= 0 && wnl[l].Diff == nil {
 		req.Last = wnl[l].Timestamp
@@ -356,6 +366,7 @@ func (t *TreadmarksApi) createDiffRequest(pageNr int16, procId uint8) DiffReques
 //----------------------------------------------------------------//
 
 func (t *TreadmarksApi) sendMessage(to, msgType uint8, msg interface{}) {
+	//fmt.Println(t.myId, t.timestamp, "Sending ",reflect.TypeOf(msg)," : ", msg)
 	var w bytes.Buffer
 	xdr.Marshal(&w, &msg)
 	data := make([]byte, w.Len()+2)
@@ -371,9 +382,7 @@ func (t *TreadmarksApi) sendLockAcquireRequest(to uint8, lockId uint8) {
 		LockId:    lockId,
 		Timestamp: t.timestamp,
 	}
-
 	t.sendMessage(to, 0, req)
-	<-t.channel
 }
 
 func (t *TreadmarksApi) sendLockAcquireResponse(lockId uint8, to uint8, timestamp Timestamp) {
@@ -386,8 +395,8 @@ func (t *TreadmarksApi) sendLockAcquireResponse(lockId uint8, to uint8, timestam
 	t.sendMessage(to, 1, resp)
 }
 
-func (t *TreadmarksApi) forwardLockAcquireRequest(id uint8, req LockAcquireRequest) {
-	t.sendMessage(id, 0, req)
+func (t *TreadmarksApi) forwardLockAcquireRequest(to uint8, req LockAcquireRequest) {
+	t.sendMessage(to, 0, req)
 }
 
 func (t *TreadmarksApi) sendBarrierRequest(barrierId uint8) {
@@ -398,6 +407,7 @@ func (t *TreadmarksApi) sendBarrierRequest(barrierId uint8) {
 		Timestamp: t.timestamp,
 	}
 	if t.myId != managerId {
+		t.newInterval()
 		req.Intervals = t.getMissingIntervalsForProc(t.myId, t.getHighestTimestamp(managerId))
 		t.sendMessage(managerId, 3, req)
 	} else {
@@ -428,12 +438,13 @@ func (t *TreadmarksApi) sendCopyRequest(pageNr int16) {
 		page.hasCopy = true
 		t.channel <- true
 	}
-	<-t.channel
 }
 
 func (t *TreadmarksApi) sendCopyResponse(to uint8, pageNr int16) {
 	data := make([]byte, t.pageByteSize)
+	t.twinsLock.Lock()
 	copy(data, t.twins[pageNr])
+	t.twinsLock.Unlock()
 	if data == nil {
 		pageSize := t.memory.GetPageSize()
 		addr := int(pageNr) * pageSize
@@ -454,7 +465,7 @@ func (t *TreadmarksApi) sendDiffRequests(pageNr int16) {
 	for range diffRequests {
 		<-t.channel
 	}
-	t.applyAllDiffs(pageNr)
+	t.pagearray[pageNr].hasMissingDiffs = false
 }
 
 func (t *TreadmarksApi) sendDiffResponse(to uint8, pageNr int16, writenotices []WritenoticeRecord) {
@@ -557,17 +568,38 @@ Loop:
 }
 
 func (t *TreadmarksApi) handleLockAcquireRequest(req LockAcquireRequest) {
+
 	id := req.LockId
 	lock := t.locks[id]
 	lock.Lock()
-	if !lock.haveToken || lock.locked {
-		t.addToLockQueue(req)
+	if lock.locked {
+		if lock.nextTimestamp == nil {
+			lock.nextTimestamp = req.Timestamp
+			lock.nextId = req.From
+		} else {
+			t.forwardLockAcquireRequest(lock.last, req)
+		}
+		lock.last = req.From
 	} else {
-		t.newInterval()
-		t.sendLockAcquireResponse(id, req.From, req.Timestamp)
-		lock.haveToken = false
+		if lock.haveToken {
+			lock.haveToken = false
+			t.newInterval()
+			t.sendLockAcquireResponse(id, req.From, req.Timestamp)
+			lock.last = req.From
+		} else {
+			if lock.last == t.myId {
+				if lock.nextTimestamp == nil {
+					lock.nextTimestamp = req.Timestamp
+					lock.nextId = req.From
+				} else {
+					t.forwardLockAcquireRequest(lock.last, req)
+				}
+			} else {
+				t.forwardLockAcquireRequest(lock.last, req)
+			}
+			lock.last = req.From
+		}
 	}
-	lock.last = req.From
 	lock.Unlock()
 }
 
@@ -575,6 +607,7 @@ func (t *TreadmarksApi) handleLockAcquireResponse(resp LockAcquireResponse) {
 	id := resp.LockId
 	lock := t.locks[id]
 	lock.Lock()
+	t.newInterval()
 	for i := len(resp.Intervals); i > 0; i-- {
 		t.addInterval(resp.Intervals[i-1])
 	}
@@ -590,9 +623,10 @@ func (t *TreadmarksApi) handleBarrierRequest(req BarrierRequest) {
 	if n < t.nrProcs {
 		t.barrier <- n
 	} else {
+		t.newInterval()
 		for _, req := range t.barrierreq {
-			for _, interval := range req.Intervals{
-				t.addInterval(interval)
+			for i := len(req.Intervals); i > 0; i-- {
+				t.addInterval(req.Intervals[i-1])
 			}
 		}
 		var i uint8
@@ -629,16 +663,23 @@ func (t *TreadmarksApi) handleCopyResponse(resp CopyResponse) {
 }
 
 func (t *TreadmarksApi) handleDiffRequest(req DiffRequest) {
+	t.twinsLock.Lock()
 	if t.twins[req.PageNr] != nil {
-		t.generateDiff(req.PageNr)
+		t.dirtyPagesLock.Lock()
+		if t.dirtyPages[req.PageNr] {
+			t.newWritenoticeRecord(req.PageNr)
+		}
+		t.dirtyPagesLock.Unlock()
+		t.generateDiff(req.PageNr, t.twins[req.PageNr])
+		t.twins[req.PageNr] = nil
 	}
+
 	result := make([]WritenoticeRecord, 0)
 	var proc uint8
 	for proc = 0; proc < t.nrProcs; proc++ {
 		if proc == req.From {
 			continue
 		}
-
 		list := t.pagearray[req.PageNr].writenotices[proc]
 		for i := len(list) - 1; i >= 0; i-- {
 			wn := list[i]
@@ -650,6 +691,7 @@ func (t *TreadmarksApi) handleDiffRequest(req DiffRequest) {
 		}
 	}
 	t.sendDiffResponse(req.From, req.PageNr, result)
+	t.twinsLock.Unlock()
 }
 
 func (t *TreadmarksApi) handleDiffResponse(resp DiffResponse) {
@@ -664,8 +706,8 @@ func (t *TreadmarksApi) handleDiffResponse(resp DiffResponse) {
 			break
 		}
 		list := t.pagearray[resp.PageNr].writenotices[proc]
-
 		for i := len(list) - 1; i >= 0; i-- {
+
 			if !(j < len(wnl)) {
 				break
 			}
@@ -704,16 +746,17 @@ func (t *TreadmarksApi) applyAllDiffs(pageNr int16) {
 		t.applyDiff(pageNr, diff)
 		index[best]++
 	}
-
 }
 
 func (t *TreadmarksApi) applyDiff(pageNr int16, diff map[int]byte) {
 	size := t.memory.GetPageSize()
 	addr := int(pageNr) * size
 	data := t.memory.PrivilegedRead(addr, size)
+
 	for key, value := range diff {
 		data[key] = value
 	}
+
 	t.memory.PrivilegedWrite(addr, data)
 }
 
@@ -731,7 +774,6 @@ func (t *TreadmarksApi) addToLockQueue(req LockAcquireRequest) {
 //----------------------------------------------------------------//
 //                           Help functions                       //
 //----------------------------------------------------------------//
-
 
 func (t *TreadmarksApi) GetId() int {
 	return int(t.myId)

@@ -65,7 +65,12 @@ func NewConnection(port int, bufferSize int) (*connection, <-chan []byte, chan<-
 	given when the connection was initialized.
 */
 func (c *connection) Connect(ip string, port int) (int, error) {
-	tempConn, err := net.DialTimeout("tcp", fmt.Sprint(ip, ":", port), time.Second*5)
+	var err error
+	var tempConn net.Conn
+	tempConn, err = net.DialTimeout("tcp", fmt.Sprint(ip, ":", port), time.Second*5)
+	for err != nil {
+		tempConn, err = net.DialTimeout("tcp", fmt.Sprint(ip, ":", port), time.Second*5)
+	}
 	conn := tempConn.(*net.TCPConn)
 	if err != nil {
 		panic("Couldnt dial the host: " + err.Error())

@@ -169,6 +169,7 @@ func SortedIntTMBenchmark(group *sync.WaitGroup, port, nrProcs, batchSize int, i
 	if isManager {
 		fmt.Println("I'm a manager.")
 	} else {
+
 		tm.Join("localhost", 2000)
 	}
 
@@ -187,10 +188,11 @@ func SortedIntTMBenchmark(group *sync.WaitGroup, port, nrProcs, batchSize int, i
 			log.Fatal("could not start CPU profile: ", err)
 		}
 	}
-
+	fmt.Println(tm.GetId(), " at barrier 0")
 	tm.Barrier(0)
+	fmt.Println(tm.GetId(), " passed barrier 0")
 	for i := 1; i <= Imax; i++ {
-		fmt.Println("Starting iteration: ", i)
+		fmt.Println(tm.GetId(), "Starting iteration: ", i)
 		K[i] = int32(i)
 		K[i+Imax] = Bmax - int32(i)
 		//Calculate the order of every entry in the interval I am responsible for.
@@ -199,12 +201,14 @@ func SortedIntTMBenchmark(group *sync.WaitGroup, port, nrProcs, batchSize int, i
 		for {
 			tm.AcquireLock(0)
 			start = readInt(tm, 0)
+			if start >= N {
+				tm.ReleaseLock(0)
+				break
+			}
 			end = Min(start+batchSize, N)
 			writeInt(tm, 0, end)
 			tm.ReleaseLock(0)
-			if start >= N {
-				break
-			}
+
 			var kj int32
 			var rj int
 			for j := start; j < end; j++ {
@@ -222,8 +226,9 @@ func SortedIntTMBenchmark(group *sync.WaitGroup, port, nrProcs, batchSize int, i
 				}
 			}
 		}
-
+		fmt.Println(tm.GetId(), " at barrier 1")
 		tm.Barrier(1)
+		fmt.Println(tm.GetId(), " passed barrier 1")
 		//Partial verification
 		if isManager {
 			if N > 8388607 {
@@ -238,7 +243,9 @@ func SortedIntTMBenchmark(group *sync.WaitGroup, port, nrProcs, batchSize int, i
 			writeInt(tm, 0, 0)
 
 		}
+		fmt.Println(tm.GetId(), " at barrier 2")
 		tm.Barrier(2)
+		fmt.Println(tm.GetId(), " passed barrier 2")
 
 	}
 	tm.Barrier(3)
@@ -268,52 +275,43 @@ func SortedIntTMBenchmark(group *sync.WaitGroup, port, nrProcs, batchSize int, i
 		group.Done()
 		group.Wait()
 	}
+	if isManager {
+		time.Sleep(time.Second)
+	}
 
 }
 
 func readInt(dsm dsm_api.DSMApiInterface, addr int) int {
 	bInt := make([]byte, 4)
-	var err error
 	for i := range bInt {
-		bInt[i], err = dsm.Read(addr + i)
-		if err != nil {
-			panic(err.Error())
-		}
+		bInt[i], _ = dsm.Read(addr + i)
+
 	}
 	return int(utils.BytesToInt32(bInt))
 }
 
 func writeInt(dsm dsm_api.DSMApiInterface, addr, input int) {
 	bInt := utils.Int32ToBytes(int32(input))
-	var err error
 	for i := range bInt {
-		err = dsm.Write(addr+i, bInt[i])
-		if err != nil {
-			panic(err.Error())
-		}
+		dsm.Write(addr+i, bInt[i])
+
 	}
 }
 
 func readInt64(dsm dsm_api.DSMApiInterface, addr int) int {
 	bInt := make([]byte, 8)
-	var err error
 	for i := range bInt {
-		bInt[i], err = dsm.Read(addr + i)
-		if err != nil {
-			panic(err.Error())
-		}
+		bInt[i], _ = dsm.Read(addr + i)
+
 	}
 	return int(utils.BytesToInt64(bInt))
 }
 
 func writeInt64(dsm dsm_api.DSMApiInterface, addr int, input int64) {
 	bInt := utils.Int64ToBytes(input)
-	var err error
 	for i := range bInt {
-		err = dsm.Write(addr+i, bInt[i])
-		if err != nil {
-			panic(err.Error())
-		}
+		dsm.Write(addr+i, bInt[i])
+
 	}
 }
 
