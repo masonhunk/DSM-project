@@ -5,7 +5,6 @@ import (
 	"DSM-project/network"
 	"DSM-project/treadmarks"
 	"encoding/binary"
-	"encoding/gob"
 	"errors"
 	"log"
 	"os"
@@ -37,14 +36,15 @@ const (
 )
 
 type Multiview struct {
-	conn           network.IClient
-	mem            *hostMem
-	Id             byte
-	server         network.Server
-	chanMap        map[byte]chan string
-	sequenceNumber byte
-	hasLock        map[int]bool
-	csvLogger      *network.CSVStructLogger
+	conn             network.IClient
+	mem              *hostMem
+	Id               byte
+	chanMap          map[int]chan string
+	sequenceNumber   int
+	hasLock          map[int]bool
+	csvLogger        *network.CSVStructLogger
+	shouldLogNetwork bool
+	messagesSent     []int
 }
 
 type hostMem struct {
@@ -67,11 +67,9 @@ func (m *Multiview) setInAccessMap(vpageNr int, val byte) {
 }
 
 func NewMultiView() *Multiview {
-	gob.Register(network.MultiviewMessage{})
-	gob.Register(network.SimpleMessage{})
 	m := new(Multiview)
 	m.sequenceNumber = 0
-	m.chanMap = make(map[byte]chan string)
+	m.chanMap = make(map[int]chan string)
 	m.hasLock = make(map[int]bool)
 	return m
 }
@@ -93,7 +91,6 @@ func (m *Multiview) Leave() {
 
 func (m *Multiview) Shutdown() {
 	m.conn.Close()
-	m.server.StopServer()
 }
 
 func (m *Multiview) Join(memSize, pageByteSize int) error {
@@ -106,10 +103,11 @@ func (m *Multiview) Join(memSize, pageByteSize int) error {
 			msg = network.MultiviewMessage{From: message.GetFrom(), To: message.GetTo(), Type: message.GetType()}
 		case network.MultiviewMessage:
 			msg = message.(network.MultiviewMessage)
+		default:
 		}
 		return m.messageHandler(msg, c)
 	}
-	client := network.NewClient(handler)
+	client := network.NewP2PClient(handler)
 	err := m.StartAndConnect(memSize, pageByteSize, client)
 	panicOnErr(err)
 	<-c
@@ -125,13 +123,8 @@ func (m *Multiview) Initialize(memSize, pageByteSize int, nrProcs int) error {
 		f.Close()
 		log.Fatal(err)
 	}
+
 	m.csvLogger = network.NewCSVStructLogger(f)
-	m.server, err = network.NewServer(func(message network.Message) error { return nil }, "2000", m.csvLogger)
-	if err != nil {
-		m.csvLogger.Close()
-		return err
-	}
-	log.Println("sucessfully started server")
 	time.Sleep(time.Millisecond * 100)
 	vm := memory.NewVmem(memSize, pageByteSize)
 	bm := treadmarks.NewBarrierManagerImp(nrProcs)
@@ -394,7 +387,6 @@ func (m *Multiview) onFault(addr int, length int, faultType byte, accessType str
 	}
 	m.conn.Send(msg)
 	return nil
-
 }
 
 func (m *Multiview) messageHandler(msg network.MultiviewMessage, c chan bool) error {
@@ -448,6 +440,7 @@ func (m *Multiview) messageHandler(msg network.MultiviewMessage, c chan bool) er
 		m.conn.Send(msg)
 	case MALLOC_REPLY:
 		if msg.Err != "" {
+
 			m.chanMap[msg.EventId] <- msg.Err
 		} else {
 			s := msg.Fault_addr
@@ -478,5 +471,39 @@ func (m *Multiview) CSVLoggingIsEnabled(b bool) {
 func panicOnErr(err error) {
 	if err != nil {
 		panic(err)
+	}
+}
+
+func (m *Multiview) SetShouldLogNetwork(b bool) {
+	m.shouldLogNetwork = b
+	if m.messagesSent == nil {
+		m.messagesSent = make([]int, 10)
+	}
+}
+
+func (m *Multiview) LogMessage(message network.MultiviewMessage) {
+	if m.shouldLogNetwork {
+		switch t := message.Type; t {
+		case READ_REQUEST:
+			m.messagesSent[0]++
+		case WRITE_REQUEST:
+			m.messagesSent[0]++
+		case INVALIDATE_REPLY:
+			m.messagesSent[0]++
+		case MALLOC_REQUEST:
+			m.messagesSent[0]++
+		case FREE_REQUEST:
+			m.messagesSent[0]++
+		case WRITE_ACK:
+			m.messagesSent[0]++
+		case READ_ACK:
+			m.messagesSent[0]++
+		case LOCK_ACQUIRE_REQUEST:
+			m.messagesSent[0]++
+		case BARRIER_REQUEST:
+			m.messagesSent[0]++
+		case LOCK_RELEASE:
+			m.messagesSent[0]++
+		}
 	}
 }

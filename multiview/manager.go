@@ -4,6 +4,7 @@ import (
 	"DSM-project/memory"
 	"DSM-project/network"
 	"DSM-project/treadmarks"
+	"DSM-project/utils"
 	"fmt"
 	"log"
 	"sync"
@@ -16,11 +17,14 @@ type minipage struct {
 
 //this is the actual manager.
 type Manager struct {
+	messagesSent     []int
+	shouldLogNetwork bool
+	group            *sync.WaitGroup
 	treadmarks.LockManager
 	treadmarks.BarrierManager
 	copyLock *sync.RWMutex
-	tr       network.ITransciever
-	cl       *network.Client      //The transciever that we are sending messages over.
+	conn     network.ServerInterface
+	shutdown chan bool
 	vm       memory.VirtualMemory //The virtual memory object we are working on in the system.
 	mpt      map[int]minipage     //Minipagetable
 	log      map[int]int          //A map, where each entrance points to
@@ -56,6 +60,8 @@ func NewUpdatedManager(vm memory.VirtualMemory, lm treadmarks.LockManager, bm tr
 		BarrierManager: bm,
 		Mutex:          new(sync.Mutex),
 		locksLock:      new(sync.RWMutex),
+		group:          new(sync.WaitGroup),
+		shutdown:       make(chan bool),
 	}
 	return &m
 }
@@ -87,54 +93,39 @@ func (m *Manager) doForAllCopies(f func(key int, bytes []byte)) {
 }
 
 func (m *Manager) Connect(address string) {
-	m.cl = network.NewClient(
-		func(message network.Message) error {
-			var msg network.MultiviewMessage
-			switch message.(type) {
-			case network.SimpleMessage:
-				msg = network.MultiviewMessage{From: message.GetFrom(), To: message.GetTo(), Type: message.GetType()}
-			case network.MultiviewMessage:
-				msg = message.(network.MultiviewMessage)
-			}
-			go m.HandleMessage(msg)
-			return nil
-		})
-	m.cl.Connect(address)
-	m.tr = m.cl.GetTransciever()
+	_, port := utils.StringToIpAndPort(address)
+	m.conn, _ = network.NewP2PServer(m.HandleMessage, port, nil)
 }
 
 // This is the function to call, when a manager has to handle any message.
 // This will call the correct functions, depending on the message type, and
 // then send whatever messages needs to be sent afterwards.
-func (m *Manager) HandleMessage(message network.MultiviewMessage) {
+func (m *Manager) HandleMessage(message network.Message) error {
+	msg := message.(network.MultiviewMessage)
 	log.Println("Manager got message ", message)
-	switch t := message.Type; t {
-
+	switch t := msg.Type; t {
 	case READ_REQUEST:
-		go m.HandleReadReq(message)
-
+		go m.HandleReadReq(msg)
 	case WRITE_REQUEST:
-		go m.HandleWriteReq(message)
-
+		go m.HandleWriteReq(msg)
 	case INVALIDATE_REPLY:
-		m.HandleInvalidateReply(message)
-
+		m.HandleInvalidateReply(msg)
 	case MALLOC_REQUEST:
-		m.HandleAlloc(message)
-
+		m.HandleAlloc(msg)
 	case FREE_REQUEST:
-		m.HandleFree(message)
+		m.HandleFree(msg)
 	case WRITE_ACK:
-		m.HandleWriteAck(message)
+		m.HandleWriteAck(msg)
 	case READ_ACK:
-		m.HandleReadAck(message)
+		m.HandleReadAck(msg)
 	case LOCK_ACQUIRE_REQUEST:
-		m.handleLockAcquireRequest(&message)
+		m.handleLockAcquireRequest(&msg)
 	case BARRIER_REQUEST:
-		m.handleBarrierRequest(&message)
+		m.handleBarrierRequest(&msg)
 	case LOCK_RELEASE:
-		m.handleLockReleaseRequest(&message)
+		m.handleLockReleaseRequest(&msg)
 	}
+	return nil
 }
 
 // This translates a message, by adding more information to it. This is information
@@ -163,7 +154,7 @@ func (m *Manager) HandleReadReq(message network.MultiviewMessage) {
 	//log.Println("RLocked vpage", vpage)
 	p := m.getCopies(vpage)[0]
 	message.To = p
-	m.tr.Send(message)
+	m.conn.Send(message)
 }
 
 // This handles write requests.
@@ -181,7 +172,7 @@ func (m *Manager) HandleWriteReq(message network.MultiviewMessage) {
 	for _, p := range m.getCopies(vpage) {
 		message.To = p
 		log.Println("Manager sending", message)
-		m.tr.Send(message)
+		m.conn.Send(message)
 	}
 }
 
@@ -194,7 +185,7 @@ func (m *Manager) HandleInvalidateReply(message network.MultiviewMessage) {
 		message.To = m.getCopies(vpage)[0]
 		log.Println("manager sending", message)
 		m.setCopies(vpage, []byte{})
-		m.tr.Send(message)
+		m.conn.Send(message)
 	} else {
 		m.setCopies(vpage, m.getCopies(vpage)[1:])
 	}
@@ -240,9 +231,8 @@ func (m *Manager) HandleAlloc(message network.MultiviewMessage) {
 		message.To = message.From
 		message.From = 0
 		message.Type = MALLOC_REPLY
-		m.tr.Send(message)
+		m.conn.Send(message)
 	}()
-
 	size := message.Minipage_size
 	ptr, err := m.vm.Malloc(size)
 	if err != nil {
@@ -261,7 +251,6 @@ func (m *Manager) HandleAlloc(message network.MultiviewMessage) {
 		sizeLeft = sizeLeft - length
 		resultArray = append(resultArray, minipage{offset, length})
 	}
-
 	startpg := ptr / m.vm.GetPageSize()
 	endpg := (ptr + size) / m.vm.GetPageSize()
 	npages := m.vm.Size() / m.vm.GetPageSize()
@@ -285,7 +274,6 @@ func (m *Manager) HandleAlloc(message network.MultiviewMessage) {
 			break
 		}
 	}
-
 	//insert into virtual memory
 	m.locksLock.Lock()
 	for i, mp := range resultArray {
@@ -295,7 +283,6 @@ func (m *Manager) HandleAlloc(message network.MultiviewMessage) {
 		m.setCopies(startpg+i, []byte{message.From})
 	}
 	m.locksLock.Unlock()
-
 	//Send reply to alloc requester
 	message.Fault_addr = startpg*m.vm.GetPageSize() + m.mpt[startpg].offset
 }
@@ -319,7 +306,7 @@ func (m *Manager) HandleFree(message network.MultiviewMessage) {
 	m.vm.Free(message.Fault_addr % m.vm.Size())
 	message.Type = FREE_REPLY
 	message.To = message.From
-	m.tr.Send(message)
+	m.conn.Send(message)
 }
 
 func (m *Manager) handleLockAcquireRequest(message *network.MultiviewMessage) {
@@ -328,7 +315,7 @@ func (m *Manager) handleLockAcquireRequest(message *network.MultiviewMessage) {
 	message.From, message.To = message.To, message.From
 	message.From = byte(0)
 	message.Type = LOCK_ACQUIRE_RESPONSE
-	m.tr.Send(message)
+	m.conn.Send(*message)
 }
 
 func (m *Manager) handleLockReleaseRequest(message *network.MultiviewMessage) error {
@@ -344,7 +331,7 @@ func (m *Manager) handleBarrierRequest(message *network.MultiviewMessage) {
 
 	message.From, message.To = message.To, message.From
 	message.Type = BARRIER_RESPONSE
-	m.tr.Send(message)
+	m.conn.Send(*message)
 }
 
 // Here is some utility stuff
@@ -353,4 +340,38 @@ func Min(x, y int) int {
 		return x
 	}
 	return y
+}
+
+func (m *Manager) SetShouldLogNetwork(b bool) {
+	m.shouldLogNetwork = b
+	if m.messagesSent == nil {
+		m.messagesSent = make([]int, 10)
+	}
+}
+
+func (m *Manager) LogMessage(message network.MultiviewMessage) {
+	if m.shouldLogNetwork {
+		switch t := message.Type; t {
+		case READ_REQUEST:
+			m.messagesSent[0]++
+		case WRITE_REQUEST:
+			m.messagesSent[0]++
+		case INVALIDATE_REPLY:
+			m.messagesSent[0]++
+		case MALLOC_REQUEST:
+			m.messagesSent[0]++
+		case FREE_REQUEST:
+			m.messagesSent[0]++
+		case WRITE_ACK:
+			m.messagesSent[0]++
+		case READ_ACK:
+			m.messagesSent[0]++
+		case LOCK_ACQUIRE_REQUEST:
+			m.messagesSent[0]++
+		case BARRIER_REQUEST:
+			m.messagesSent[0]++
+		case LOCK_RELEASE:
+			m.messagesSent[0]++
+		}
+	}
 }

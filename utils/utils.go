@@ -1,6 +1,10 @@
 package utils
 
-import "unsafe"
+import (
+	"strconv"
+	"strings"
+	"unsafe"
+)
 
 func Min(x, y int) int {
 	if x < y {
@@ -45,11 +49,11 @@ func Int32ToBytes(i int32) []byte {
 	return slice
 }
 
-func BytesToUint32(data []byte) uint32{
+func BytesToUint32(data []byte) uint32 {
 	return *(*uint32)(unsafe.Pointer(&data[0]))
 }
 
-func Uint32ToBytes(i uint32) []byte{
+func Uint32ToBytes(i uint32) []byte {
 	ptr := uintptr(unsafe.Pointer(&i))
 	slice := make([]byte, 4)
 	for i := 0; i < 4; i++ {
@@ -85,4 +89,14 @@ func Int64ToBytes(i int64) []byte {
 		ptr++
 	}
 	return slice
+}
+
+func StringToIpAndPort(addr string) (string, int) {
+	s := strings.Split(addr, ":")
+	port, _ := strconv.Atoi(s[len(s)-1])
+	if len(s) == 2 {
+		return s[0], port
+	} else {
+		return "localhost", port
+	}
 }

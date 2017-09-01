@@ -5,13 +5,13 @@ import (
 	"DSM-project/memory"
 	"DSM-project/network"
 	"bytes"
+	"fmt"
 	"github.com/davecgh/go-xdr/xdr2"
 	"math"
 	"runtime"
 	"strconv"
 	"sync"
 	"time"
-	"fmt"
 )
 
 type TreadmarksApi struct {
@@ -34,7 +34,7 @@ type TreadmarksApi struct {
 	conn                           network.Connection
 	group                          *sync.WaitGroup
 	timestamp                      Timestamp
-	diffLock						*sync.Mutex
+	diffLock                       *sync.Mutex
 }
 
 var _ dsm_api.DSMApiInterface = new(TreadmarksApi)
@@ -65,7 +65,7 @@ func NewTreadmarksApi(memSize, pageByteSize int, nrProcs, nrLocks, nrBarriers ui
 //----------------------------------------------------------------//
 
 func (t *TreadmarksApi) Initialize(port int) error {
-	t.conn, t.in, t.out = network.NewConnection(port, 10)
+	t.conn, t.in, t.out, _ = network.NewConnection(port, 10)
 	t.memory.AddFaultListener(t.onFault)
 	t.group = new(sync.WaitGroup)
 	t.initializeBarriers()
@@ -163,7 +163,6 @@ func (t *TreadmarksApi) onFault(addr int, length int, faultType byte, accessType
 		addrList = append(addrList, i)
 	}
 	access := t.memory.GetRightsList(addrList)
-
 
 	for i := range access {
 		pageNr := int16(math.Floor(float64(t.memory.GetPageAddr(addr)) / float64(t.memory.GetPageSize())))
@@ -783,7 +782,7 @@ func (t *TreadmarksApi) applyAllDiffs(pageNr int16) {
 		diff := wnl[best][index[best]].Diff
 		t.applyDiff(pageNr, diff)
 		x++
-		index[best] = index[best]+1
+		index[best] = index[best] + 1
 	}
 
 	t.pagearray[pageNr].index = index
@@ -794,7 +793,6 @@ func (t *TreadmarksApi) applyDiff(pageNr int16, diff map[int]byte) {
 	size := t.memory.GetPageSize()
 	addr := int(pageNr) * size
 	data := t.memory.PrivilegedRead(addr, size)
-
 
 	for key, value := range diff {
 		data[key] = value

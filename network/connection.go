@@ -40,7 +40,7 @@ type peer struct {
 	NewConnection gives a new connection, that will be listening on the given port.
 	The host will have ID 0 at this point.
 */
-func NewConnection(port int, bufferSize int) (*connection, <-chan []byte, chan<- []byte) {
+func NewConnection(port int, bufferSize int) (*connection, <-chan []byte, chan<- []byte, error) {
 	c := new(connection)
 	c.peers = make([]*peer, 1)
 	c.in, c.out = make(chan []byte, 1000), make(chan []byte, 1000)
@@ -49,12 +49,12 @@ func NewConnection(port int, bufferSize int) (*connection, <-chan []byte, chan<-
 	c.myPort = port
 	listener, err := net.Listen("tcp", fmt.Sprint(":", port))
 	if err != nil {
-		panic("Couldnt create listener: " + err.Error())
+		return nil, nil, nil, err
 	}
 	c.listener = listener.(*net.TCPListener)
 	go c.listen()
 	go c.sendLoop()
-	return c, c.in, c.out
+	return c, c.in, c.out, nil
 }
 
 /*
@@ -117,7 +117,6 @@ func (c *connection) sendLoop() {
 	for msg := range c.out {
 		time.Sleep(0)
 		id = int(msg[0])
-
 		if id == c.myId {
 			c.in <- msg
 		} else {

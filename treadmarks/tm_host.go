@@ -78,7 +78,7 @@ type TreadMarks struct {
 	twinMap  map[int][]byte //contains twins since last sync.
 	twinLock *sync.Mutex
 	network.IClient
-	server            network.Server
+	server            network.ServerInterface
 	manager           tm_Manager
 	eventchanMap      map[byte]chan string
 	eventNumber       byte
@@ -118,43 +118,43 @@ func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarri
 	for i := range tm.locks {
 		tm.locks[i] = new(sync.Mutex)
 	}
-/*
-	tm.VirtualMemory.AddFaultListener(func(addr int, faultType byte, accessType string, value byte) {
-		//do fancy protocol stuff here
-		//if no copy, get one.
-		pageNr := tm.GetPageAddr(addr) / tm.GetPageSize()
-		tm.RLockPage(pageNr)
-		shouldGetCopy := !tm.HasCopy(pageNr)
-		copyset := tm.GetCopyset(pageNr)
-		tm.RUnlockPage(pageNr)
-		if shouldGetCopy {
-			tm.sendCopyRequest(pageNr, byte(copyset[len(tm.GetCopyset(pageNr))-1])) //blocks until copy has been received
-		}
-		//get and apply diffs before continuing
-		tm.RequestAndApplyDiffs(pageNr)
-
-		switch accessType {
-		case "READ":
-			tm.SetRights(addr, memory.READ_ONLY)
-		case "WRITE":
-			//create a twin
-			tm.twinLock.Lock()
-			tm.LockPage(pageNr)
-			val := tm.PrivilegedRead(tm.GetPageAddr(addr), tm.GetPageSize())
-
-			fmt.Println(tm.ProcId, "We are creating a twin: ", val)
-			if _, ok := tm.twinMap[pageNr]; ok {
-				fmt.Println("But we already had a twin!")
+	/*
+		tm.VirtualMemory.AddFaultListener(func(addr int, faultType byte, accessType string, value byte) {
+			//do fancy protocol stuff here
+			//if no copy, get one.
+			pageNr := tm.GetPageAddr(addr) / tm.GetPageSize()
+			tm.RLockPage(pageNr)
+			shouldGetCopy := !tm.HasCopy(pageNr)
+			copyset := tm.GetCopyset(pageNr)
+			tm.RUnlockPage(pageNr)
+			if shouldGetCopy {
+				tm.sendCopyRequest(pageNr, byte(copyset[len(tm.GetCopyset(pageNr))-1])) //blocks until copy has been received
 			}
-			tm.twinMap[pageNr] = val
+			//get and apply diffs before continuing
+			tm.RequestAndApplyDiffs(pageNr)
 
-			tm.PrivilegedWrite(addr, []byte{value})
-			fmt.Println("After the write, the twin was ", tm.twinMap[pageNr], " and what we wrote was ", value)
-			tm.twinLock.Unlock()
-			tm.SetRights(addr, memory.READ_WRITE)
-			tm.UnlockPage(pageNr)
-		}
-	})*/
+			switch accessType {
+			case "READ":
+				tm.SetRights(addr, memory.READ_ONLY)
+			case "WRITE":
+				//create a twin
+				tm.twinLock.Lock()
+				tm.LockPage(pageNr)
+				val := tm.PrivilegedRead(tm.GetPageAddr(addr), tm.GetPageSize())
+
+				fmt.Println(tm.ProcId, "We are creating a twin: ", val)
+				if _, ok := tm.twinMap[pageNr]; ok {
+					fmt.Println("But we already had a twin!")
+				}
+				tm.twinMap[pageNr] = val
+
+				tm.PrivilegedWrite(addr, []byte{value})
+				fmt.Println("After the write, the twin was ", tm.twinMap[pageNr], " and what we wrote was ", value)
+				tm.twinLock.Unlock()
+				tm.SetRights(addr, memory.READ_WRITE)
+				tm.UnlockPage(pageNr)
+			}
+		})*/
 	return &tm
 }
 
@@ -251,11 +251,7 @@ func (t *TreadMarks) Startup() error {
 		log.Fatal(err)
 	}
 	logger := network.NewCSVStructLogger(f)
-	t.server, err = network.NewServer(func(message network.Message) error { return nil }, "2000", logger)
-	if err != nil {
-		logger.Close()
-		return err
-	}
+	t.server, _ = network.NewServer(func(message network.Message) error { return nil }, 2000, logger)
 	log.Println("sucessfully started server")
 	time.Sleep(time.Millisecond * 100)
 
@@ -467,7 +463,7 @@ func (t *TreadMarks) Shutdown() {
 	t.Close()
 	if t.ProcId == byte(1) {
 		t.manager.Close()
-		t.server.StopServer()
+		t.server.Close()
 	}
 
 }

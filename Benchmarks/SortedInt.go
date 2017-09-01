@@ -4,6 +4,7 @@ import (
 	"DSM-project/dsm-api"
 	"DSM-project/dsm-api/treadmarks"
 	"DSM-project/multiview"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -11,7 +12,6 @@ import (
 	"runtime/pprof"
 	"sync"
 	"time"
-	"encoding/binary"
 )
 
 func SortedIntMVBenchmark(nrProcs int, batchSize int, isManager bool, N int, Bmax int32, Imax int, pprofFile io.Writer) {

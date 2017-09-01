@@ -3,6 +3,7 @@ package network
 import (
 	"log"
 	"net"
+	"strconv"
 )
 
 type SimpleMessage struct {
@@ -31,7 +32,7 @@ type MultiviewMessage struct {
 	Minipage_size int
 	Minipage_base int // addrress in the vpage address space
 	Privbase      int //address in the privileged view
-	EventId       byte
+	EventId       int
 	Err           string
 	Data          []byte //Data of the message
 	Id            int
@@ -60,8 +61,8 @@ type Endpoint struct {
 	l    net.Listener
 }
 
-func NewEndpoint(port string, handler func(conn net.Conn)) (Endpoint, error) {
-	l, err := net.Listen("tcp", ":"+port)
+func NewEndpoint(port int, handler func(conn net.Conn)) (Endpoint, error) {
+	l, err := net.Listen("tcp", ":"+strconv.Itoa(port))
 	if err != nil {
 		log.Println("Failed to listen:", err)
 		return Endpoint{}, err

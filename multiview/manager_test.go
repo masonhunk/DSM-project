@@ -60,7 +60,7 @@ func TestManager_HandleReadReq(t *testing.T) {
 	vmem := memory.NewVmem(1024, 128)
 	tm := network.NewMultiviewTranscieverMock()
 	m := NewManager(vmem)
-	m.tr = tm
+	m.conn = tm
 	m.HandleAlloc(network.MultiviewMessage{From: byte(2), To: byte(1), Minipage_size: 200})
 	m.HandleReadReq(network.MultiviewMessage{Fault_addr: 1100, From: 1, To: 3})
 	message := tm.Messages[len(tm.Messages)-1]
@@ -71,7 +71,7 @@ func TestManager_HandleMultipleReadReq(t *testing.T) {
 	vmem := memory.NewVmem(1024, 128)
 	tm := network.NewMultiviewTranscieverMock()
 	m := NewManager(vmem)
-	m.tr = tm
+	m.conn = tm
 	message := network.MultiviewMessage{Fault_addr: 1025, From: byte(2), To: byte(1), Type: READ_REQUEST}
 	vpage := message.Fault_addr / vmem.GetPageSize()
 	m.HandleAlloc(network.MultiviewMessage{From: byte(2), To: byte(1), Minipage_size: 1024})
@@ -89,7 +89,7 @@ func TestManager_HandleAlloc(t *testing.T) {
 	expmpt := map[int]minipage{}
 	tm := network.NewMultiviewTranscieverMock()
 	m := NewManager(vmem)
-	m.tr = tm
+	m.conn = tm
 	m.HandleAlloc(network.MultiviewMessage{From: byte(2), To: byte(1), Minipage_size: 200})
 	expmpt[8] = minipage{0, 128}
 	expmpt[9] = minipage{0, 72}
@@ -117,7 +117,7 @@ func TestManager_HandleFree(t *testing.T) {
 	expmpt := map[int]minipage{}
 	tm := network.NewMultiviewTranscieverMock()
 	m := NewManager(vmem)
-	m.tr = tm
+	m.conn = tm
 	m.HandleAlloc(network.MultiviewMessage{From: byte(2), To: byte(1), Minipage_size: 200})
 	pointer := tm.Messages[0]
 	expmpt[8] = minipage{0, 128}
@@ -134,7 +134,7 @@ func TestManager_HandleWriteReq(t *testing.T) {
 	vmem := memory.NewVmem(1024, 128)
 	tm := network.NewMultiviewTranscieverMock()
 	m := NewManager(vmem)
-	m.tr = tm
+	m.conn = tm
 
 	message := network.MultiviewMessage{From: byte(2), To: byte(1), Fault_addr: 4}
 	m.HandleAlloc(network.MultiviewMessage{From: byte(2), To: byte(1), Minipage_size: 200})
@@ -157,7 +157,7 @@ func TestManager_HandleMultipleWriteReq(t *testing.T) {
 	vmem := memory.NewVmem(1024, 128)
 	tm := network.NewMultiviewTranscieverMock()
 	m := NewManager(vmem)
-	m.tr = tm
+	m.conn = tm
 	m.HandleAlloc(network.MultiviewMessage{From: byte(2), To: byte(1), Minipage_size: 200})
 	pointer := tm.Messages[len(tm.Messages)-1]
 	message := network.MultiviewMessage{From: byte(2), To: byte(1), Fault_addr: pointer.Fault_addr}
