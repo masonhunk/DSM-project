@@ -6,6 +6,7 @@ import (
 	"DSM-project/treadmarks"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -33,6 +34,8 @@ const (
 	LOCK_RELEASE          = "lock_rel"
 	BARRIER_REQUEST       = "barr_req"
 	BARRIER_RESPONSE      = "barr_resp"
+	MULTI_MALLOC_REQUEST  = "MMR"
+	MULTI_MALLOC_REPLY    = "MMRPL"
 )
 
 type Multiview struct {
@@ -91,6 +94,7 @@ func (m *Multiview) Leave() {
 
 func (m *Multiview) Shutdown() {
 	m.conn.Close()
+	m.
 }
 
 func (m *Multiview) Join(memSize, pageByteSize int) error {
@@ -103,7 +107,6 @@ func (m *Multiview) Join(memSize, pageByteSize int) error {
 			msg = network.MultiviewMessage{From: message.GetFrom(), To: message.GetTo(), Type: message.GetType()}
 		case network.MultiviewMessage:
 			msg = message.(network.MultiviewMessage)
-		default:
 		}
 		return m.messageHandler(msg, c)
 	}
@@ -123,7 +126,6 @@ func (m *Multiview) Initialize(memSize, pageByteSize int, nrProcs int) error {
 		f.Close()
 		log.Fatal(err)
 	}
-
 	m.csvLogger = network.NewCSVStructLogger(f)
 	time.Sleep(time.Millisecond * 100)
 	vm := memory.NewVmem(memSize, pageByteSize)
@@ -317,6 +319,24 @@ func (m *Multiview) Malloc(sizeInBytes int) (int, error) {
 	return res, nil
 }
 
+func (m *Multiview) MultiMalloc(sizes []int) ([]int, error) {
+	c := make(chan string)
+	m.sequenceNumber++
+	i := m.sequenceNumber
+	m.chanMap[i] = c
+	msg := network.MultiviewMessage{
+		Type:    MULTI_MALLOC_REQUEST,
+		From:    m.Id,
+		To:      byte(0),
+		EventId: i,
+		IntArr:  sizes, //<- contains the sizes for the allocations
+	}
+	m.conn.Send(msg)
+	s := <-c
+	m.chanMap[i] = nil
+	return StringOfIntsToIntArray(s), nil
+}
+
 func (m *Multiview) Free(pointer, length int) error {
 	c := make(chan string)
 	m.sequenceNumber++
@@ -440,11 +460,16 @@ func (m *Multiview) messageHandler(msg network.MultiviewMessage, c chan bool) er
 		m.conn.Send(msg)
 	case MALLOC_REPLY:
 		if msg.Err != "" {
-
 			m.chanMap[msg.EventId] <- msg.Err
 		} else {
 			s := msg.Fault_addr
 			m.chanMap[msg.EventId] <- strconv.Itoa(s)
+		}
+	case MULTI_MALLOC_REPLY:
+		if msg.Err != "" {
+			m.chanMap[msg.EventId] <- msg.Err
+		} else {
+			m.chanMap[msg.EventId] <- arrayToString(msg.IntArr, ",")
 		}
 	case FREE_REPLY:
 		if msg.Err != "" {
@@ -474,36 +499,61 @@ func panicOnErr(err error) {
 	}
 }
 
+func arrayToString(a []int, delim string) string {
+	return strings.Trim(strings.Replace(fmt.Sprint(a), " ", delim, -1), "[]")
+	//return strings.Trim(strings.Join(strings.Split(fmt.Sprint(a), " "), delim), "[]")
+	//return strings.Trim(strings.Join(strings.Fields(fmt.Sprint(a)), delim), "[]")
+}
+
+func StringOfIntsToIntArray(s string) []int {
+	stringSlice := strings.Split(s, ",")
+	var err error
+	var res []int = make([]int, len(stringSlice))
+	for i, s := range stringSlice {
+		res[i], err = strconv.Atoi(s)
+		panicOnErr(err)
+	}
+	return res
+}
+
 func (m *Multiview) SetShouldLogNetwork(b bool) {
 	m.shouldLogNetwork = b
 	if m.messagesSent == nil {
-		m.messagesSent = make([]int, 10)
+		m.messagesSent = make([]int, 12)
 	}
 }
 
 func (m *Multiview) LogMessage(message network.MultiviewMessage) {
 	if m.shouldLogNetwork {
-		switch t := message.Type; t {
-		case READ_REQUEST:
-			m.messagesSent[0]++
-		case WRITE_REQUEST:
-			m.messagesSent[0]++
-		case INVALIDATE_REPLY:
-			m.messagesSent[0]++
-		case MALLOC_REQUEST:
-			m.messagesSent[0]++
-		case FREE_REQUEST:
-			m.messagesSent[0]++
-		case WRITE_ACK:
-			m.messagesSent[0]++
-		case READ_ACK:
-			m.messagesSent[0]++
-		case LOCK_ACQUIRE_REQUEST:
-			m.messagesSent[0]++
-		case BARRIER_REQUEST:
-			m.messagesSent[0]++
-		case LOCK_RELEASE:
-			m.messagesSent[0]++
-		}
+
+	}
+}
+
+func mTypeToInt(t string) int {
+	switch t {
+	case READ_REQUEST:
+		return 0
+	case WRITE_REQUEST:
+		return 1
+	case INVALIDATE_REPLY:
+		return 2
+	case MALLOC_REQUEST:
+		return 3
+	case FREE_REQUEST:
+		return 4
+	case WRITE_ACK:
+		return 5
+	case READ_ACK:
+		return 6
+	case LOCK_ACQUIRE_REQUEST:
+		return 7
+	case BARRIER_REQUEST:
+		return 8
+	case LOCK_RELEASE:
+		return 9
+	case MULTI_MALLOC_REQUEST:
+		return 10
+	case MULTI_MALLOC_REPLY :
+		return 11
 	}
 }

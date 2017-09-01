@@ -3,6 +3,7 @@ package multiview
 import (
 	"DSM-project/memory"
 	"DSM-project/network"
+	"fmt"
 	"github.com/stretchr/testify/assert"
 	"testing"
 	"time"
@@ -117,6 +118,17 @@ func TestHostMem_WriteAndRead(t *testing.T) {
 	time.Sleep(time.Millisecond * 200)
 	assert.Equal(t, WRITE_ACK, cMock.messages[3].Type)
 
+}
+
+func TestStringConvertInt(t *testing.T) {
+	ints := make([]int, 2250000)
+	tb := time.Now()
+	str := arrayToString(ints, ",")
+	fmt.Println(time.Now().Sub(tb))
+	//fmt.Println(str)
+	tb = time.Now()
+	fmt.Println(StringOfIntsToIntArray(str))
+	fmt.Println(time.Now().Sub(tb))
 }
 
 type ClientMock struct {

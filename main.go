@@ -79,7 +79,7 @@ func main() {
 	case "locksTM":
 		Benchmarks.TestLockTM(2000000, cpuprofFile)
 	case "SyncOpsCostTM":
-		Benchmarks.TestSynchronizedReadsWritesTM(5000, cpuprofFile)
+		Benchmarks.TestSynchronizedReadsWritesTM(10000, cpuprofFile)
 	case "NonSyncOpsCostTM":
 		Benchmarks.TestNonSynchronizedReadWritesTM(100000000, cpuprofFile)
 	default:
