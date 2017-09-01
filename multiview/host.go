@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"encoding/gob"
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -34,6 +35,8 @@ const (
 	LOCK_RELEASE          = "lock_rel"
 	BARRIER_REQUEST       = "barr_req"
 	BARRIER_RESPONSE      = "barr_resp"
+	MULTI_MALLOC_REQUEST  = "MMR"
+	MULTI_MALLOC_REPLY    = "MMRPL"
 )
 
 type Multiview struct {
@@ -324,6 +327,24 @@ func (m *Multiview) Malloc(sizeInBytes int) (int, error) {
 	return res, nil
 }
 
+func (m *Multiview) MultiMalloc(sizes []int) ([]int, error) {
+	c := make(chan string)
+	m.sequenceNumber++
+	i := m.sequenceNumber
+	m.chanMap[i] = c
+	msg := network.MultiviewMessage{
+		Type:    MULTI_MALLOC_REQUEST,
+		From:    m.Id,
+		To:      byte(0),
+		EventId: i,
+		IntArr:  sizes, //<- contains the sizes for the allocations
+	}
+	m.conn.Send(msg)
+	s := <-c
+	m.chanMap[i] = nil
+	return StringOfIntsToIntArray(s), nil
+}
+
 func (m *Multiview) Free(pointer, length int) error {
 	c := make(chan string)
 	m.sequenceNumber++
@@ -453,6 +474,13 @@ func (m *Multiview) messageHandler(msg network.MultiviewMessage, c chan bool) er
 			s := msg.Fault_addr
 			m.chanMap[msg.EventId] <- strconv.Itoa(s)
 		}
+	case MULTI_MALLOC_REPLY:
+		fmt.Println("got multi malloc reply")
+		if msg.Err != "" {
+			m.chanMap[msg.EventId] <- msg.Err
+		} else {
+			m.chanMap[msg.EventId] <- arrayToString(msg.IntArr, ",")
+		}
 	case FREE_REPLY:
 		if msg.Err != "" {
 			m.chanMap[msg.EventId] <- msg.Err
@@ -479,4 +507,21 @@ func panicOnErr(err error) {
 	if err != nil {
 		panic(err)
 	}
+}
+
+func arrayToString(a []int, delim string) string {
+	return strings.Trim(strings.Replace(fmt.Sprint(a), " ", delim, -1), "[]")
+	//return strings.Trim(strings.Join(strings.Split(fmt.Sprint(a), " "), delim), "[]")
+	//return strings.Trim(strings.Join(strings.Fields(fmt.Sprint(a)), delim), "[]")
+}
+
+func StringOfIntsToIntArray(s string) []int {
+	stringSlice := strings.Split(s, ",")
+	var err error
+	var res []int = make([]int, len(stringSlice))
+	for i, s := range stringSlice {
+		res[i], err = strconv.Atoi(s)
+		panicOnErr(err)
+	}
+	return res
 }

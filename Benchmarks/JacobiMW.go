@@ -68,10 +68,16 @@ func JacobiProgramMultiView(matrixSize int, nrIterations int, nrProcs int, isMan
 		mw.Initialize(N*M*float32_BYTE_LENGTH, pageByteSize, nrProcs)
 		mw.CSVLoggingIsEnabled(false)
 
+		allocs := make([]int, M*N)
+		for i := range allocs {
+			allocs[i] = float32_BYTE_LENGTH
+		}
+		addrs, _ := mw.MultiMalloc(allocs)
 		for i := range gridEntryAddresses {
 			row := gridEntryAddresses[i]
 			for j := range row {
-				gridEntryAddresses[i][j], _ = mw.Malloc(float32_BYTE_LENGTH)
+				gridEntryAddresses[i][j] = addrs[i+j]
+				//gridEntryAddresses[i][j], _ = mw.Malloc(float32_BYTE_LENGTH)
 				//placeholder value
 				/*var valAsBytes []byte = float32ToBytes(20.0)
 				for r, b := range valAsBytes {

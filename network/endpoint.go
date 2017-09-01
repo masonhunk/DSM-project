@@ -34,6 +34,7 @@ type MultiviewMessage struct {
 	EventId       byte
 	Err           string
 	Data          []byte //Data of the message
+	IntArr        []int
 	Id            int
 }
 

@@ -112,6 +112,16 @@ func TestManager_HandleAlloc(t *testing.T) {
 	assert.Equal(t, expmpt, m.mpt)
 }
 
+/*func TestHandleMultiMalloc(t *testing.T) {
+	vmem := memory.NewVmem(1024, 128)
+	tm := network.NewMultiviewTranscieverMock()
+	m := NewManager(vmem)
+	m.tr = tm
+	msg := network.MultiviewMessage{From: byte(2), To: byte(1), IntArr:[]int{10,20,30,100}}
+	m.HandleAlloc(msg)
+	fmt.Println(msg.IntArr)
+}*/
+
 func TestManager_HandleFree(t *testing.T) {
 	vmem := memory.NewVmem(1024, 128)
 	expmpt := map[int]minipage{}

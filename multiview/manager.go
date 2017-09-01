@@ -134,6 +134,8 @@ func (m *Manager) HandleMessage(message network.MultiviewMessage) {
 		m.handleBarrierRequest(&message)
 	case LOCK_RELEASE:
 		m.handleLockReleaseRequest(&message)
+	case MULTI_MALLOC_REQUEST:
+		m.handleMultiAlloc(message)
 	}
 }
 
@@ -153,6 +155,7 @@ func (m *Manager) translate(message *network.MultiviewMessage) int {
 	m.Unlock()
 	return vpage
 }
+
 
 // This handles read requests.
 func (m *Manager) HandleReadReq(message network.MultiviewMessage) {
@@ -231,6 +234,76 @@ func (m *Manager) handleAck(message network.MultiviewMessage) int {
 		m.setCopies(vpage, append(m.getCopies(vpage), message.From))
 	}
 	return vpage
+}
+
+
+func (m *Manager) handleMultiAlloc(message network.MultiviewMessage)  {
+	res := make([]int, len(message.IntArr))
+	fmt.Println("handling alloc message")
+	for r, size := range message.IntArr {
+		fmt.Println("handling alloc call", r)
+		// Alloc begins here
+		ptr, err := m.vm.Malloc(size)
+		if err != nil {
+			message.Err = err.Error()
+			return
+		}
+		//generate minipages
+		sizeLeft := size
+		i := ptr
+		resultArray := make([]minipage, 0)
+		for sizeLeft > 0 {
+			offset := i - m.vm.GetPageAddr(i)
+			length := Min(sizeLeft, m.vm.GetPageSize()-offset)
+			i = i + length
+			sizeLeft = sizeLeft - length
+			resultArray = append(resultArray, minipage{offset, length})
+		}
+
+		startpg := ptr / m.vm.GetPageSize()
+		endpg := (ptr + size) / m.vm.GetPageSize()
+		npages := m.vm.Size() / m.vm.GetPageSize()
+		rest := m.vm.Size() % m.vm.GetPageSize()
+		if rest > 0 {
+			npages++
+		}
+		//loop over views to find free space
+		for i := 1; i < m.vm.GetPageSize(); i++ {
+			failed := false
+			startpg = startpg + npages
+			endpg = endpg + npages
+			for j := startpg; j <= endpg; j++ {
+				_, exists := m.mpt[j]
+				if exists {
+					failed = true
+					break
+				}
+			}
+			if failed == false {
+				break
+			}
+		}
+
+		//insert into virtual memory
+		m.locksLock.Lock()
+		for i, mp := range resultArray {
+			m.mpt[startpg+i] = mp
+			m.log[startpg+i] = startpg
+			m.locks[startpg+i] = new(sync.RWMutex)
+			m.setCopies(startpg+i, []byte{message.From})
+		}
+		m.locksLock.Unlock()
+		//Alloc ends
+
+		res[r] = startpg*m.vm.GetPageSize() + m.mpt[startpg].offset
+	}
+	fmt.Println("sending multi malloc reply")
+	message.Minipage_size = 0
+	message.IntArr = res
+	message.Type = MULTI_MALLOC_REPLY
+	message.To = message.From
+	message.From = 0
+	m.tr.Send(message)
 }
 
 func (m *Manager) HandleAlloc(message network.MultiviewMessage) {

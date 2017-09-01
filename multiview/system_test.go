@@ -257,6 +257,13 @@ func TestReacquireLock(t *testing.T) {
 	mw1.Shutdown()
 }
 
+func TestMultiview_MultiMalloc(t *testing.T) {
+	mw1 := NewMultiView()
+	mw1.Initialize(4104, 4096, 1)
+	addrs, _ := mw1.MultiMalloc([]int{10, 20, 100, 1000})
+	fmt.Println(addrs)
+}
+
 func TestMemoryMalloc(t *testing.T) {
 	mw1 := NewMultiView()
 	mw1.Initialize(4104, 4096, 1)

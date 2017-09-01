@@ -52,12 +52,12 @@ func main() {
 	case "JacobiTM":
 		wg := sync.WaitGroup{}
 		wg.Add(1)
-		matrixsize := 1024*3
+		matrixsize := 1024 * 3
 		Benchmarks.JacobiProgramTreadMarks(matrixsize, 20, *nrprocs, *manager, *port, &wg, cpuprofFile)
 	case "JacobiMW":
 		wg := sync.WaitGroup{}
 		wg.Add(1)
-		matrixsize := 1024*3
+		matrixsize := 1024 * 3
 		Benchmarks.JacobiProgramMultiView(matrixsize, 20, *nrprocs, *manager, 4096, &wg, cpuprofFile)
 	case "SortedIntTM":
 		Benchmarks.SortedIntTMBenchmark(nil, *port, *nrprocs, 2000, *manager, 80000, 524288, 10, cpuprofFile)
@@ -80,7 +80,7 @@ func main() {
 	case "locksTM":
 		Benchmarks.TestLockTM(2000000, cpuprofFile)
 	case "SyncOpsCostTM":
-		Benchmarks.TestSynchronizedReadsWritesTM(5000, cpuprofFile)
+		Benchmarks.TestSynchronizedReadsWritesTM(10000, cpuprofFile)
 	case "NonSyncOpsCostTM":
 		Benchmarks.TestNonSynchronizedReadWritesTM(100000000, cpuprofFile)
 	default:
