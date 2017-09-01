@@ -5,6 +5,8 @@ import (
 	"DSM-project/treadmarks"
 	"encoding/binary"
 	"math"
+	"DSM-project/dsm-api"
+	"bytes"
 )
 
 func setupTreadMarksStruct(nrProcs, memsize, pagebytesize, nrlocks, nrbarriers int) *treadmarks.TreadMarks {
@@ -25,6 +27,28 @@ func float32ToBytes(float float32) []byte {
 	binary.LittleEndian.PutUint32(bytes, bits)
 	return bytes
 }
+
+func readFloat(dsm dsm_api.DSMApiInterface,addr int) float64 {
+	bInt, _ := dsm.ReadBytes(addr, 8)
+	buf := bytes.NewBuffer(bInt)
+	var result float64
+	err := binary.Read(buf, binary.BigEndian, &result)
+	if err != nil {
+		panic(err.Error())
+	}
+	return result
+}
+
+func writeFloat(dsm dsm_api.DSMApiInterface, addr int, value float64) {
+	buf := bytes.NewBuffer(make([]byte, 0, 8))
+	binary.Write(buf, binary.BigEndian, value)
+	if buf.Len() > 8 {
+		panic("floats are too big!")
+	}
+	dsm.WriteBytes(addr, buf.Bytes())
+}
+
+
 
 func mergeArrays(a, b []int) []int {
 	res := make([]int, len(a)+len(b))

@@ -2,8 +2,8 @@ package memory
 
 import (
 	"errors"
-	"strconv"
 	"sync"
+	"fmt"
 )
 
 var AccessDeniedErr = errors.New("access denied")
@@ -12,7 +12,7 @@ const NO_ACCESS byte = 0
 const READ_ONLY byte = 1
 const READ_WRITE byte = 2
 
-type FaultListener func(addr int, faultType byte, accessType string, value byte) //faultType = 0 => read fault, = 1 => write fault
+type FaultListener func(addr int, length int, faultType byte, accessType string, value []byte) error //faultType = 0 => read fault, = 1 => write fault
 
 type VirtualMemory interface {
 	Read(addr int) (byte, error)
@@ -22,7 +22,9 @@ type VirtualMemory interface {
 	PrivilegedRead(addr, length int) []byte
 	PrivilegedWrite(addr int, data []byte) error
 	GetRights(addr int) byte
+	GetRightsList(addr []int) []byte
 	SetRights(addr int, access byte)
+	SetRightsList(addr []int, access byte)
 	GetPageAddr(addr int) int
 	Malloc(sizeInBytes int) (int, error)
 	Free(pointer int) error
@@ -40,7 +42,9 @@ type Vmem struct {
 	mallocHistory  map[int]int //maps address to length
 	arDisabled     bool
 	faultListeners []FaultListener
-	mutex          sync.Mutex
+	accessLock		*sync.Mutex
+
+	mutex          *sync.Mutex
 }
 
 func (m *Vmem) PrivilegedRead(addr, length int) []byte {
@@ -50,10 +54,12 @@ func (m *Vmem) PrivilegedRead(addr, length int) []byte {
 }
 
 func (m *Vmem) PrivilegedWrite(addr int, data []byte) error {
-
-	for i, bt := range data {
-		m.Stack[i+addr] = bt
+	if addr+len(data) > len(m.Stack) {
+		fmt.Println(len(m.Stack))
+		fmt.Println(len(m.Stack[addr: addr+len(data)]))
+		fmt.Println(len(data))
 	}
+	copy(m.Stack[addr: addr+len(data)], data)
 	return nil
 }
 
@@ -127,106 +133,140 @@ func NewVmem(memSize int, pageByteSize int) *Vmem {
 	m.mallocHistory = make(map[int]int)
 	m.arDisabled = false
 	m.faultListeners = make([]FaultListener, 0)
-	m.mutex = sync.Mutex{}
+	m.mutex = new(sync.Mutex)
+	m.accessLock = new(sync.Mutex)
 	return m
 }
 
 func (m *Vmem) Read(addr int) (byte, error) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
 	//If access rights disabled, just read no matter what
 	if m.arDisabled {
 		return m.Stack[addr], nil
 	}
 	access := m.GetRights(addr)
 
-	switch access {
-	case NO_ACCESS:
-		//notify all listeners
+	if access == NO_ACCESS {
 		for _, l := range m.faultListeners {
-			l(addr, 0, "READ", 0)
+			err := l(addr,1,  0, "READ", []byte{0})
+			if err == nil {
+				return m.Stack[addr], nil
+			}
 		}
 		return m.Stack[addr], errors.New("access denied")
-	case READ_ONLY:
-		return m.Stack[addr], nil
-	case READ_WRITE:
-		return m.Stack[addr], nil
 	}
-	return 127, errors.New("unknown error")
+	return m.Stack[addr], nil
 }
 
 func (m *Vmem) ReadBytes(addr, length int) ([]byte, error) {
-	start := addr
-	end := addr + length
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	firstPageAddr := m.GetPageAddr(addr)
+	lastPageAddr := m.GetPageAddr(addr+ length)
 	result := make([]byte, length)
-	copy(result, m.Stack[start:end])
-	if m.arDisabled {
-		return result, nil
-	}
 
-	for i := start; i < end; i++ {
-		access := m.GetRights(m.GetPageAddr(i))
-		switch access {
-		case NO_ACCESS:
-			//notify all listeners
+	addrList := make([]int, 0)
+	for tempAddr := firstPageAddr; tempAddr <= lastPageAddr; tempAddr = tempAddr + m.GetPageSize() {
+		addrList = append(addrList, tempAddr)
+	}
+	access := m.GetRightsList(addrList)
+Loop:
+	for i := range access {
+		if access[i] == NO_ACCESS {
 			for _, l := range m.faultListeners {
-				l(m.GetPageAddr(i), 0, "READ", 0)
+				err := l(addr, length,1, "READ", nil)
+				if err == nil {
+					break Loop
+				}
 			}
-			return result, errors.New("access denied at location: " + strconv.Itoa(i))
-		case READ_WRITE, READ_ONLY:
-			continue
-		default:
-			return nil, errors.New("unknown access value at: " + strconv.Itoa(i))
+			return nil, errors.New("access denied")
 		}
 	}
+	copy(result, m.Stack[addr:addr+length])
 	return result, nil
 }
 
 func (m *Vmem) Write(addr int, val byte) error {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
 	if m.arDisabled {
 		m.Stack[addr] = val
 		return nil
 	}
 	access := m.GetRights(m.GetPageAddr(addr))
-	switch access {
-	case NO_ACCESS:
-		//notify all listeners
+	if access != READ_WRITE {
 		for _, l := range m.faultListeners {
-			l(addr, 1, "WRITE", val)
+			err := l(addr, 1, 1, "WRITE", []byte{val})
+			if err == nil {
+				m.Stack[addr] = val
+				return nil
+			}
 		}
 		return errors.New("access denied")
-	case READ_ONLY:
-		//notify all listeners
-		for _, l := range m.faultListeners {
-			l(addr, 1, "WRITE", val)
-		}
-		return errors.New("access denied")
-	case READ_WRITE:
+	} else {
 		m.Stack[addr] = val
 		return nil
 	}
-	return errors.New("unknown error")
 
 }
 
 func (m *Vmem) WriteBytes(addr int, val []byte) error {
-	var err error = nil
-	for b := range val {
-
-		err = m.Write(addr+b, val[b])
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	length := len(val)
+	firstPageAddr := m.GetPageAddr(addr)
+	lastPageAddr := m.GetPageAddr(addr + length-1)
+	addrList := make([]int, 0)
+	for tempAddr := firstPageAddr; tempAddr <= lastPageAddr; tempAddr = tempAddr + m.GetPageSize() {
+		addrList = append(addrList, tempAddr)
 	}
-	return err
+	access := m.GetRightsList(addrList)
+Loop:
+	for i := range access {
+		if access[i] != READ_WRITE {
+			for _, l := range m.faultListeners {
+				err := l(addrList[i], length, 1, "WRITE", val)
+				if err == nil {
+					break Loop
+				}
+			}
+			return errors.New("access denied")
+		}
+	}
+	copy(m.Stack[addr:addr+length], val)
+	return nil
 }
 
 func (m *Vmem) GetRights(addr int) byte {
-	m.mutex.Lock()
+	m.accessLock.Lock()
 	res := m.AccessMap[m.GetPageAddr(addr)]
-	m.mutex.Unlock()
+	m.accessLock.Unlock()
 	return res
 }
 
+func (m *Vmem) GetRightsList(addrList []int) []byte{
+	m.accessLock.Lock()
+	defer m.accessLock.Unlock()
+	result := make([]byte, len(addrList))
+	for i, addr := range addrList{
+		result[i] = m.AccessMap[m.GetPageAddr(addr)]
+	}
+	return result
+}
+
 func (m *Vmem) SetRights(addr int, access byte) {
-	m.mutex.Lock()
+	m.accessLock.Lock()
 	m.AccessMap[m.GetPageAddr(addr)] = access
-	m.mutex.Unlock()
+	m.accessLock.Unlock()
+}
+
+func (m *Vmem) SetRightsList(addrList []int, access byte) {
+	m.accessLock.Lock()
+	defer m.accessLock.Unlock()
+	for _, addr := range addrList {
+		m.AccessMap[m.GetPageAddr(addr)] = access
+	}
 }
 
 func (m *Vmem) GetPageAddr(addr int) int {

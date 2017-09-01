@@ -39,31 +39,31 @@ func main() {
 		wg := sync.WaitGroup{}
 		wg.Add(1)
 		pageSize := 4096
-		nrOfInts := 4096 * 1000000
+		nrOfInts := 4096 * 10000000
 		batchSize := 10000 * 4096 // nr of ints in batch
 		Benchmarks.ParallelSumMW(batchSize, nrOfInts, *nrprocs, *manager, pageSize, &wg, cpuprofFile)
 	case "ModuloMultTM":
 		wg := sync.WaitGroup{}
 		wg.Add(1)
 		pageSize := 4096
-		nrOfInts := 4096 * 1000000
-		batchSize := 10000 * 4096 // nr of ints in batch
+		var nrOfInts int64 = 4096 * 10000000
+		var batchSize int64 = 10000 * 4096 // nr of ints in batch
 		Benchmarks.ParallelSumTM(batchSize, nrOfInts, *nrprocs, *manager, *port, pageSize, &wg, cpuprofFile)
 	case "JacobiTM":
 		wg := sync.WaitGroup{}
 		wg.Add(1)
-		matrixsize := 256
+		matrixsize := 1024*3
 		Benchmarks.JacobiProgramTreadMarks(matrixsize, 20, *nrprocs, *manager, *port, &wg, cpuprofFile)
 	case "JacobiMW":
 		wg := sync.WaitGroup{}
 		wg.Add(1)
-		matrixsize := 512
+		matrixsize := 1024*3
 		Benchmarks.JacobiProgramMultiView(matrixsize, 20, *nrprocs, *manager, 4096, &wg, cpuprofFile)
 	case "SortedIntTM":
-		Benchmarks.SortedIntTMBenchmark(nil, *port, *nrprocs, 1000, *manager, 38860, 524288, 10, cpuprofFile)
+		Benchmarks.SortedIntTMBenchmark(nil, *port, *nrprocs, 2000, *manager, 80000, 524288, 10, cpuprofFile)
 	case "SortedIntMW":
-		batchSize := 1000
-		N := 38860
+		batchSize := 2000
+		N := 80000
 		var Bmax int32 = 524288
 		Imax := 10
 		Benchmarks.SortedIntMVBenchmark(*nrprocs, batchSize, *manager, N, Bmax, Imax, cpuprofFile)

@@ -6,6 +6,8 @@ type DSMApiInterface interface{
 	Shutdown() error
 	Read(addr int) (byte, error)
 	Write(addr int, val byte) error
+	ReadBytes(addr int, length int) ([]byte, error)
+	WriteBytes(addr int, val []byte) error
 	Malloc(size int) (int, error)
 	Free(addr, size int) error
 	Barrier(id uint8)

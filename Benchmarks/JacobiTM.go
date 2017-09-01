@@ -27,20 +27,20 @@ func TestJacobiProgramTreadMarks(t *testing.T) {
 func JacobiProgramTreadMarks(matrixsize int, nrIterations int, nrProcs int, isManager bool, port int, group *sync.WaitGroup, pprofFile io.Writer) {
 	var M = matrixsize
 	var N = matrixsize
-	const float32_BYTE_LENGTH = 4 //32 bits
-	var privateArray [][]float32  //privateArray[M][N]
-	privateArray = make([][]float32, M)
+	const float64_BYTE_LENGTH = 8 //32 bits
+	var privateArray [][]float64  //privateArray[M][N]
+	privateArray = make([][]float64, M)
 	for i := range privateArray {
-		privateArray[i] = make([]float32, N)
+		privateArray[i] = make([]float64, N)
 	}
 	gridAddr := func(m, n int) int {
 		if m >= M || n >= N || m < 0 || n < 0 {
 			return -1
 		}
-		return (m * N * float32_BYTE_LENGTH) + (n * float32_BYTE_LENGTH)
+		return (m * N * float64_BYTE_LENGTH) + (n * float64_BYTE_LENGTH)
 	}
 
-	tm, _ := treadmarks.NewTreadmarksApi(M*N*float32_BYTE_LENGTH, 4096, uint8(nrProcs), uint8(nrProcs), uint8(nrProcs))
+	tm, _ := treadmarks.NewTreadmarksApi(M*N*float64_BYTE_LENGTH, 4096, uint8(nrProcs), uint8(nrProcs), uint8(nrProcs))
 	tm.Initialize(port)
 	if !isManager {
 		tm.Join("localhost", 2000)
@@ -68,37 +68,31 @@ func JacobiProgramTreadMarks(matrixsize int, nrIterations int, nrProcs int, isMa
 		fmt.Println("in iteration nr", iter)
 		for i := begin; i < end; i++ {
 			for j := 0; j < N; j++ {
-				divisionAmount := 4
-				g1 := []byte{0, 0, 0, 0}
-				g2 := []byte{0, 0, 0, 0}
-				g3 := []byte{0, 0, 0, 0}
-				g4 := []byte{0, 0, 0, 0}
+				var divisionAmount float64 = 4
+				var g1, g2, g3, g4 float64
 
 				if i > 0 {
-					g1 = readBytes(tm, gridAddr(i-1, j), float32_BYTE_LENGTH)
+					g1 = readFloat(tm, gridAddr(i-1, j))
 
 				} else {
 					divisionAmount--
 				}
 				if i < M-1 {
-					if i+1 == end {
-						//log.Println("about to read to shared variable with i+1, j values:", i+1, j, "and address", gridEntryAddresses[i+1][j])
-					}
-					g2 = readBytes(tm, gridAddr(i+1, j), float32_BYTE_LENGTH)
+					g2 = readFloat(tm, gridAddr(i+1, j))
 				} else {
 					divisionAmount--
 				}
 				if j > 0 {
-					g3 = readBytes(tm, gridAddr(i, j-1), float32_BYTE_LENGTH)
+					g3 = readFloat(tm, gridAddr(i, j-1))
 				} else {
 					divisionAmount--
 				}
 				if j < N-1 {
-					g4 = readBytes(tm, gridAddr(i, j+1), float32_BYTE_LENGTH)
+					g4 = readFloat(tm, gridAddr(i, j+1))
 				} else {
 					divisionAmount--
 				}
-				privateArray[i][j] = (bytesToFloat32(g1) + bytesToFloat32(g2) + bytesToFloat32(g3) + bytesToFloat32(g4)) / float32(divisionAmount)
+				privateArray[i][j] = (g1 +g2 + g3 + g4) / divisionAmount
 			}
 		}
 		//fmt.Println("at barrier 1 in iteration", iter)
@@ -106,13 +100,7 @@ func JacobiProgramTreadMarks(matrixsize int, nrIterations int, nrProcs int, isMa
 		for i := begin; i < end; i++ {
 			for j := 0; j < N; j++ {
 				addr := gridAddr(i, j)
-				var valAsBytes []byte = float32ToBytes(privateArray[i][j])
-				if len(valAsBytes) > 8 {
-					panic("valAsBytes was longer than expected")
-				}
-				for r, b := range valAsBytes {
-					tm.Write(addr+r, b)
-				}
+				writeFloat(tm, addr, privateArray[i][j])
 			}
 		}
 		//fmt.Println("at barrier 2 in iteration", iter)

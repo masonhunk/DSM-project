@@ -20,8 +20,8 @@ func TestParallelSumTM(t *testing.T) {
 	log.SetOutput(ioutil.Discard)
 	group := sync.WaitGroup{}
 	pageSize := 4096
-	nrOfInts := 4096 * 1000000
-	batchSize := 10000 * 4096 // nr of ints in batch
+	var nrOfInts int64 = 4096 * 1000000
+	var batchSize int64 = 10000 * 4096 // nr of ints in batch
 	nrProcs := 4
 	group.Add(nrProcs)
 	go ParallelSumTM(batchSize, nrOfInts, nrProcs, true, 2000, pageSize, &group, nil)
@@ -107,12 +107,12 @@ func ParallelSumMW(batchSize int, nrOfInts int, nrProcs int, isManager bool, pag
 		mw.WriteInt64(currBatchNrAddr, currBatchNr+batchSize)
 		mw.Release(1)
 		for i := 0; i < batchSize; i++ {
-			localSum = (localSum * localSum) % 2000000000
+			localSum = ((localSum * localSum) % 2000000000) +33
 		}
 
 	}
 	mw.Lock(2)
-	localSum = (localSum * mw.ReadInt64(sharedSumAddr)) % 2000000000
+	localSum = ((localSum * mw.ReadInt64(sharedSumAddr)) % 2000000000) +33
 	mw.WriteInt64(sharedSumAddr, localSum)
 	mw.Release(2)
 	mw.Barrier(2)
@@ -134,7 +134,7 @@ func ParallelSumMW(batchSize int, nrOfInts int, nrProcs int, isManager bool, pag
 	}()
 }
 
-func ParallelSumTM(batchSize int, nrOfInts int, nrProcs int, isManager bool, port int, pageByteSize int, group *sync.WaitGroup, cpuProfFile io.Writer) {
+func ParallelSumTM(batchSize int64, nrOfInts int64, nrProcs int, isManager bool, port int, pageByteSize int, group *sync.WaitGroup, cpuProfFile io.Writer) {
 	const INT_BYTE_LENGTH = 8 //64 bits
 	var sharedSumAddr int
 	var currBatchNrAddr int
@@ -173,25 +173,32 @@ func ParallelSumTM(batchSize int, nrOfInts int, nrProcs int, isManager bool, por
 	}
 	tm.Barrier(1) //ensures everyone gets their first lock
 
-	localSum := 1
+	var prevBatchNumber int64
+	var localSum int64 = 1
 	for {
 		//lock and get next batch and calculate localSum
 		tm.AcquireLock(1)
 		currBatchNr := readInt64(tm, currBatchNrAddr)
+		if prevBatchNumber > currBatchNr {
+			fmt.Println(currBatchNr)
+		}
+		prevBatchNumber = currBatchNr
+
 		if currBatchNr >= nrOfInts {
 			tm.ReleaseLock(1)
 			break
 		}
 		//tm.WriteInt64(currBatchNrAddr, currBatchNr+batchSize)
-		writeInt64(tm, currBatchNrAddr, int64(currBatchNr+batchSize))
+		writeInt64(tm, currBatchNrAddr, currBatchNr+batchSize)
 		tm.ReleaseLock(1)
-		for i := 0; i < batchSize; i++ {
-			localSum = (localSum * localSum) % 2000000000
+		var i int64
+		for i = 0; i < batchSize; i++ {
+			localSum = ((localSum * localSum) % 2000000000)+33
 		}
 
 	}
 	tm.AcquireLock(2)
-	localSum = (localSum * readInt64(tm, sharedSumAddr)) % 2000000000
+	localSum = ((localSum * readInt64(tm, sharedSumAddr)) % 2000000000) +33
 	writeInt64(tm, sharedSumAddr, int64(localSum))
 	tm.ReleaseLock(2)
 	tm.Barrier(2)

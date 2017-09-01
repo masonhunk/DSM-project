@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"sync"
 	"time"
+	"fmt"
 )
 
 type TreadmarksApi struct {
@@ -33,6 +34,7 @@ type TreadmarksApi struct {
 	conn                           network.Connection
 	group                          *sync.WaitGroup
 	timestamp                      Timestamp
+	diffLock						*sync.Mutex
 }
 
 var _ dsm_api.DSMApiInterface = new(TreadmarksApi)
@@ -54,6 +56,7 @@ func NewTreadmarksApi(memSize, pageByteSize int, nrProcs, nrLocks, nrBarriers ui
 	t.dirtyPages = make(map[int16]bool)
 	t.twinsLock = new(sync.RWMutex)
 	t.dirtyPagesLock = new(sync.RWMutex)
+	t.diffLock = new(sync.Mutex)
 	return t, err
 }
 
@@ -94,8 +97,16 @@ func (t *TreadmarksApi) Read(addr int) (byte, error) {
 	return t.memory.Read(addr)
 }
 
+func (t *TreadmarksApi) ReadBytes(addr int, length int) ([]byte, error) {
+	return t.memory.ReadBytes(addr, length)
+}
+
 func (t *TreadmarksApi) Write(addr int, val byte) error {
 	return t.memory.Write(addr, val)
+}
+
+func (t *TreadmarksApi) WriteBytes(addr int, val []byte) error {
+	return t.memory.WriteBytes(addr, val)
 }
 
 func (t *TreadmarksApi) Malloc(size int) (int, error) {
@@ -111,7 +122,6 @@ func (t *TreadmarksApi) Barrier(id uint8) {
 }
 
 func (t *TreadmarksApi) AcquireLock(id uint8) {
-
 	time.Sleep(0)
 	lock := t.locks[id]
 	lock.Lock()
@@ -147,34 +157,51 @@ func (t *TreadmarksApi) ReleaseLock(id uint8) {
 //                        Initialisation                          //
 //----------------------------------------------------------------//
 
-func (t *TreadmarksApi) onFault(addr int, faultType byte, accessType string, value byte) {
+func (t *TreadmarksApi) onFault(addr int, length int, faultType byte, accessType string, value []byte) error {
+	addrList := make([]int, 0)
+	for i := t.memory.GetPageAddr(addr); i < addr+length; i = i + t.memory.GetPageSize() {
+		addrList = append(addrList, i)
+	}
+	access := t.memory.GetRightsList(addrList)
 
-	pageNr := int16(t.memory.GetPageAddr(addr) / t.memory.GetPageSize())
-	page := t.pagearray[pageNr]
-	access := t.memory.GetRights(addr)
-	if access == memory.NO_ACCESS {
-		if !page.hasCopy {
-			t.sendCopyRequest(pageNr)
-			<-t.channel
+
+	for i := range access {
+		pageNr := int16(math.Floor(float64(t.memory.GetPageAddr(addr)) / float64(t.memory.GetPageSize())))
+		if int(pageNr) >= len(t.pagearray) || pageNr < 0 {
+			fmt.Println(math.Floor(float64(addr) / float64(t.memory.GetPageSize())))
+			fmt.Println(addr, t.memory.GetPageSize())
+			fmt.Println(pageNr, len(t.pagearray), addr, t.memory.GetPageSize())
 		}
-		if t.hasMissingDiffs(pageNr) {
-			t.sendDiffRequests(pageNr)
-			t.applyAllDiffs(pageNr)
+		page := t.pagearray[pageNr]
+		if access[i] == memory.NO_ACCESS {
+			if !page.hasCopy {
+				t.sendCopyRequest(pageNr)
+				<-t.channel
+			}
+			if t.hasMissingDiffs(pageNr) {
+				t.sendDiffRequests(pageNr)
+				t.applyAllDiffs(pageNr)
+			}
+		}
+		if accessType == "WRITE" {
+			t.twinsLock.Lock()
+			t.dirtyPagesLock.Lock()
+
+			t.twins[pageNr] = make([]byte, t.pageByteSize)
+
+			copy(t.twins[pageNr], t.memory.PrivilegedRead(t.memory.GetPageAddr(int(pageNr)), t.memory.GetPageSize()))
+			t.dirtyPages[pageNr] = true
+			t.dirtyPagesLock.Unlock()
+			t.twinsLock.Unlock()
 		}
 	}
+
 	if accessType == "WRITE" {
-		t.dirtyPagesLock.Lock()
-		t.twinsLock.Lock()
-		t.twins[pageNr] = make([]byte, t.pageByteSize)
-		copy(t.twins[pageNr], t.memory.PrivilegedRead(t.memory.GetPageAddr(int(pageNr)), t.memory.GetPageSize()))
-		t.memory.PrivilegedWrite(addr, []byte{value})
-		t.dirtyPages[pageNr] = true
-		t.dirtyPagesLock.Unlock()
-		t.twinsLock.Unlock()
-		t.memory.SetRights(addr, memory.READ_WRITE)
+		t.memory.SetRightsList(addrList, memory.READ_WRITE)
 	} else {
-		t.memory.SetRights(addr, memory.READ_ONLY)
+		t.memory.SetRightsList(addrList, memory.READ_ONLY)
 	}
+	return nil
 }
 
 func (t *TreadmarksApi) initializeLocks() {
@@ -194,9 +221,10 @@ func (t *TreadmarksApi) initializeBarriers() {
 //----------------------------------------------------------------//
 
 func (t *TreadmarksApi) newWritenoticeRecord(pageNr int16) {
+	ts := NewTimestamp(t.nrProcs).merge(t.timestamp)
 	wn := WritenoticeRecord{
 		Owner:     t.myId,
-		Timestamp: t.timestamp,
+		Timestamp: ts,
 	}
 	t.pagearray[pageNr].writenotices[t.myId] = append(t.pagearray[pageNr].writenotices[t.myId], wn)
 	delete(t.dirtyPages, pageNr)
@@ -240,13 +268,15 @@ func (t *TreadmarksApi) newInterval() {
 			pages = append(pages, page)
 			t.newWritenoticeRecord(page)
 		}
+		ts := NewTimestamp(t.nrProcs).merge(t.timestamp)
 		interval := IntervalRecord{
 			Owner:     t.myId,
-			Timestamp: t.timestamp,
+			Timestamp: ts,
 			Pages:     pages,
 		}
 		t.procarray[t.myId] = append(t.procarray[t.myId], interval)
 	}
+
 	t.dirtyPagesLock.Unlock()
 }
 
@@ -258,7 +288,6 @@ func (t *TreadmarksApi) addInterval(interval IntervalRecord) {
 		}
 		t.procarray[interval.Owner] = append(t.procarray[interval.Owner], interval)
 		t.timestamp = t.timestamp.merge(interval.Timestamp)
-	} else {
 	}
 }
 
@@ -386,12 +415,14 @@ func (t *TreadmarksApi) sendLockAcquireRequest(to uint8, lockId uint8) {
 }
 
 func (t *TreadmarksApi) sendLockAcquireResponse(lockId uint8, to uint8, timestamp Timestamp) {
+
 	intervals := t.getMissingIntervals(timestamp)
 	resp := LockAcquireResponse{
 		LockId:    lockId,
 		Intervals: intervals,
 		Timestamp: t.timestamp,
 	}
+
 	t.sendMessage(to, 1, resp)
 }
 
@@ -497,6 +528,7 @@ func (t *TreadmarksApi) handleIncoming() {
 	buf := bytes.NewBuffer([]byte{})
 Loop:
 	for {
+		time.Sleep(0)
 		var msg []byte
 		select {
 		case msg = <-t.in:
@@ -568,7 +600,6 @@ Loop:
 }
 
 func (t *TreadmarksApi) handleLockAcquireRequest(req LockAcquireRequest) {
-
 	id := req.LockId
 	lock := t.locks[id]
 	lock.Lock()
@@ -644,7 +675,6 @@ func (t *TreadmarksApi) handleBarrierResponse(resp BarrierResponse) {
 	for i := len(resp.Intervals); i > 0; i-- {
 		t.addInterval(resp.Intervals[i-1])
 	}
-
 	t.channel <- true
 }
 
@@ -655,6 +685,10 @@ func (t *TreadmarksApi) handleCopyRequest(req CopyRequest) {
 }
 
 func (t *TreadmarksApi) handleCopyResponse(resp CopyResponse) {
+	if int(resp.PageNr)*t.memory.GetPageSize() >= t.memSize {
+		fmt.Println("booom")
+		fmt.Println(resp.PageNr)
+	}
 	t.memory.PrivilegedWrite(int(resp.PageNr)*t.memory.GetPageSize(), resp.Data)
 	page := t.pagearray[resp.PageNr]
 	page.hasCopy = true
@@ -724,6 +758,10 @@ func (t *TreadmarksApi) handleDiffResponse(resp DiffResponse) {
 }
 
 func (t *TreadmarksApi) applyAllDiffs(pageNr int16) {
+
+	x := 0
+	t.diffLock.Lock()
+	defer t.diffLock.Unlock()
 	wnl := t.pagearray[pageNr].writenotices
 	index := t.pagearray[pageNr].index
 	for {
@@ -744,19 +782,23 @@ func (t *TreadmarksApi) applyAllDiffs(pageNr int16) {
 		}
 		diff := wnl[best][index[best]].Diff
 		t.applyDiff(pageNr, diff)
-		index[best]++
+		x++
+		index[best] = index[best]+1
 	}
+
+	t.pagearray[pageNr].index = index
 }
 
 func (t *TreadmarksApi) applyDiff(pageNr int16, diff map[int]byte) {
+
 	size := t.memory.GetPageSize()
 	addr := int(pageNr) * size
 	data := t.memory.PrivilegedRead(addr, size)
 
+
 	for key, value := range diff {
 		data[key] = value
 	}
-
 	t.memory.PrivilegedWrite(addr, data)
 }
 

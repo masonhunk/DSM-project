@@ -4,7 +4,6 @@ import (
 	"DSM-project/dsm-api"
 	"DSM-project/dsm-api/treadmarks"
 	"DSM-project/multiview"
-	"DSM-project/utils"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -12,6 +11,7 @@ import (
 	"runtime/pprof"
 	"sync"
 	"time"
+	"encoding/binary"
 )
 
 func SortedIntMVBenchmark(nrProcs int, batchSize int, isManager bool, N int, Bmax int32, Imax int, pprofFile io.Writer) {
@@ -19,7 +19,7 @@ func SortedIntMVBenchmark(nrProcs int, batchSize int, isManager bool, N int, Bma
 	mv := multiview.NewMultiView()
 	rand := NewRandom()
 	address := make([]int, N)
-	pagebytesize := 8
+	pagebytesize := 128
 	memsize := (((N+1)*4)/pagebytesize + 1) * pagebytesize
 	prog := N*4 + ((N%(pagebytesize/4))+1)*memsize
 	if isManager {
@@ -157,7 +157,7 @@ func SortedIntTMBenchmark(group *sync.WaitGroup, port, nrProcs, batchSize int, i
 		group.Add(1)
 	}
 	rand := NewRandom()
-	pagebytesize := 8
+	pagebytesize := 128
 	tm, err := treadmarks.NewTreadmarksApi((((N+1)*4)/pagebytesize+1)*pagebytesize, pagebytesize, uint8(nrProcs), uint8(2), uint8(4))
 	tm.Initialize(port)
 	if err != nil {
@@ -208,7 +208,6 @@ func SortedIntTMBenchmark(group *sync.WaitGroup, port, nrProcs, batchSize int, i
 			end = Min(start+batchSize, N)
 			writeInt(tm, 0, end)
 			tm.ReleaseLock(0)
-
 			var kj int32
 			var rj int
 			for j := start; j < end; j++ {
@@ -220,15 +219,15 @@ func SortedIntTMBenchmark(group *sync.WaitGroup, port, nrProcs, batchSize int, i
 						rj++
 					}
 				}
+
 				writeInt(tm, key(j), rj)
+
 				if err != nil {
 					panic(err.Error())
 				}
 			}
 		}
-		fmt.Println(tm.GetId(), " at barrier 1")
 		tm.Barrier(1)
-		fmt.Println(tm.GetId(), " passed barrier 1")
 		//Partial verification
 		if isManager {
 			if N > 8388607 {
@@ -243,9 +242,7 @@ func SortedIntTMBenchmark(group *sync.WaitGroup, port, nrProcs, batchSize int, i
 			writeInt(tm, 0, 0)
 
 		}
-		fmt.Println(tm.GetId(), " at barrier 2")
 		tm.Barrier(2)
-		fmt.Println(tm.GetId(), " passed barrier 2")
 
 	}
 	tm.Barrier(3)
@@ -253,6 +250,9 @@ func SortedIntTMBenchmark(group *sync.WaitGroup, port, nrProcs, batchSize int, i
 	for i := 0; i < N; i++ {
 		x := readInt(tm, key(i))
 		//fmt.Println(i, " - ", K[i], " - ", x, " - ", N)
+		if len(sorted) <= x {
+			sorted = append(sorted, make([]int32, len(sorted))...)
+		}
 		sorted[x] = K[i]
 	}
 	var last int32 = 0
@@ -263,7 +263,9 @@ func SortedIntTMBenchmark(group *sync.WaitGroup, port, nrProcs, batchSize int, i
 		}
 		last = v
 	}
-
+	fmt.Println(tm.GetId(), " at barrier 3")
+	tm.Barrier(3)
+	fmt.Println(tm.GetId(), " passed barrier 3")
 	if isManager {
 		endTime := time.Now()
 		diff := endTime.Sub(startTime)
@@ -275,56 +277,35 @@ func SortedIntTMBenchmark(group *sync.WaitGroup, port, nrProcs, batchSize int, i
 		group.Done()
 		group.Wait()
 	}
-	if isManager {
-		time.Sleep(time.Second)
-	}
 
 }
 
 func readInt(dsm dsm_api.DSMApiInterface, addr int) int {
-	bInt := make([]byte, 4)
-	for i := range bInt {
-		bInt[i], _ = dsm.Read(addr + i)
-
+	bInt, _ := dsm.ReadBytes(addr, 4)
+	result, n := binary.Varint(bInt)
+	if n == 0 {
+		panic("buf too small for varint.")
 	}
-	return int(utils.BytesToInt32(bInt))
+	return int(result)
 }
 
 func writeInt(dsm dsm_api.DSMApiInterface, addr, input int) {
-	bInt := utils.Int32ToBytes(int32(input))
-	for i := range bInt {
-		dsm.Write(addr+i, bInt[i])
-
-	}
+	bInt := make([]byte, 4)
+	binary.PutVarint(bInt, int64(input))
+	dsm.WriteBytes(addr, bInt)
 }
 
-func readInt64(dsm dsm_api.DSMApiInterface, addr int) int {
-	bInt := make([]byte, 8)
-	for i := range bInt {
-		bInt[i], _ = dsm.Read(addr + i)
-
+func readInt64(dsm dsm_api.DSMApiInterface, addr int) int64 {
+	bInt, _ := dsm.ReadBytes(addr, 8)
+	result, n := binary.Varint(bInt)
+	if n == 0 {
+		panic("buf too small for varint.")
 	}
-	return int(utils.BytesToInt64(bInt))
+	return result
 }
 
 func writeInt64(dsm dsm_api.DSMApiInterface, addr int, input int64) {
-	bInt := utils.Int64ToBytes(input)
-	for i := range bInt {
-		dsm.Write(addr+i, bInt[i])
-
-	}
-}
-
-func readBytes(dsm dsm_api.DSMApiInterface, addr, length int) []byte {
-	res := make([]byte, length)
-	for i := 0; i < length-1; i++ {
-		res[i], _ = dsm.Read(addr + i)
-	}
-	return res
-}
-
-func writeBytes(dsm dsm_api.DSMApiInterface, addr int, bytes []byte) {
-	for i, b := range bytes {
-		dsm.Write(addr+i, b)
-	}
+	bInt := make([]byte, 8)
+	binary.PutVarint(bInt, input)
+	dsm.WriteBytes(addr, bInt)
 }

@@ -1,7 +1,6 @@
 package network
 
 import (
-	"DSM-project/utils"
 	"bytes"
 	"encoding/binary"
 	"fmt"
@@ -44,7 +43,7 @@ type peer struct {
 func NewConnection(port int, bufferSize int) (*connection, <-chan []byte, chan<- []byte) {
 	c := new(connection)
 	c.peers = make([]*peer, 1)
-	c.in, c.out = make(chan []byte, bufferSize), make(chan []byte, bufferSize)
+	c.in, c.out = make(chan []byte, 1000), make(chan []byte, 1000)
 	c.running = true
 	c.group = new(sync.WaitGroup)
 	c.myPort = port
@@ -116,7 +115,9 @@ func (c *connection) sendLoop() {
 	c.group.Add(1)
 	var id int
 	for msg := range c.out {
+		time.Sleep(0)
 		id = int(msg[0])
+
 		if id == c.myId {
 			c.in <- msg
 		} else {
@@ -127,6 +128,7 @@ func (c *connection) sendLoop() {
 				}()
 			} else {
 				msg[0] = 1
+
 				write(c.peers[id].conn, msg)
 			}
 		}
@@ -144,10 +146,14 @@ func (c *connection) sendLoop() {
 func (c *connection) receive(peer *peer) {
 	c.group.Add(1)
 	for c.running {
+
 		b := read(peer.conn)
 		if b == nil {
-			break
+			continue
 		}
+		if peer.id == 0 || peer.id == 1 {
+		}
+
 		if len(b) > 0 && b[0] == 0 {
 			id := int(b[1])
 			ip, port, _ := addrFromBytes(b[2:])
@@ -156,6 +162,7 @@ func (c *connection) receive(peer *peer) {
 		} else {
 			msg := append([]byte{byte(peer.id)}, b[1:]...)
 			c.in <- msg
+
 		}
 	}
 	peer.conn.Close()
@@ -248,20 +255,29 @@ func write(conn net.Conn, data []byte) {
 	if len(data) != int(length) {
 		panic(fmt.Sprint("Length did not match.", length, len(data)))
 	}
-	l := utils.Uint64ToBytes(uint64(len(data)))
+	l := make([]byte, 8)
+	binary.PutVarint(l, int64(len(data)))
 	msg := append(l, data...)
-	conn.Write(msg)
+	n := 0
+	var err error
+	for {
+		n, err = conn.Write(msg[n:])
+		if err == nil {
+			break
+		}
+		panic(err.Error())
+	}
 }
 
 func read(conn net.Conn) []byte {
-	msg := make([]byte, 8)
+	length := make([]byte, 8)
 	conn.SetReadDeadline(time.Now().Add(time.Second))
-	_, err := io.ReadFull(conn, msg)
+	_, err := io.ReadFull(conn, length)
 	if err != nil {
 		return nil
 	}
-	l := int(utils.BytesToUint64(msg))
-	msg = make([]byte, l)
+	l, _ := binary.Varint(length)
+	msg := make([]byte, l)
 	_, err = io.ReadFull(conn, msg)
 	if err != nil {
 		return nil

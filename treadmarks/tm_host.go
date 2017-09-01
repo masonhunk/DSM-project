@@ -118,7 +118,7 @@ func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarri
 	for i := range tm.locks {
 		tm.locks[i] = new(sync.Mutex)
 	}
-
+/*
 	tm.VirtualMemory.AddFaultListener(func(addr int, faultType byte, accessType string, value byte) {
 		//do fancy protocol stuff here
 		//if no copy, get one.
@@ -154,7 +154,7 @@ func NewTreadMarks(virtualMemory memory.VirtualMemory, nrProcs, nrLocks, nrBarri
 			tm.SetRights(addr, memory.READ_WRITE)
 			tm.UnlockPage(pageNr)
 		}
-	})
+	})*/
 	return &tm
 }
 
