@@ -28,7 +28,7 @@ type P2PServer struct {
 func NewP2PServer(handler func(Message) error, port int, logger *CSVStructLogger) (*P2PServer, error) {
 	s := new(P2PServer)
 	s.conn, s.in, s.out, _ = NewConnection(port, 1000)
-	s.shutdown = make(chan bool)
+	s.shutdown = make(chan bool, 1)
 	s.handler = handler
 	s.group = new(sync.WaitGroup)
 	go s.recieveLoop()
@@ -66,6 +66,8 @@ Loop:
 		select {
 		case data = <-s.in:
 		case <-s.shutdown:
+		}
+		if data == nil {
 			break Loop
 		}
 		buf.Write(data[1:])

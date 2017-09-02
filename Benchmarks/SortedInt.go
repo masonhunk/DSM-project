@@ -17,6 +17,7 @@ import (
 func SortedIntMVBenchmark(nrProcs int, batchSize int, isManager bool, N int, Bmax int32, Imax int, pprofFile io.Writer) {
 	log.SetOutput(ioutil.Discard)
 	mv := multiview.NewMultiView()
+
 	rand := NewRandom()
 	address := make([]int, N)
 	pagebytesize := 128
@@ -25,10 +26,12 @@ func SortedIntMVBenchmark(nrProcs int, batchSize int, isManager bool, N int, Bma
 	if isManager {
 		mv.Initialize(memsize, pagebytesize, nrProcs)
 		fmt.Println("I am the manager.")
+		allocs := make([]int, len(address))
 		for i := range address {
-			address[i], _ = mv.Malloc(4)
+			allocs[i] = 4
 			//fmt.Println("manager address", i, ":",address[i])
 		}
+		address, _ = mv.MultiMalloc(allocs)
 		prog, _ = mv.Malloc(4)
 		mv.Barrier(3)
 	} else {
@@ -54,6 +57,7 @@ func SortedIntMVBenchmark(nrProcs int, batchSize int, isManager bool, N int, Bma
 		}
 
 	}
+	mv.SetShouldLogNetwork(true)
 	K := make([]int32, N)
 	for i := 0; i < N; i++ {
 		K[i] = int32(float64(Bmax) * ((rand.Next() + rand.Next() + rand.Next() + rand.Next()) / 4))

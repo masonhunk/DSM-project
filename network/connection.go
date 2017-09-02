@@ -105,7 +105,6 @@ func (c *connection) Connect(ip string, port int) (int, error) {
 func (c *connection) Close() {
 	close(c.out)
 	c.group.Wait()
-
 }
 
 /*

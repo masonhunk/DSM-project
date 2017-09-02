@@ -84,8 +84,10 @@ func main() {
 		Benchmarks.TestNonSynchronizedReadWritesTM(100000000, cpuprofFile)
 	default:
 		fmt.Println("Default is running.")
-		Benchmarks.SortedIntMVBenchmark(1, 100, true, 80000, 524288, 10, cpuprofFile)
-		fmt.Println("Benchmark done.")
+		wg := sync.WaitGroup{}
+		wg.Add(1)
+		matrixsize := 1024 * 3
+		Benchmarks.JacobiProgramMultiView(matrixsize, 20, *nrprocs, *manager, 128, &wg, cpuprofFile)
 	}
 
 	if *memprofile == "" {

@@ -5,6 +5,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"io/ioutil"
 	"log"
+	"math"
 	"sync"
 	"testing"
 	"time"
@@ -132,6 +133,20 @@ func TestMultiview_Lock(t *testing.T) {
 	mw3.Leave()
 	mw2.Leave()
 	mw1.Shutdown()
+}
+
+func TestMultiview_MultiMalloc2(t *testing.T) {
+	mw1 := NewMultiView()
+	gridSize := 1024
+	mw1.Initialize(gridSize*gridSize*4, 4096, 1)
+	req := make([]int, gridSize*gridSize)
+	for i := range req {
+		req[i] = 4
+	}
+	addrs, _ := mw1.MultiMalloc(req)
+	for i := range addrs {
+		assert.True(t, addrs[i] < math.MaxInt32)
+	}
 }
 
 func TestMultiview_Barrier(t *testing.T) {

@@ -77,6 +77,9 @@ func JacobiProgramMultiView(matrixSize int, nrIterations int, nrProcs int, isMan
 			row := gridEntryAddresses[i]
 			for j := range row {
 				gridEntryAddresses[i][j] = addrs[i+j]
+				if gridEntryAddresses[i][j] < 0 {
+					panic(fmt.Sprintln("Address was negative: ", i, ", ", j, ", ", gridEntryAddresses[i][j]))
+				}
 				//gridEntryAddresses[i][j], _ = mw.Malloc(float32_BYTE_LENGTH)
 				//placeholder value
 				/*var valAsBytes []byte = float32ToBytes(20.0)
@@ -122,7 +125,7 @@ func JacobiProgramMultiView(matrixSize int, nrIterations int, nrProcs int, isMan
 		panic("begin is larger than end")
 	}
 	fmt.Println("begin, end at host", mw.Id, ":", begin, end)
-
+	mw.SetShouldLogNetwork(true)
 	//fmt.Println("at barrier 1")
 	mw.Barrier(1)
 

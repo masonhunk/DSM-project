@@ -35,6 +35,8 @@ type TreadmarksApi struct {
 	group                          *sync.WaitGroup
 	timestamp                      Timestamp
 	diffLock                       *sync.Mutex
+	shouldLogMessages              bool
+	messageLog                     []int
 }
 
 var _ dsm_api.DSMApiInterface = new(TreadmarksApi)
@@ -57,6 +59,7 @@ func NewTreadmarksApi(memSize, pageByteSize int, nrProcs, nrLocks, nrBarriers ui
 	t.twinsLock = new(sync.RWMutex)
 	t.dirtyPagesLock = new(sync.RWMutex)
 	t.diffLock = new(sync.Mutex)
+
 	return t, err
 }
 
@@ -90,6 +93,17 @@ func (t *TreadmarksApi) Shutdown() error {
 	t.shutdown <- true
 	t.group.Wait()
 	t.conn.Close()
+	if t.shouldLogMessages {
+		fmt.Println("Lock acquire request messages: ", t.messageLog[0])
+		fmt.Println("Lock acquire response messages: ", t.messageLog[1])
+		fmt.Println("Lock release messages: ", t.messageLog[2])
+		fmt.Println("Barrier request messages: ", t.messageLog[3])
+		fmt.Println("Barrier response messages: ", t.messageLog[4])
+		fmt.Println("Copy request messages: ", t.messageLog[5])
+		fmt.Println("Copy response messages: ", t.messageLog[6])
+		fmt.Println("Diff request messages: ", t.messageLog[7])
+		fmt.Println("Diff response messages: ", t.messageLog[8])
+	}
 	return nil
 }
 
@@ -402,6 +416,9 @@ func (t *TreadmarksApi) sendMessage(to, msgType uint8, msg interface{}) {
 	data[1] = byte(msgType)
 	w.Read(data[2:])
 	t.out <- data
+	if t.shouldLogMessages {
+		t.log(msgType)
+	}
 }
 
 func (t *TreadmarksApi) sendLockAcquireRequest(to uint8, lockId uint8) {
@@ -684,10 +701,6 @@ func (t *TreadmarksApi) handleCopyRequest(req CopyRequest) {
 }
 
 func (t *TreadmarksApi) handleCopyResponse(resp CopyResponse) {
-	if int(resp.PageNr)*t.memory.GetPageSize() >= t.memSize {
-		fmt.Println("booom")
-		fmt.Println(resp.PageNr)
-	}
 	t.memory.PrivilegedWrite(int(resp.PageNr)*t.memory.GetPageSize(), resp.Data)
 	page := t.pagearray[resp.PageNr]
 	page.hasCopy = true
@@ -826,4 +839,15 @@ func getGID() uint64 {
 	b = b[:bytes.IndexByte(b, ' ')]
 	n, _ := strconv.ParseUint(string(b), 10, 64)
 	return n
+}
+
+func (t *TreadmarksApi) SetLogging(b bool) {
+	t.shouldLogMessages = b
+}
+
+func (t *TreadmarksApi) log(msgId uint8) {
+	if t.messageLog == nil {
+		t.messageLog = make([]int, 9)
+	}
+	t.messageLog[msgId]++
 }

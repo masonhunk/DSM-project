@@ -48,6 +48,7 @@ type Multiview struct {
 	csvLogger        *network.CSVStructLogger
 	shouldLogNetwork bool
 	messagesSent     []int
+	manager          *Manager
 }
 
 type hostMem struct {
@@ -89,12 +90,66 @@ func NewHostMem(virtualMemory memory.VirtualMemory) *hostMem {
 }
 
 func (m *Multiview) Leave() {
+	if m.shouldLogNetwork {
+		fmt.Println("Number of messages sent by host", m.Id, ":")
+		fmt.Println("READ_REQUEST", m.messagesSent[0])
+		fmt.Println("WRITE_REQUEST", m.messagesSent[1])
+		fmt.Println("READ_REPLY", m.messagesSent[2])
+		fmt.Println("WRITE_REPLY", m.messagesSent[3])
+		fmt.Println("INVALIDATE_REPLY", m.messagesSent[4])
+		fmt.Println("INVALIDATE_REQUEST", m.messagesSent[5])
+		fmt.Println("MALLOC_REQUEST", m.messagesSent[6])
+		fmt.Println("FREE_REQUEST", m.messagesSent[7])
+		fmt.Println("MALLOC_REPLY", m.messagesSent[8])
+		fmt.Println("FREE_REPLY", m.messagesSent[9])
+		fmt.Println("WELCOME_MESSAGE", m.messagesSent[10])
+		fmt.Println("READ_ACK", m.messagesSent[11])
+		fmt.Println("WRITE_ACK", m.messagesSent[12])
+		fmt.Println("LOCK_ACQUIRE_REQUEST", m.messagesSent[13])
+		fmt.Println("LOCK_ACQUIRE_RESPONSE", m.messagesSent[14])
+		fmt.Println("LOCK_RELEASE", m.messagesSent[15])
+		fmt.Println("BARRIER_REQUEST", m.messagesSent[16])
+		fmt.Println("BARRIER_RESPONSE", m.messagesSent[17])
+		fmt.Println("MULTI_MALLOC_REQUEST", m.messagesSent[18])
+		fmt.Println("MULTI_MALLOC_REPLY", m.messagesSent[19])
+	}
+	if m.manager != nil {
+		m.manager.Shutdown()
+	}
 	m.conn.Close()
 }
 
 func (m *Multiview) Shutdown() {
+	if m.shouldLogNetwork {
+		fmt.Println("Number of messages sent by host", m.Id, ":")
+		fmt.Println("READ_REQUEST", m.messagesSent[0])
+		fmt.Println("WRITE_REQUEST", m.messagesSent[1])
+		fmt.Println("READ_REPLY", m.messagesSent[2])
+		fmt.Println("WRITE_REPLY", m.messagesSent[3])
+		fmt.Println("INVALIDATE_REPLY", m.messagesSent[4])
+		fmt.Println("INVALIDATE_REQUEST", m.messagesSent[5])
+		fmt.Println("MALLOC_REQUEST", m.messagesSent[6])
+		fmt.Println("FREE_REQUEST", m.messagesSent[7])
+		fmt.Println("MALLOC_REPLY", m.messagesSent[8])
+		fmt.Println("FREE_REPLY", m.messagesSent[9])
+		fmt.Println("WELCOME_MESSAGE", m.messagesSent[10])
+		fmt.Println("READ_ACK", m.messagesSent[11])
+		fmt.Println("WRITE_ACK", m.messagesSent[12])
+		fmt.Println("LOCK_ACQUIRE_REQUEST", m.messagesSent[13])
+		fmt.Println("LOCK_ACQUIRE_RESPONSE", m.messagesSent[14])
+		fmt.Println("LOCK_RELEASE", m.messagesSent[15])
+		fmt.Println("BARRIER_REQUEST", m.messagesSent[16])
+		fmt.Println("BARRIER_RESPONSE", m.messagesSent[17])
+		fmt.Println("MULTI_MALLOC_REQUEST", m.messagesSent[18])
+		fmt.Println("MULTI_MALLOC_REPLY", m.messagesSent[19])
+	}
+	if m.manager != nil {
+		fmt.Println("BOOOM")
+		m.manager.Shutdown()
+		fmt.Println("BOOOM")
+	}
 	m.conn.Close()
-	m.
+
 }
 
 func (m *Multiview) Join(memSize, pageByteSize int) error {
@@ -131,8 +186,9 @@ func (m *Multiview) Initialize(memSize, pageByteSize int, nrProcs int) error {
 	vm := memory.NewVmem(memSize, pageByteSize)
 	bm := treadmarks.NewBarrierManagerImp(nrProcs)
 	lm := treadmarks.NewLockManagerImp()
-	manager := NewUpdatedManager(vm, lm, bm)
-	manager.Connect("localhost:2000")
+	m.manager = NewUpdatedManager(vm, lm, bm)
+	m.manager.SetShouldLogNetwork(m.shouldLogNetwork)
+	m.manager.Connect("localhost:2000")
 	return m.Join(memSize, pageByteSize)
 }
 
@@ -211,6 +267,7 @@ func (m *Multiview) Lock(id int) {
 		EventId: i,
 	}
 	m.conn.Send(msg)
+	m.logMessage(msg)
 	<-c
 	m.hasLock[id] = true
 	m.chanMap[i] = nil
@@ -225,6 +282,7 @@ func (m *Multiview) Release(id int) {
 	}
 	m.hasLock[id] = false
 	m.conn.Send(msg)
+	m.logMessage(msg)
 }
 
 func (m *Multiview) Barrier(id int) {
@@ -240,6 +298,7 @@ func (m *Multiview) Barrier(id int) {
 		EventId: i,
 	}
 	m.conn.Send(msg)
+	m.logMessage(msg)
 	<-c
 	m.chanMap[i] = nil
 }
@@ -310,6 +369,7 @@ func (m *Multiview) Malloc(sizeInBytes int) (int, error) {
 		Minipage_size: sizeInBytes, //<- contains the size for the allocation!
 	}
 	m.conn.Send(msg)
+	m.logMessage(msg)
 	s := <-c
 	m.chanMap[i] = nil
 	res, err := strconv.Atoi(s)
@@ -332,6 +392,7 @@ func (m *Multiview) MultiMalloc(sizes []int) ([]int, error) {
 		IntArr:  sizes, //<- contains the sizes for the allocations
 	}
 	m.conn.Send(msg)
+	m.logMessage(msg)
 	s := <-c
 	m.chanMap[i] = nil
 	return StringOfIntsToIntArray(s), nil
@@ -351,6 +412,7 @@ func (m *Multiview) Free(pointer, length int) error {
 		Minipage_size: length, //<- length here
 	}
 	m.conn.Send(msg)
+	m.logMessage(msg)
 	res := <-c
 	m.chanMap[i] = nil
 	if res != "ok" {
@@ -391,6 +453,7 @@ func (m *Multiview) onFault(addr int, length int, faultType byte, accessType str
 		Fault_addr: addr,
 	}
 	err := m.conn.Send(msg)
+	m.logMessage(msg)
 	panicOnErr(err)
 	<-c
 	m.chanMap[i] = nil
@@ -406,6 +469,7 @@ func (m *Multiview) onFault(addr int, length int, faultType byte, accessType str
 		msg.Type = WRITE_ACK
 	}
 	m.conn.Send(msg)
+	m.logMessage(msg)
 	return nil
 }
 
@@ -452,12 +516,14 @@ func (m *Multiview) messageHandler(msg network.MultiviewMessage, c chan bool) er
 		panicOnErr(err)
 		msg.Data = res
 		m.conn.Send(msg)
+		m.logMessage(msg)
 
 	case INVALIDATE_REQUEST:
 		m.setInAccessMap(m.mem.getVPageNr(msg.Fault_addr), memory.NO_ACCESS)
 		msg.Type = INVALIDATE_REPLY
 		msg.To = byte(0)
 		m.conn.Send(msg)
+		m.logMessage(msg)
 	case MALLOC_REPLY:
 		if msg.Err != "" {
 			m.chanMap[msg.EventId] <- msg.Err
@@ -519,41 +585,61 @@ func StringOfIntsToIntArray(s string) []int {
 func (m *Multiview) SetShouldLogNetwork(b bool) {
 	m.shouldLogNetwork = b
 	if m.messagesSent == nil {
-		m.messagesSent = make([]int, 12)
+		m.messagesSent = make([]int, 20)
+	}
+	if m.manager != nil {
+		m.manager.SetShouldLogNetwork(b)
 	}
 }
 
-func (m *Multiview) LogMessage(message network.MultiviewMessage) {
+func (m *Multiview) logMessage(message network.MultiviewMessage) {
 	if m.shouldLogNetwork {
-
+		m.messagesSent[mTypeToInt(message.GetType())]++
 	}
 }
 
-func mTypeToInt(t string) int {
-	switch t {
+func mTypeToInt(s string) int {
+	switch s {
 	case READ_REQUEST:
 		return 0
 	case WRITE_REQUEST:
 		return 1
-	case INVALIDATE_REPLY:
+	case READ_REPLY:
 		return 2
-	case MALLOC_REQUEST:
+	case WRITE_REPLY:
 		return 3
-	case FREE_REQUEST:
+	case INVALIDATE_REPLY:
 		return 4
-	case WRITE_ACK:
+	case INVALIDATE_REQUEST:
 		return 5
-	case READ_ACK:
+	case MALLOC_REQUEST:
 		return 6
-	case LOCK_ACQUIRE_REQUEST:
+	case FREE_REQUEST:
 		return 7
-	case BARRIER_REQUEST:
+	case MALLOC_REPLY:
 		return 8
-	case LOCK_RELEASE:
+	case FREE_REPLY:
 		return 9
-	case MULTI_MALLOC_REQUEST:
+	case WELCOME_MESSAGE:
 		return 10
-	case MULTI_MALLOC_REPLY :
+	case READ_ACK:
 		return 11
+	case WRITE_ACK:
+		return 12
+	case LOCK_ACQUIRE_REQUEST:
+		return 13
+	case LOCK_ACQUIRE_RESPONSE:
+		return 14
+	case LOCK_RELEASE:
+		return 15
+	case BARRIER_REQUEST:
+		return 16
+	case BARRIER_RESPONSE:
+		return 17
+	case MULTI_MALLOC_REQUEST:
+		return 18
+	case MULTI_MALLOC_REPLY:
+		return 19
 	}
+	return -1
 }

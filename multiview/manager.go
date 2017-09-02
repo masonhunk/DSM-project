@@ -97,6 +97,34 @@ func (m *Manager) Connect(address string) {
 	m.conn, _ = network.NewP2PServer(m.HandleMessage, port, nil)
 }
 
+func (m *Manager) Shutdown() {
+	if m.shouldLogNetwork {
+		fmt.Println("Number of messages sent by manager:")
+		fmt.Println("READ_REQUEST", m.messagesSent[0])
+		fmt.Println("WRITE_REQUEST", m.messagesSent[1])
+		fmt.Println("READ_REPLY", m.messagesSent[2])
+		fmt.Println("WRITE_REPLY", m.messagesSent[3])
+		fmt.Println("INVALIDATE_REPLY", m.messagesSent[4])
+		fmt.Println("INVALIDATE_REQUEST", m.messagesSent[5])
+		fmt.Println("MALLOC_REQUEST", m.messagesSent[6])
+		fmt.Println("FREE_REQUEST", m.messagesSent[7])
+		fmt.Println("MALLOC_REPLY", m.messagesSent[8])
+		fmt.Println("FREE_REPLY", m.messagesSent[9])
+		fmt.Println("WELCOME_MESSAGE", m.messagesSent[10])
+		fmt.Println("READ_ACK", m.messagesSent[11])
+		fmt.Println("WRITE_ACK", m.messagesSent[12])
+		fmt.Println("LOCK_ACQUIRE_REQUEST", m.messagesSent[13])
+		fmt.Println("LOCK_ACQUIRE_RESPONSE", m.messagesSent[14])
+		fmt.Println("LOCK_RELEASE", m.messagesSent[15])
+		fmt.Println("BARRIER_REQUEST", m.messagesSent[16])
+		fmt.Println("BARRIER_RESPONSE", m.messagesSent[17])
+		fmt.Println("MULTI_MALLOC_REQUEST", m.messagesSent[18])
+		fmt.Println("MULTI_MALLOC_REPLY", m.messagesSent[19])
+	}
+	m.conn.Close()
+
+}
+
 // This is the function to call, when a manager has to handle any message.
 // This will call the correct functions, depending on the message type, and
 // then send whatever messages needs to be sent afterwards.
@@ -157,6 +185,7 @@ func (m *Manager) HandleReadReq(message network.MultiviewMessage) {
 	p := m.getCopies(vpage)[0]
 	message.To = p
 	m.conn.Send(message)
+	m.logMessage(message)
 }
 
 // This handles write requests.
@@ -175,6 +204,7 @@ func (m *Manager) HandleWriteReq(message network.MultiviewMessage) {
 		message.To = p
 		log.Println("Manager sending", message)
 		m.conn.Send(message)
+		m.logMessage(message)
 	}
 }
 
@@ -188,6 +218,7 @@ func (m *Manager) HandleInvalidateReply(message network.MultiviewMessage) {
 		log.Println("manager sending", message)
 		m.setCopies(vpage, []byte{})
 		m.conn.Send(message)
+		m.logMessage(message)
 	} else {
 		m.setCopies(vpage, m.getCopies(vpage)[1:])
 	}
@@ -226,12 +257,9 @@ func (m *Manager) handleAck(message network.MultiviewMessage) int {
 	return vpage
 }
 
-
-func (m *Manager) handleMultiAlloc(message network.MultiviewMessage)  {
+func (m *Manager) handleMultiAlloc(message network.MultiviewMessage) {
 	res := make([]int, len(message.IntArr))
-	fmt.Println("handling alloc message")
 	for r, size := range message.IntArr {
-		fmt.Println("handling alloc call", r)
 		// Alloc begins here
 		ptr, err := m.vm.Malloc(size)
 		if err != nil {
@@ -287,13 +315,13 @@ func (m *Manager) handleMultiAlloc(message network.MultiviewMessage)  {
 
 		res[r] = startpg*m.vm.GetPageSize() + m.mpt[startpg].offset
 	}
-	fmt.Println("sending multi malloc reply")
 	message.Minipage_size = 0
 	message.IntArr = res
 	message.Type = MULTI_MALLOC_REPLY
 	message.To = message.From
 	message.From = 0
 	m.conn.Send(message)
+	m.logMessage(message)
 }
 
 func (m *Manager) HandleAlloc(message network.MultiviewMessage) {
@@ -304,6 +332,7 @@ func (m *Manager) HandleAlloc(message network.MultiviewMessage) {
 		message.From = 0
 		message.Type = MALLOC_REPLY
 		m.conn.Send(message)
+		m.logMessage(message)
 	}()
 
 	size := message.Minipage_size
@@ -381,6 +410,7 @@ func (m *Manager) HandleFree(message network.MultiviewMessage) {
 	message.Type = FREE_REPLY
 	message.To = message.From
 	m.conn.Send(message)
+	m.logMessage(message)
 }
 
 func (m *Manager) handleLockAcquireRequest(message *network.MultiviewMessage) {
@@ -390,6 +420,7 @@ func (m *Manager) handleLockAcquireRequest(message *network.MultiviewMessage) {
 	message.From = byte(0)
 	message.Type = LOCK_ACQUIRE_RESPONSE
 	m.conn.Send(*message)
+	m.logMessage(*message)
 }
 
 func (m *Manager) handleLockReleaseRequest(message *network.MultiviewMessage) error {
@@ -406,6 +437,7 @@ func (m *Manager) handleBarrierRequest(message *network.MultiviewMessage) {
 	message.From, message.To = message.To, message.From
 	message.Type = BARRIER_RESPONSE
 	m.conn.Send(*message)
+	m.logMessage(*message)
 }
 
 // Here is some utility stuff
@@ -419,33 +451,12 @@ func Min(x, y int) int {
 func (m *Manager) SetShouldLogNetwork(b bool) {
 	m.shouldLogNetwork = b
 	if m.messagesSent == nil {
-		m.messagesSent = make([]int, 10)
+		m.messagesSent = make([]int, 20)
 	}
 }
 
-func (m *Manager) LogMessage(message network.MultiviewMessage) {
+func (m *Manager) logMessage(message network.MultiviewMessage) {
 	if m.shouldLogNetwork {
-		switch t := message.Type; t {
-		case READ_REQUEST:
-			m.messagesSent[0]++
-		case WRITE_REQUEST:
-			m.messagesSent[0]++
-		case INVALIDATE_REPLY:
-			m.messagesSent[0]++
-		case MALLOC_REQUEST:
-			m.messagesSent[0]++
-		case FREE_REQUEST:
-			m.messagesSent[0]++
-		case WRITE_ACK:
-			m.messagesSent[0]++
-		case READ_ACK:
-			m.messagesSent[0]++
-		case LOCK_ACQUIRE_REQUEST:
-			m.messagesSent[0]++
-		case BARRIER_REQUEST:
-			m.messagesSent[0]++
-		case LOCK_RELEASE:
-			m.messagesSent[0]++
-		}
+		m.messagesSent[mTypeToInt(message.GetType())]++
 	}
 }
