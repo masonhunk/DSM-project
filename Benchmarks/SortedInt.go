@@ -161,7 +161,7 @@ func SortedIntTMBenchmark(group *sync.WaitGroup, port, nrProcs, batchSize int, i
 		group.Add(1)
 	}
 	rand := NewRandom()
-	pagebytesize := 128
+	pagebytesize := 4096
 	tm, err := treadmarks.NewTreadmarksApi((((N+1)*4)/pagebytesize+1)*pagebytesize, pagebytesize, uint8(nrProcs), uint8(2), uint8(4))
 	tm.Initialize(port)
 	if err != nil {
@@ -192,6 +192,7 @@ func SortedIntTMBenchmark(group *sync.WaitGroup, port, nrProcs, batchSize int, i
 			log.Fatal("could not start CPU profile: ", err)
 		}
 	}
+	tm.SetLogging(true)
 	fmt.Println(tm.GetId(), " at barrier 0")
 	tm.Barrier(0)
 	fmt.Println(tm.GetId(), " passed barrier 0")

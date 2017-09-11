@@ -75,6 +75,7 @@ func (t *TreadmarksApi) Initialize(port int) error {
 	t.initializeLocks()
 	t.shutdown = make(chan bool)
 	go t.handleIncoming()
+	t.messageLog = make([]int, 9)
 	return nil
 }
 
@@ -90,20 +91,21 @@ func (t *TreadmarksApi) Join(ip string, port int) error {
 }
 
 func (t *TreadmarksApi) Shutdown() error {
+	fmt.Println("Lock acquire request messages: ", t.messageLog[0])
+	fmt.Println("Lock acquire response messages: ", t.messageLog[1])
+	fmt.Println("Lock release messages: ", t.messageLog[2])
+	fmt.Println("Barrier request messages: ", t.messageLog[3])
+	fmt.Println("Barrier response messages: ", t.messageLog[4])
+	fmt.Println("Copy request messages: ", t.messageLog[5])
+	fmt.Println("Copy response messages: ", t.messageLog[6])
+	fmt.Println("Diff request messages: ", t.messageLog[7])
+	fmt.Println("Diff response messages: ", t.messageLog[8])
 	t.shutdown <- true
 	t.group.Wait()
 	t.conn.Close()
-	if t.shouldLogMessages {
-		fmt.Println("Lock acquire request messages: ", t.messageLog[0])
-		fmt.Println("Lock acquire response messages: ", t.messageLog[1])
-		fmt.Println("Lock release messages: ", t.messageLog[2])
-		fmt.Println("Barrier request messages: ", t.messageLog[3])
-		fmt.Println("Barrier response messages: ", t.messageLog[4])
-		fmt.Println("Copy request messages: ", t.messageLog[5])
-		fmt.Println("Copy response messages: ", t.messageLog[6])
-		fmt.Println("Diff request messages: ", t.messageLog[7])
-		fmt.Println("Diff response messages: ", t.messageLog[8])
-	}
+
+
+
 	return nil
 }
 
@@ -415,10 +417,8 @@ func (t *TreadmarksApi) sendMessage(to, msgType uint8, msg interface{}) {
 	data[0] = byte(to)
 	data[1] = byte(msgType)
 	w.Read(data[2:])
+	t.log(msgType)
 	t.out <- data
-	if t.shouldLogMessages {
-		t.log(msgType)
-	}
 }
 
 func (t *TreadmarksApi) sendLockAcquireRequest(to uint8, lockId uint8) {
@@ -846,8 +846,5 @@ func (t *TreadmarksApi) SetLogging(b bool) {
 }
 
 func (t *TreadmarksApi) log(msgId uint8) {
-	if t.messageLog == nil {
-		t.messageLog = make([]int, 9)
-	}
 	t.messageLog[msgId]++
 }

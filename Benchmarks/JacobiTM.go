@@ -64,6 +64,7 @@ func JacobiProgramTreadMarks(matrixsize int, nrIterations int, nrProcs int, isMa
 	if end <= begin {
 		panic("begin is larger than end")
 	}
+	tm.SetLogging(true)
 	for iter := 1; iter <= nrIterations; iter++ {
 		fmt.Println("in iteration nr", iter)
 		for i := begin; i < end; i++ {

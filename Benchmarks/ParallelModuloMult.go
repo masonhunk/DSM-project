@@ -171,6 +171,7 @@ func ParallelSumTM(batchSize int64, nrOfInts int64, nrProcs int, isManager bool,
 			log.Fatal("could not start CPU profile: ", err)
 		}
 	}
+	tm.SetLogging(true)
 	tm.Barrier(1) //ensures everyone gets their first lock
 
 	var prevBatchNumber int64

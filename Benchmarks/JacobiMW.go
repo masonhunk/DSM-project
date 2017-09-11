@@ -76,7 +76,7 @@ func JacobiProgramMultiView(matrixSize int, nrIterations int, nrProcs int, isMan
 		for i := range gridEntryAddresses {
 			row := gridEntryAddresses[i]
 			for j := range row {
-				gridEntryAddresses[i][j] = addrs[i+j]
+				gridEntryAddresses[i][j] = addrs[i*M+j]
 				if gridEntryAddresses[i][j] < 0 {
 					panic(fmt.Sprintln("Address was negative: ", i, ", ", j, ", ", gridEntryAddresses[i][j]))
 				}
