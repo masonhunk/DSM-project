@@ -72,7 +72,7 @@ func SortedIntMVBenchmark(nrProcs int, batchSize int, isManager bool, N int, Bma
 			log.Fatal("could not start CPU profile: ", err)
 		}
 	}
-
+	batchesInFirstIteration := make([]int, 0)
 	mv.Barrier(0)
 	for i := 1; i <= Imax; i++ {
 		fmt.Println("Starting iteration ", i)
@@ -80,13 +80,23 @@ func SortedIntMVBenchmark(nrProcs int, batchSize int, isManager bool, N int, Bma
 		K[i+Imax] = Bmax - int32(i)
 		//Calculate the order of every entry in the interval I am responsible for.
 		start := 0
+		batchIndex := 0
 		var end int
 		for {
-			mv.Lock(0)
-			start = mv.ReadInt(prog)
-			end = Min(start+batchSize, N)
-			mv.WriteInt(prog, end)
-			mv.Release(0)
+			if i == 1 {
+				mv.Lock(0)
+				start = mv.ReadInt(prog)
+				batchesInFirstIteration = append(batchesInFirstIteration, start)
+				end = Min(start+batchSize, N)
+				mv.WriteInt(prog, end)
+				mv.Release(0)
+
+			} else {
+				start = batchesInFirstIteration[batchIndex]
+				batchIndex++
+				end = Min(start+batchSize, N)
+
+			}
 			if start >= N {
 				break
 			}
