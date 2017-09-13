@@ -206,6 +206,7 @@ func SortedIntTMBenchmark(group *sync.WaitGroup, port, nrProcs, batchSize int, i
 	fmt.Println(tm.GetId(), " at barrier 0")
 	tm.Barrier(0)
 	fmt.Println(tm.GetId(), " passed barrier 0")
+	batchesInFirstIteration := make([]int, 0)
 	for i := 1; i <= Imax; i++ {
 		fmt.Println(tm.GetId(), "Starting iteration: ", i)
 		K[i] = int32(i)
@@ -213,16 +214,24 @@ func SortedIntTMBenchmark(group *sync.WaitGroup, port, nrProcs, batchSize int, i
 		//Calculate the order of every entry in the interval I am responsible for.
 		start := 0
 		var end int
+		batchIndex := 0
 		for {
-			tm.AcquireLock(0)
-			start = readInt(tm, 0)
+			if i == 1 {
+				tm.AcquireLock(0)
+				start = readInt(tm, 0)
+				batchesInFirstIteration = append(batchesInFirstIteration, start)
+				writeInt(tm, 0, end)
+				tm.ReleaseLock(0)
+			} else {
+				start = batchesInFirstIteration[batchIndex]
+				batchIndex++
+			}
+
 			if start >= N {
 				tm.ReleaseLock(0)
 				break
 			}
 			end = Min(start+batchSize, N)
-			writeInt(tm, 0, end)
-			tm.ReleaseLock(0)
 			var kj int32
 			var rj int
 			for j := start; j < end; j++ {
